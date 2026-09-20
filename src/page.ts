@@ -1222,8 +1222,7 @@ const RAW = String.raw`<!doctype html>
 
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
-      h("p", { class: "question", text: q }),
-      translateBlock(q, questionTargetLang())
+      h("p", { class: "question", text: t(q) })
     ]);
 
     if (complete) {
@@ -1310,7 +1309,7 @@ const RAW = String.raw`<!doctype html>
           var entry = state.answers[key];
           var entryDiv = h("div", { class: "journal-entry" }, [
             h("div", { class: "journal-date", text: t(formatDateLabel(key)) }),
-            h("p", { class: "journal-q", text: questionForKey(key) })
+            h("p", { class: "journal-q", text: t(questionForKey(key)) })
           ]);
           ["mark", "nikita"].forEach(function (pKey) {
             if (pKey === viewerKey && editingEntry === key) { entryDiv.appendChild(ownAnswerEditor(key)); return; }

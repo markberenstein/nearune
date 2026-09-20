@@ -767,6 +767,9 @@ const RAW = String.raw`<!doctype html>
     if (guessedToday) {
       var msg = state.puzzleLastGuessCorrect ? "🎉 You got it!" : "Today's guess: “" + state.puzzleLastGuessText + "” — not quite. Try again tomorrow.";
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
+      if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
+        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy)));
+      }
       return wrap;
     }
     var input = document.createElement("input");
@@ -815,6 +818,9 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(puzzleGrid(puzzleImgSrc()));
       if (state.puzzleSolved) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: "Solved — it was “" + state.puzzleAnswer + ".” ✧" }));
+        if (state.puzzleAnswer && state.puzzleSetBy) {
+          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy)));
+        }
         var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? "Next picture →" : "Finish batch" });
         nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
         card.appendChild(nextBtn);

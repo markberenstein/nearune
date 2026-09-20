@@ -529,10 +529,16 @@ const RAW = String.raw`<!doctype html>
     return val === undefined || val === null ? text : val;
   }
   function tTemplate(template, vars) {
-    var translated = t(template);
-    Object.keys(vars || {}).forEach(function (k) {
-      translated = translated.split("{" + k + "}").join(String(vars[k]));
-    });
+    // Translation services translate the WORDS inside {name}-style tokens
+    // too (e.g. "{total}" comes back as "{कुल}", since "total" itself gets
+    // translated) — so the named token is swapped for a bare digit before
+    // translating, which survives round-trip intact, and vars are
+    // substituted back in afterward by that same index.
+    var keys = Object.keys(vars || {});
+    var indexed = template;
+    keys.forEach(function (k, i) { indexed = indexed.split("{" + k + "}").join("{" + i + "}"); });
+    var translated = t(indexed);
+    keys.forEach(function (k, i) { translated = translated.split("{" + i + "}").join(String(vars[k])); });
     return translated;
   }
 

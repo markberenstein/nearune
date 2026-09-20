@@ -375,7 +375,7 @@ const RAW = String.raw`<!doctype html>
     var diff = nextRolloverMs() - Date.now();
     var hrs = Math.max(0, Math.floor(diff / 3600000));
     var mins = Math.max(0, Math.floor((diff % 3600000) / 60000));
-    return "Next question in " + hrs + " hours and " + mins + " minutes";
+    return tTemplate("Next question in {h} hours and {m} minutes", { h: hrs, m: mins });
   }
 
   var state = { version: 1, answers: {}, status: {}, comments: {} };
@@ -504,6 +504,36 @@ const RAW = String.raw`<!doctype html>
       wrap.appendChild(document.createTextNode(val));
     }
     return wrap;
+  }
+
+  // UI-copy translation: every static label/button/note in the app is
+  // authored in English. t() swaps it in-place for the viewer's own
+  // registered language once a translation comes back (falls back to the
+  // English original while pending, so nothing flickers or shows blank).
+  // tTemplate() is for copy with embedded dynamic values (names, counts) —
+  // it translates the fixed template (with {tokens}) once and substitutes
+  // the live values afterward, so a changing number never triggers a fresh
+  // translation call.
+  function uiLang() {
+    if (!viewerKey) return "en";
+    var code = langCodeFor(viewerKey);
+    return code || "en";
+  }
+  function t(text) {
+    if (!text) return text;
+    var lang = uiLang();
+    if (lang === "en") return text;
+    var key = lang + "|en::" + text;
+    scheduleTranslate(text, lang, "en");
+    var val = translationCache[key];
+    return val === undefined || val === null ? text : val;
+  }
+  function tTemplate(template, vars) {
+    var translated = t(template);
+    Object.keys(vars || {}).forEach(function (k) {
+      translated = translated.split("{" + k + "}").join(String(vars[k]));
+    });
+    return translated;
   }
 
   var PUZZLE_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -657,15 +687,15 @@ const RAW = String.raw`<!doctype html>
 
   function puzzleBatchForm() {
     var wrap = h("div", { class: "puzzle-setup" });
-    wrap.appendChild(h("p", { text: "Load up to 10 photos at once — each needs a short answer for your partner to guess. They'll appear one at a time as you both keep answering." }));
+    wrap.appendChild(h("p", { text: t("Load up to 10 photos at once — each needs a short answer for your partner to guess. They'll appear one at a time as you both keep answering.") }));
 
     var fileInput = document.createElement("input");
     fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.multiple = true; fileInput.style.display = "none";
-    var chooseBtn = h("button", { class: "puzzle-choose-btn", text: "Choose up to 10 photos" });
+    var chooseBtn = h("button", { class: "puzzle-choose-btn", text: t("Choose up to 10 photos") });
     chooseBtn.addEventListener("click", function () { fileInput.click(); });
 
     var list = h("div", { class: "puzzle-batch-list" });
-    var submitBtn = h("button", { class: "puzzle-upload-btn", text: "Load pictures" });
+    var submitBtn = h("button", { class: "puzzle-upload-btn", text: t("Load pictures") });
 
     function refreshSubmit() {
       submitBtn.disabled = puzzleBatchItems.length === 0 || puzzleBatchItems.some(function (it) { return !it.answer.trim(); });
@@ -676,7 +706,7 @@ const RAW = String.raw`<!doctype html>
         var row = h("div", { class: "puzzle-batch-row" });
         row.appendChild(h("span", { class: "puzzle-batch-name", text: item.file.name }));
         var ans = document.createElement("input");
-        ans.type = "text"; ans.maxLength = 120; ans.placeholder = "Answer for this one…";
+        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer for this one…");
         ans.value = item.answer;
         ans.addEventListener("input", function () { item.answer = ans.value; refreshSubmit(); });
         row.appendChild(ans);
@@ -729,7 +759,8 @@ const RAW = String.raw`<!doctype html>
           state = next; online = true;
           var count = (next.puzzleQueue ? next.puzzleQueue.length : 0) + (next.puzzleCurrentId ? 1 : 0);
           puzzleBatchItems = [];
-          setActiveTab("puzzle", "Loaded " + count + " photo" + (count === 1 ? "" : "s") + " — first one's up now.");
+          var loadedTemplate = count === 1 ? "Loaded {count} photo — first one's up now." : "Loaded {count} photos — first one's up now.";
+          setActiveTab("puzzle", tTemplate(loadedTemplate, { count: count }));
         })
         .catch(function () { online = false; renderApp(); });
     });
@@ -747,8 +778,11 @@ const RAW = String.raw`<!doctype html>
     var total = state.puzzleQueueTotal || remaining;
     var loaderName = state.puzzleQueueBy ? personName(state.puzzleQueueBy) : "";
     var wrap = h("div", { class: "puzzle-locked" });
-    wrap.appendChild(h("p", { class: "puzzle-guess-note", text: (loaderName ? loaderName + " loaded " : "") + total + " pictures — " + remaining + " left in this batch." }));
-    var btn = h("button", { class: "puzzle-upload-btn", text: "Choose photos" });
+    var lockedMsg = loaderName
+      ? tTemplate("{name} loaded {total} pictures — {remaining} left in this batch.", { name: loaderName, total: total, remaining: remaining })
+      : tTemplate("{total} pictures — {remaining} left in this batch.", { total: total, remaining: remaining });
+    wrap.appendChild(h("p", { class: "puzzle-guess-note", text: lockedMsg }));
+    var btn = h("button", { class: "puzzle-upload-btn", text: t("Choose photos") });
     btn.disabled = true;
     wrap.appendChild(btn);
     return wrap;
@@ -761,11 +795,13 @@ const RAW = String.raw`<!doctype html>
     var wrap = h("div", { class: "puzzle-guess" });
     if (isSetter) {
       var otherName = personName(otherKeyOf(viewerKey));
-      wrap.appendChild(h("p", { class: "puzzle-guess-note", text: "You set this one — waiting for " + otherName + " to guess." }));
+      wrap.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You set this one — waiting for {name} to guess.", { name: otherName }) }));
       return wrap;
     }
     if (guessedToday) {
-      var msg = state.puzzleLastGuessCorrect ? "🎉 You got it!" : "Today's guess: “" + state.puzzleLastGuessText + "” — not quite. Try again tomorrow.";
+      var msg = state.puzzleLastGuessCorrect
+        ? t("🎉 You got it!")
+        : tTemplate("Today's guess: “{guess}” — not quite. Try again tomorrow.", { guess: state.puzzleLastGuessText });
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
       if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
         wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy)));
@@ -773,10 +809,10 @@ const RAW = String.raw`<!doctype html>
       return wrap;
     }
     var input = document.createElement("input");
-    input.type = "text"; input.maxLength = 120; input.placeholder = "Guess where (or what) this is…";
+    input.type = "text"; input.maxLength = 120; input.placeholder = t("Guess where (or what) this is…");
     input.value = puzzleGuessDraft;
     input.addEventListener("input", function () { puzzleGuessDraft = input.value; });
-    var btn = h("button", { class: "puzzle-guess-btn", text: "Guess" });
+    var btn = h("button", { class: "puzzle-guess-btn", text: t("Guess") });
     function submitGuess() {
       var text = puzzleGuessDraft.trim();
       if (!text) return;
@@ -804,24 +840,24 @@ const RAW = String.raw`<!doctype html>
     var unlocked = puzzleUnlockedCount();
     var card = h("div", { class: "puzzle-card" }, [
       h("div", { class: "puzzle-head" }, [
-        h("p", { class: "puzzle-title", text: "Us, one piece at a time" }),
-        h("span", { class: "puzzle-progress", text: unlocked + " / " + PUZZLE_TOTAL + " pieces" })
+        h("p", { class: "puzzle-title", text: t("Us, one piece at a time") }),
+        h("span", { class: "puzzle-progress", text: tTemplate("{n} / {total} pieces", { n: unlocked, total: PUZZLE_TOTAL }) })
       ]),
-      h("p", { class: "puzzle-explain", text: "Once you both answer today's question, a puzzle piece unlocks. Whoever didn't load the picture gets one guess a day at where it was taken." })
+      h("p", { class: "puzzle-explain", text: t("Once you both answer today's question, a puzzle piece unlocks. Whoever didn't load the picture gets one guess a day at where it was taken.") })
     ]);
     if (!inBatch) {
       card.appendChild(puzzleBatchForm());
       if (state.puzzleQueueBy) {
-        card.appendChild(h("p", { class: "puzzle-guess-note", text: "Last loaded by " + personName(state.puzzleQueueBy) + " (" + (state.puzzleQueueTotal || 0) + " pictures)." }));
+        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
       }
     } else {
       card.appendChild(puzzleGrid(puzzleImgSrc()));
       if (state.puzzleSolved) {
-        card.appendChild(h("p", { class: "puzzle-done-note", text: "Solved — it was “" + state.puzzleAnswer + ".” ✧" }));
+        card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
           card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy)));
         }
-        var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? "Next picture →" : "Finish batch" });
+        var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? t("Next picture →") : t("Finish batch") });
         nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
         card.appendChild(nextBtn);
       } else {
@@ -853,9 +889,9 @@ const RAW = String.raw`<!doctype html>
     ta.value = editDraftText;
     ta.addEventListener("input", function () { editDraftText = ta.value; });
     var actions = h("div", { class: "edit-actions" });
-    var cancel = h("button", { class: "mini-btn ghost", text: "Cancel" });
+    var cancel = h("button", { class: "mini-btn ghost", text: t("Cancel") });
     cancel.addEventListener("click", cancelEdit);
-    var save = h("button", { class: "mini-btn primary", text: "Save" });
+    var save = h("button", { class: "mini-btn primary", text: t("Save") });
     save.addEventListener("click", function () { saveEdit(dateKeyVal); });
     actions.appendChild(cancel); actions.appendChild(save);
     wrap.appendChild(ta); wrap.appendChild(actions);
@@ -874,7 +910,7 @@ const RAW = String.raw`<!doctype html>
     var wrap = h("div", { class: "comments" });
     var list = (state.comments && state.comments[dateKeyVal]) || [];
     list.forEach(function (c) {
-      var person = PEOPLE[c.who] ? { name: personName(c.who), color: PEOPLE[c.who].color } : { name: "Someone", color: "var(--ink-soft)" };
+      var person = PEOPLE[c.who] ? { name: personName(c.who), color: PEOPLE[c.who].color } : { name: t("Someone"), color: "var(--ink-soft)" };
       var cDiv = h("div", { class: "comment" }, [
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
@@ -884,11 +920,11 @@ const RAW = String.raw`<!doctype html>
     });
     var form = h("div", { class: "comment-form" });
     var input = document.createElement("input");
-    input.type = "text"; input.maxLength = 200; input.placeholder = "Reply to this day…";
+    input.type = "text"; input.maxLength = 200; input.placeholder = t("Reply to this day…");
     input.value = commentDrafts[dateKeyVal] || "";
     input.addEventListener("input", function () { commentDrafts[dateKeyVal] = input.value; });
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); sendComment(dateKeyVal); } });
-    var send = h("button", { class: "comment-send", text: "Reply" });
+    var send = h("button", { class: "comment-send", text: t("Reply") });
     send.addEventListener("click", function () { sendComment(dateKeyVal); });
     form.appendChild(input); form.appendChild(send);
     wrap.appendChild(form);
@@ -904,10 +940,10 @@ const RAW = String.raw`<!doctype html>
 
   function tabBar() {
     var unlocked = puzzleUnlockedCount();
-    var todayBtn = h("button", { class: "tab-btn" + (activeTab === "today" ? " active" : ""), text: "Today" });
+    var todayBtn = h("button", { class: "tab-btn" + (activeTab === "today" ? " active" : ""), text: t("Today") });
     todayBtn.addEventListener("click", function () { setActiveTab("today"); });
     var puzzleBtn = h("button", { class: "tab-btn" + (activeTab === "puzzle" ? " active" : "") }, [
-      document.createTextNode("Puzzle "),
+      document.createTextNode(t("Puzzle") + " "),
       h("span", { class: "tab-badge", text: unlocked + "/" + PUZZLE_TOTAL })
     ]);
     puzzleBtn.addEventListener("click", function () { setActiveTab("puzzle"); });
@@ -937,22 +973,22 @@ const RAW = String.raw`<!doctype html>
 
   function textField(value, placeholder, onInput) {
     var i = document.createElement("input");
-    i.type = "text"; i.placeholder = placeholder; i.value = value;
+    i.type = "text"; i.placeholder = t(placeholder); i.value = value;
     i.addEventListener("input", function () { onInput(i.value); });
     return i;
   }
 
   function acceptInviteForm() {
     var card = h("div", { class: "card" }, [
-      h("div", { class: "eyebrow" }, [h("span", { text: "You're invited" })]),
-      h("p", { class: "question", text: "Finish setting up your Same Sky." })
+      h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
+      h("p", { class: "question", text: t("Finish setting up your Same Sky.") })
     ]);
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; }));
     form.appendChild(textField(acceptDraft.language, "Preferred language", function (v) { acceptDraft.language = v; }));
-    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: regError }));
-    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? "Joining…" : "Join Same Sky" });
+    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Same Sky") });
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
       if (!acceptDraft.name.trim()) { regError = "Enter your name."; renderApp(); return; }
@@ -963,7 +999,7 @@ const RAW = String.raw`<!doctype html>
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
-          if (!res.ok) { regError = "That invite link isn't valid."; renderApp(); return; }
+          if (!res.ok) { regError = t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
           try { localStorage.setItem("sameSkyViewer", viewerKey); } catch (e) {}
@@ -976,7 +1012,7 @@ const RAW = String.raw`<!doctype html>
           online = true;
           renderApp();
         })
-        .catch(function () { regBusy = false; regError = "Something went wrong — try again."; renderApp(); });
+        .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
     });
     form.appendChild(btn);
     card.appendChild(form);
@@ -985,7 +1021,7 @@ const RAW = String.raw`<!doctype html>
 
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
-    if (!name || !email) { regError = "Name and email required."; renderApp(); return; }
+    if (!name || !email) { regError = t("Name and email required."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -993,13 +1029,13 @@ const RAW = String.raw`<!doctype html>
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
-        if (!res.ok) { regError = "Couldn't register — try again."; renderApp(); return; }
+        if (!res.ok) { regError = t("Couldn't register — try again."); renderApp(); return; }
         state = res.data;
         showRegisterForm = false;
-        regError = res.data._emailSent === false ? "Registered, but the email failed to send — try again." : "";
+        regError = res.data._emailSent === false ? t("Registered, but the email failed to send — try again.") : "";
         renderApp();
       })
-      .catch(function () { regBusy = false; regError = "Something went wrong — try again."; renderApp(); });
+      .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
 
   function registrationFlow() {
@@ -1007,31 +1043,31 @@ const RAW = String.raw`<!doctype html>
     var awaiting = state.pendingConfirm && state.pendingConfirm[viewerKey];
     if (mine && awaiting && !showRegisterForm) {
       var wait = h("div", { class: "card" }, [
-        h("div", { class: "eyebrow" }, [h("span", { text: "Almost there" })]),
-        h("p", { class: "question", text: "Check your email for a confirmation link." })
+        h("div", { class: "eyebrow" }, [h("span", { text: t("Almost there") })]),
+        h("p", { class: "question", text: t("Check your email for a confirmation link.") })
       ]);
-      if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: regError }));
-      var again = h("button", { class: "switch-link", text: "Resend confirmation" });
+      if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+      var again = h("button", { class: "switch-link", text: t("Resend confirmation") });
       again.addEventListener("click", function () { showRegisterForm = true; renderApp(); });
       wait.appendChild(h("div", { class: "switch-row" }, [again]));
       return wait;
     }
     var card = h("div", { class: "card" }, [
-      h("div", { class: "eyebrow" }, [h("span", { text: "Set up your account" })]),
-      h("p", { class: "question", text: "You're registering as " + personName(viewerKey) + "." })
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Set up your account") })]),
+      h("p", { class: "question", text: tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) })
     ]);
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; }));
     form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; }));
     form.appendChild(textField(registerDraft.language, "Preferred language", function (v) { registerDraft.language = v; }));
-    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: regError }));
-    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? "Sending…" : "Register" });
+    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Register") });
     btn.disabled = regBusy;
     btn.addEventListener("click", submitRegister);
     form.appendChild(btn);
     card.appendChild(form);
-    var sw = h("button", { class: "switch-link", text: "Not " + personName(viewerKey) + "? Switch" });
+    var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
     sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem("sameSkyViewer"); } catch (e) {} renderApp(); });
     card.appendChild(h("div", { class: "switch-row" }, [sw]));
     return card;
@@ -1040,51 +1076,51 @@ const RAW = String.raw`<!doctype html>
   var lastInviteUrl = "";
   function submitInvite() {
     var email = inviteEmailDraft.trim();
-    if (!email) { regError = "Enter an email first."; renderApp(); return; }
+    if (!email) { regError = t("Enter an email first."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, email: email })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
-        if (!res.ok) { regError = "Couldn't send invite — try again."; renderApp(); return; }
+        if (!res.ok) { regError = t("Couldn't send invite — try again."); renderApp(); return; }
         lastInviteUrl = res.data._inviteUrl || "";
         state = res.data;
         showInviteForm = false;
-        regError = res.data._emailSent === false ? "Saved, but the email failed to send — try again." : "";
+        regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
         renderApp();
       })
-      .catch(function () { regBusy = false; regError = "Something went wrong — try again."; renderApp(); });
+      .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
 
   function copyLinkButton(url) {
-    var btn = h("button", { class: "switch-link", text: "Copy invite link" });
+    var btn = h("button", { class: "switch-link", text: t("Copy invite link") });
     btn.addEventListener("click", function () {
-      var done = function () { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy invite link"; }, 1500); };
+      var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = t("Copy invite link"); }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
-      else { window.prompt("Copy this link:", url); done(); }
+      else { window.prompt(t("Copy this link:"), url); done(); }
     });
     return btn;
   }
 
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
-    var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: "Invite " + personName(otherKey) })])]);
+    var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: personName(otherKey) }) })])]);
     if (pending && !showInviteForm) {
-      card.appendChild(h("p", { class: "question", text: "Invite sent — waiting for " + personName(otherKey) + " to accept." }));
-      if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: "Email may not land — safer to send this link yourself." }));
-      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: regError }));
-      var again = h("button", { class: "switch-link", text: "Resend invite" });
+      card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: personName(otherKey) }) }));
+      if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
+      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+      var again = h("button", { class: "switch-link", text: t("Resend invite") });
       again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
       var row = [again];
       if (lastInviteUrl) row.push(copyLinkButton(lastInviteUrl));
       card.appendChild(h("div", { class: "switch-row" }, row));
     } else {
-      card.appendChild(h("p", { class: "question", text: personName(otherKey) + " hasn't joined yet — send an invite." }));
+      card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: personName(otherKey) }) }));
       var form = h("div", { class: "puzzle-setup" });
       form.appendChild(textField(inviteEmailDraft, personName(otherKey) + "'s email", function (v) { inviteEmailDraft = v; }));
-      if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: regError }));
-      var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? "Sending…" : "Send invite" });
+      if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+      var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
       btn.disabled = regBusy;
       btn.addEventListener("click", submitInvite);
       form.appendChild(btn);
@@ -1122,7 +1158,7 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(journalSection());
     }
     app.appendChild(switchRow());
-    if (!online) app.appendChild(h("p", { class: "offline-note", text: "Having trouble syncing — check your connection." }));
+    if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
   function pickerOverlay() {
@@ -1159,7 +1195,7 @@ const RAW = String.raw`<!doctype html>
       var current = (state.status[key] && state.status[key].text) || "";
       var chip = h("div", { class: "status-chip" }, [h("span", { class: "status-dot", style: "background:" + person.color })]);
       var input = document.createElement("input");
-      input.type = "text"; input.maxLength = 60; input.placeholder = personName(key) + "'s world right now…";
+      input.type = "text"; input.maxLength = 60; input.placeholder = tTemplate("{name}'s world right now…", { name: personName(key) });
       input.value = current;
       input.disabled = viewerKey !== key;
       input.addEventListener("change", function () {
@@ -1179,7 +1215,7 @@ const RAW = String.raw`<!doctype html>
     var complete = isComplete(today);
 
     var card = h("div", { class: "card" }, [
-      h("div", { class: "eyebrow" }, [h("span", { text: "Today's question" }), h("span", { text: formatDateLabel(today) })]),
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
       h("p", { class: "question", text: q }),
       translateBlock(q, questionTargetLang())
     ]);
@@ -1191,7 +1227,7 @@ const RAW = String.raw`<!doctype html>
         var bubble = h("div", { class: "answer-bubble", style: "background:color-mix(in srgb, " + person.color + " 10%, var(--surface))" });
         var headRow = h("div", { class: "answer-head" }, [h("span", { class: "answer-name", style: "color:" + person.color, text: personName(key) })]);
         if (key === viewerKey && editingEntry !== today) {
-          var editBtn = h("button", { class: "edit-btn", text: "Edit" });
+          var editBtn = h("button", { class: "edit-btn", text: t("Edit") });
           editBtn.addEventListener("click", function () { startEdit(today); });
           headRow.appendChild(editBtn);
         }
@@ -1213,19 +1249,19 @@ const RAW = String.raw`<!doctype html>
         var mineWrap = h("div", { class: "own-answer-visible" });
         mineWrap.appendChild(h("p", { class: "answer-text", text: mine }));
         mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey)));
-        var editBtn2 = h("button", { class: "edit-btn", text: "Edit your answer" });
+        var editBtn2 = h("button", { class: "edit-btn", text: t("Edit your answer") });
         editBtn2.addEventListener("click", function () { startEdit(today); });
         mineWrap.appendChild(editBtn2);
         card.appendChild(mineWrap);
       }
-      card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>Sent — waiting for ' + personName(otherKeyOf(viewerKey)) + ' to answer too.</span>' }));
+      card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>' + tTemplate("Sent — waiting for {name} to answer too.", { name: personName(otherKeyOf(viewerKey)) }) + '</span>' }));
     } else {
       var form = h("div", { class: "answer-form" });
       var textarea = document.createElement("textarea");
-      textarea.placeholder = "Type your answer…";
+      textarea.placeholder = t("Type your answer…");
       textarea.value = draftText;
       textarea.addEventListener("input", function () { draftText = textarea.value; });
-      var btn = h("button", { class: "send-btn", text: "Send" });
+      var btn = h("button", { class: "send-btn", text: t("Send") });
       btn.addEventListener("click", async function () {
         var text = textarea.value.trim();
         if (!text) return;
@@ -1244,37 +1280,37 @@ const RAW = String.raw`<!doctype html>
     var info = streakInfo();
     var dots = h("div", { class: "streak-dots" });
     info.last7.forEach(function (d) { dots.appendChild(h("span", { class: "streak-dot" + (d.done ? " filled" : "") })); });
-    var label = info.count === 0 ? "Answer today to start a new streak." : "You've both shown up";
+    var label = info.count === 0 ? t("Answer today to start a new streak.") : t("You've both shown up");
     var text = h("div", { class: "streak-text" }, [
       document.createTextNode(label + " "),
-      info.count > 0 ? h("strong", { text: info.count + (info.count === 1 ? " day" : " days") }) : null,
-      info.count > 0 ? document.createTextNode(" in a row.") : null
+      info.count > 0 ? h("strong", { text: t(info.count === 1 ? "{n} day" : "{n} days").split("{n}").join(String(info.count)) }) : null,
+      info.count > 0 ? document.createTextNode(" " + t("in a row.")) : null
     ]);
     return h("div", { class: "streak-card" }, [text, dots]);
   }
 
   function journalSection() {
     var wrap = h("div", {});
-    var toggle = h("button", { class: "journal-toggle" + (journalOpen ? " open" : ""), html: '<span class="chevron">›</span><span>' + (journalOpen ? "Hide" : "Look back at past days") + "</span>" });
+    var toggle = h("button", { class: "journal-toggle" + (journalOpen ? " open" : ""), html: '<span class="chevron">›</span><span>' + t(journalOpen ? "Hide" : "Look back at past days") + "</span>" });
     toggle.addEventListener("click", function () { journalOpen = !journalOpen; renderApp(); });
     wrap.appendChild(toggle);
     if (journalOpen) {
       var entries = journalEntries();
       var list = h("div", { class: "journal" });
       if (entries.length === 0) {
-        list.appendChild(h("p", { class: "journal-empty", text: "Nothing yet — your first shared day will show up here." }));
+        list.appendChild(h("p", { class: "journal-empty", text: t("Nothing yet — your first shared day will show up here.") }));
       } else {
         entries.forEach(function (key) {
           var entry = state.answers[key];
           var entryDiv = h("div", { class: "journal-entry" }, [
-            h("div", { class: "journal-date", text: formatDateLabel(key) }),
+            h("div", { class: "journal-date", text: t(formatDateLabel(key)) }),
             h("p", { class: "journal-q", text: questionForKey(key) })
           ]);
           ["mark", "nikita"].forEach(function (pKey) {
             if (pKey === viewerKey && editingEntry === key) { entryDiv.appendChild(ownAnswerEditor(key)); return; }
             var line = h("p", { class: "journal-a" }, [h("b", { text: personName(pKey) + ": " }), document.createTextNode(entry[pKey].text)]);
             if (pKey === viewerKey) {
-              var ebtn = h("button", { class: "edit-btn", text: "Edit" });
+              var ebtn = h("button", { class: "edit-btn", text: t("Edit") });
               ebtn.style.marginLeft = "8px";
               ebtn.addEventListener("click", function () { startEdit(key); });
               line.appendChild(ebtn);
@@ -1293,14 +1329,14 @@ const RAW = String.raw`<!doctype html>
 
   function switchRow() {
     var row = h("div", { class: "switch-row" });
-    var link = h("button", { class: "switch-link", text: "Not " + personName(viewerKey) + "? Switch" });
+    var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
     link.addEventListener("click", function () {
       viewerKey = null;
       try { localStorage.removeItem("sameSkyViewer"); } catch (e) {}
       renderApp();
     });
     row.appendChild(link);
-    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: "Start Same Sky for another couple" });
+    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Same Sky for another couple") });
     row.appendChild(newRoomLink);
     return row;
   }

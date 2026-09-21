@@ -234,6 +234,13 @@ const RAW = String.raw`<!doctype html>
     var p = state.people && state.people[key];
     return (p && p.name) || PEOPLE[key].name;
   }
+  // Friendlier than the raw "Person A"/"Person B" placeholder specifically
+  // for inviting someone who hasn't registered yet — once they have a real
+  // name on file, that's used instead.
+  function inviteeLabel(key) {
+    var p = state.people && state.people[key];
+    return (p && p.name) || t("your significant other");
+  }
   function personLocation(key) {
     var p = state.people && state.people[key];
     return (p && p.location) || PEOPLE[key].city;
@@ -1149,10 +1156,15 @@ const RAW = String.raw`<!doctype html>
 
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
-    var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: personName(otherKey) }) })])]);
+    var otherLabel = inviteeLabel(otherKey);
+    var registeredAlready = !!(state.people && state.people[otherKey] && state.people[otherKey].name);
+    var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: otherLabel }) })])]);
+    if (!registeredAlready) {
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("(complete their registration to send invite)") }));
+    }
     if (pending && !showInviteForm) {
-      card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: personName(otherKey) }) }));
-      card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: personName(otherKey) }) }));
+      card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: otherLabel }) }));
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
       if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
       if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var again = h("button", { class: "switch-link", text: t("Resend invite") });
@@ -1161,9 +1173,9 @@ const RAW = String.raw`<!doctype html>
       if (lastInviteUrl) row.push(copyLinkButton(lastInviteUrl));
       card.appendChild(h("div", { class: "switch-row" }, row));
     } else {
-      card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: personName(otherKey) }) }));
+      card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
       var form = h("div", { class: "puzzle-setup" });
-      form.appendChild(textField(inviteEmailDraft, personName(otherKey) + "'s email", function (v) { inviteEmailDraft = v; }));
+      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s email", function (v) { inviteEmailDraft = v; }));
       if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
       btn.disabled = regBusy;

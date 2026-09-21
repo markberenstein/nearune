@@ -1072,6 +1072,12 @@ const RAW = String.raw`<!doctype html>
   // there — still just a starting point, freely changeable via the
   // dropdown. Debounced so it fires once typing pauses, not per keystroke.
   var geoSuggestTimer = null;
+  // Set by languageSelectField whenever it builds the dropdown currently on
+  // screen, so the geo-suggest callback below can paint a fresh value onto
+  // it directly — a full safeRerender() would silently no-op while the
+  // person is still typing in the location field (it stays focused on
+  // mobile until they tap away), which left the dropdown looking stuck.
+  var lastLangSelectEl = null;
   function suggestLanguageFromLocation(draft, locationText) {
     if (geoSuggestTimer) clearTimeout(geoSuggestTimer);
     if (draft.languageTouched || !locationText.trim()) return;
@@ -1082,7 +1088,11 @@ const RAW = String.raw`<!doctype html>
           if (draft.languageTouched) return; // they picked one while we were waiting
           if (info && info.language && draft.location.trim() === locationText.trim()) {
             draft.language = info.language;
-            safeRerender(); // skips the rebuild while they're still typing, so it doesn't steal focus
+            if (lastLangSelectEl && document.body.contains(lastLangSelectEl)) {
+              lastLangSelectEl.value = info.language;
+            } else {
+              safeRerender();
+            }
           }
         })
         .catch(function () {});
@@ -1104,6 +1114,7 @@ const RAW = String.raw`<!doctype html>
   function languageSelectField(value, onInput) {
     var sel = document.createElement("select");
     sel.className = "lang-select";
+    lastLangSelectEl = sel;
     var placeholder = document.createElement("option");
     placeholder.value = ""; placeholder.textContent = t("Choose a language"); placeholder.disabled = true;
     if (!value) placeholder.selected = true;

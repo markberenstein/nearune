@@ -157,6 +157,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-setup { display: flex; flex-direction: column; gap: 8px; width: 100%; }
   .puzzle-setup input[type="text"] { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .puzzle-setup select.lang-select { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
+  .puzzle-setup select.lang-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .puzzle-setup-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .puzzle-choose-btn { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 9px 16px; font: inherit; font-size: 0.83rem; cursor: pointer; }
   .puzzle-guess { display: flex; flex-direction: column; gap: 8px; }
@@ -245,14 +247,26 @@ const RAW = String.raw`<!doctype html>
     var p = state.people && state.people[key];
     return (p && p.location) || PEOPLE[key].city;
   }
-  var LANG_NAME_TO_CODE = {
-    english: "en", hindi: "hi", spanish: "es", french: "fr", german: "de",
-    portuguese: "pt", italian: "it", mandarin: "zh", chinese: "zh", japanese: "ja",
-    korean: "ko", arabic: "ar", russian: "ru", bengali: "bn", punjabi: "pa",
-    gujarati: "gu", marathi: "mr", tamil: "ta", telugu: "te", urdu: "ur",
-    dutch: "nl", polish: "pl", turkish: "tr", vietnamese: "vi", thai: "th",
-    indonesian: "id", greek: "el", hebrew: "he", swedish: "sv", norwegian: "no"
-  };
+  // Single source of truth for the language picker (registration/invite
+  // forms use a dropdown built from this list, so it's impossible to type
+  // an unrecognized language or a typo like "Australian" — see LANGUAGES
+  // below and its use in selectField()).
+  var LANGUAGES = [
+    ["English", "en"], ["Hindi", "hi"], ["Spanish", "es"], ["French", "fr"], ["German", "de"],
+    ["Portuguese", "pt"], ["Italian", "it"], ["Mandarin Chinese", "zh"], ["Japanese", "ja"],
+    ["Korean", "ko"], ["Arabic", "ar"], ["Farsi (Persian)", "fa"], ["Russian", "ru"],
+    ["Bengali", "bn"], ["Punjabi", "pa"], ["Gujarati", "gu"], ["Marathi", "mr"], ["Tamil", "ta"],
+    ["Telugu", "te"], ["Urdu", "ur"], ["Dutch", "nl"], ["Polish", "pl"], ["Turkish", "tr"],
+    ["Vietnamese", "vi"], ["Thai", "th"], ["Indonesian", "id"], ["Tagalog (Filipino)", "tl"],
+    ["Greek", "el"], ["Hebrew", "he"], ["Swedish", "sv"], ["Norwegian", "no"],
+    ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"]
+  ];
+  var LANG_NAME_TO_CODE = (function () {
+    var m = {};
+    LANGUAGES.forEach(function (pair) { m[pair[0].toLowerCase()] = pair[1]; });
+    m.mandarin = "zh"; m.chinese = "zh"; m.persian = "fa"; m.farsi = "fa"; m.filipino = "tl"; m.tagalog = "tl";
+    return m;
+  })();
   function normalizeLangCode(raw) {
     var s = (raw || "").trim().toLowerCase();
     if (!s) return null;
@@ -1052,6 +1066,26 @@ const RAW = String.raw`<!doctype html>
     i.addEventListener("input", function () { onInput(i.value); });
     return i;
   }
+  // A dropdown of known languages — replaces free-text entry so a typo or
+  // an unlisted language (like "Farsi" used to be) can't silently produce
+  // no translation. "Choose a language" is a real placeholder option so
+  // nothing's picked by default; picking one is required to register.
+  function languageSelectField(value, onInput) {
+    var sel = document.createElement("select");
+    sel.className = "lang-select";
+    var placeholder = document.createElement("option");
+    placeholder.value = ""; placeholder.textContent = t("Choose a language"); placeholder.disabled = true;
+    if (!value) placeholder.selected = true;
+    sel.appendChild(placeholder);
+    LANGUAGES.forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0]; opt.textContent = pair[0];
+      if (value === pair[0]) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", function () { onInput(sel.value); });
+    return sel;
+  }
 
   function acceptInviteForm() {
     var card = h("div", { class: "card" }, [
@@ -1061,7 +1095,7 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; }));
-    form.appendChild(textField(acceptDraft.language, "Preferred language", function (v) { acceptDraft.language = v; }));
+    form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Same Sky") });
     btn.disabled = regBusy;
@@ -1139,7 +1173,7 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; }));
     form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; }));
-    form.appendChild(textField(registerDraft.language, "Preferred language", function (v) { registerDraft.language = v; }));
+    form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Register") });
     btn.disabled = regBusy;

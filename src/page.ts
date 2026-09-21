@@ -1263,11 +1263,7 @@ const RAW = String.raw`<!doctype html>
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
     var otherLabel = inviteeLabel(otherKey);
-    var registeredAlready = !!(state.people && state.people[otherKey] && state.people[otherKey].name);
     var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: otherLabel }) })])]);
-    if (!registeredAlready) {
-      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("(complete their registration to send invite)") }));
-    }
     if (pending && !showInviteForm) {
       card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: otherLabel }) }));
       card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));

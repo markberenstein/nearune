@@ -21,6 +21,10 @@ export type State = {
   pendingInvite?: Partial<Record<PersonKey, { token: string; at: string }>>;
   puzzleCurrentId?: string;
   puzzleAnswer?: string;
+  // What the guesser is being asked, e.g. "Where was this taken?" — defaults
+  // to that when whoever loaded the photo left it blank, but they can type
+  // any question they like instead (not secret, unlike puzzleAnswer).
+  puzzleQuestion?: string;
   puzzleSetBy?: PersonKey;
   puzzleRoundBase?: number; // legacy field, no longer written; kept for old snapshots
   puzzleRoundStartDate?: string; // date key (PT) this photo's round started
@@ -32,7 +36,7 @@ export type State = {
   puzzleLastGuessBy?: PersonKey;
   puzzleLastGuessText?: string;
   puzzleLastGuessCorrect?: boolean;
-  puzzleQueue?: { id: string; answer: string }[];
+  puzzleQueue?: { id: string; answer: string; question?: string }[];
   puzzleQueueBy?: PersonKey;
   puzzleQueueAt?: string;
   puzzleQueueTotal?: number;

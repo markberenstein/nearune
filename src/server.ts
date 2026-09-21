@@ -248,12 +248,14 @@ Bun.serve({
       if (!isPerson(who) || !Array.isArray(items) || items.length < 1 || items.length > 10) {
         return json({ error: "invalid" }, { status: 400 });
       }
-      const parsed: { id: string; answer: string; bytes: Uint8Array }[] = [];
+      const parsed: { id: string; answer: string; question: string; bytes: Uint8Array }[] = [];
       for (const item of items) {
         const dataUrl = item && item.dataUrl;
         const answer = item && item.answer;
+        const question = item && item.question;
         const match = typeof dataUrl === "string" ? dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
         const trimmedAnswer = typeof answer === "string" ? answer.trim().slice(0, 200) : "";
+        const trimmedQuestion = typeof question === "string" ? question.trim().slice(0, 200) : "";
         if (!match || !trimmedAnswer) return json({ error: "invalid" }, { status: 400 });
         let bytes: Uint8Array;
         try {
@@ -262,7 +264,7 @@ Bun.serve({
           return json({ error: "invalid" }, { status: 400 });
         }
         if (bytes.length > 6 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
-        parsed.push({ id: crypto.randomUUID(), answer: trimmedAnswer, bytes });
+        parsed.push({ id: crypto.randomUUID(), answer: trimmedAnswer, question: trimmedQuestion, bytes });
       }
       const current = await loadState(roomId);
       if (current.puzzleCurrentId || (current.puzzleQueue && current.puzzleQueue.length > 0)) {
@@ -277,9 +279,10 @@ Bun.serve({
       }
       const state = await saveState(roomId, (s) => {
         const first = parsed[0];
-        const rest = parsed.slice(1).map((p) => ({ id: p.id, answer: p.answer }));
+        const rest = parsed.slice(1).map((p) => ({ id: p.id, answer: p.answer, question: p.question }));
         s.puzzleCurrentId = first.id;
         s.puzzleAnswer = first.answer;
+        if (first.question) s.puzzleQuestion = first.question; else delete s.puzzleQuestion;
         s.puzzleSetBy = who;
         s.puzzleRoundStartDate = todayKeyPT();
         s.puzzleBonusCredits = 0;

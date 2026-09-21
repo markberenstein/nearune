@@ -146,12 +146,14 @@ export function advanceQueue(s: State) {
     const next = s.puzzleQueue.shift()!;
     s.puzzleCurrentId = next.id;
     s.puzzleAnswer = next.answer;
+    if (next.question) s.puzzleQuestion = next.question; else delete s.puzzleQuestion;
     s.puzzleRoundStartDate = todayKeyPT();
     s.puzzleBonusCredits = bonus ? 1 : 0;
     delete s.puzzleRoundBase;
   } else {
     delete s.puzzleCurrentId;
     delete s.puzzleAnswer;
+    delete s.puzzleQuestion;
     delete s.puzzleSetBy;
     delete s.puzzleRoundBase;
     delete s.puzzleRoundStartDate;

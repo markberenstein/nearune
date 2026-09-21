@@ -14,7 +14,7 @@ import {
   ensurePuzzleMigrated,
 } from "./storage";
 import { resolveTranslation } from "./translate";
-import { json, isValidEmail, readJson, sendViaResend, todayKeyPT, guessMatches, advanceQueue, forClient } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient } from "./util";
 import { buildPageHtml, buildNewRoomPage } from "./page";
 
 const PORT = Number(Bun.env.PORT) || 3000;
@@ -129,7 +129,7 @@ Bun.serve({
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
       });
       const confirmUrl = url.origin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
-      const r = await sendViaResend(
+      const r = await sendEmail(
         email,
         "Confirm your Same Sky account",
         "<p>Hi " + name + ",</p><p><a href=\"" + confirmUrl + "\">Confirm your email</a></p>"
@@ -180,7 +180,7 @@ Bun.serve({
       });
       const inviteUrl = url.origin + roomPrefix + "/?invite=" + other + "&token=" + token;
       const inviterName = cur.people[who]!.name;
-      const r = await sendViaResend(
+      const r = await sendEmail(
         email,
         inviterName + " invited you to Same Sky",
         "<p>" + inviterName + " invited you to Same Sky.</p><p><a href=\"" + inviteUrl + "\">Accept</a></p>"

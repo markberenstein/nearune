@@ -40,6 +40,46 @@ export async function sendViaResend(to: string, subject: string, html: string): 
   }
 }
 
+// SendGrid — used instead of Resend when SENDGRID_API_KEY is set. Unlike
+// Resend's sandbox sender (which can only email the account owner until a
+// full domain is verified), SendGrid's free Single Sender Verification lets
+// one already-owned address (no domain needed) send to anyone.
+export async function sendViaSendGrid(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
+  const key = Bun.env.SENDGRID_API_KEY;
+  if (!key) return { ok: false, error: "no_key" };
+  const fromEmail = Bun.env.SENDGRID_FROM_EMAIL;
+  if (!fromEmail) return { ok: false, error: "no_from_email" };
+  try {
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + key },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: fromEmail, name: "Same Sky" },
+        subject,
+        content: [{ type: "text/html", value: html }],
+      }),
+    });
+    if (res.ok) return { ok: true };
+    let msg = "send_failed";
+    try {
+      const d: any = await res.json();
+      if (d && d.errors && d.errors[0] && d.errors[0].message) msg = d.errors[0].message;
+    } catch {}
+    return { ok: false, error: msg };
+  } catch {
+    return { ok: false, error: "network_error" };
+  }
+}
+
+// Tries SendGrid first (works for any recipient, once a single sender is
+// verified — see sendViaSendGrid above), falling back to Resend so nothing
+// breaks before SendGrid is configured.
+export async function sendEmail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
+  if (Bun.env.SENDGRID_API_KEY) return sendViaSendGrid(to, subject, html);
+  return sendViaResend(to, subject, html);
+}
+
 // New day rolls over at 6:30am in whichever of the two people's zones is
 // currently ahead — Asia/Kolkata (IST, fixed UTC+5:30) is always ahead of
 // America/Los_Angeles, so 6:30am IST is the rollover instant. (Same

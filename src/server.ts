@@ -114,6 +114,7 @@ Bun.serve({
       const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
+      const tz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!isPerson(who) || !name || !isValidEmail(email)) {
         return json({ error: "invalid" }, { status: 400 });
       }
@@ -124,7 +125,7 @@ Bun.serve({
       const token = crypto.randomUUID();
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, confirmed: false };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
       });
@@ -208,6 +209,7 @@ Bun.serve({
       const name = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
+      const tz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
@@ -217,7 +219,7 @@ Bun.serve({
       if (!who) return json({ error: "invalid_token" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who!] = { name, location, language, confirmed: true };
+        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
       return json({ who, ...forClient(state) });

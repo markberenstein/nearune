@@ -386,6 +386,16 @@ const RAW = String.raw`<!doctype html>
     return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(d);
   }
   function clockFor(tz) { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date()); }
+  // The registering browser's own IANA zone — captured automatically so the
+  // other person's clock is correct without asking anyone to pick a
+  // timezone by hand (free-text "location" alone can't reliably give us one).
+  function browserTz() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; }
+  }
+  function personTz(key) {
+    var p = state.people && state.people[key];
+    return (p && p.tz) || PEOPLE[key].tz;
+  }
   function nextRolloverMs() {
     var n = Date.now(), d = new Date(n);
     var c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 1, 0, 0);
@@ -1055,7 +1065,7 @@ const RAW = String.raw`<!doctype html>
       regBusy = true; regError = ""; renderApp();
       fetch(RP + "/api/accept-invite", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: inviteParams.token, name: acceptDraft.name.trim(), location: acceptDraft.location.trim(), language: acceptDraft.language.trim() })
+        body: JSON.stringify({ token: inviteParams.token, name: acceptDraft.name.trim(), location: acceptDraft.location.trim(), language: acceptDraft.language.trim(), tz: browserTz() })
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
@@ -1085,7 +1095,7 @@ const RAW = String.raw`<!doctype html>
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, email: email, location: registerDraft.location.trim(), language: registerDraft.language.trim() })
+      body: JSON.stringify({ who: viewerKey, name: name, email: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz() })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -1276,8 +1286,8 @@ const RAW = String.raw`<!doctype html>
 
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Same Sky</span>" });
-    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(PEOPLE.mark.tz) })]);
-    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(PEOPLE.nikita.tz) })]);
+    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
+    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
     return h("div", {}, [wordmark, clocks]);
@@ -1439,7 +1449,7 @@ const RAW = String.raw`<!doctype html>
 
   function tickClocks() {
     document.querySelectorAll(".clock-time").forEach(function (el, i) {
-      el.textContent = i === 0 ? clockFor(PEOPLE.mark.tz) : clockFor(PEOPLE.nikita.tz);
+      el.textContent = i === 0 ? clockFor(personTz("mark")) : clockFor(personTz("nikita"));
     });
     var cd = document.getElementById("cd-note");
     if (cd) cd.textContent = countdownText();

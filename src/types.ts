@@ -7,7 +7,10 @@ export type PersonKey = "mark" | "nikita";
 
 export type Answer = { text: string; at: string; editedAt?: string };
 export type Comment = { who: PersonKey; text: string; at: string };
-export type PersonProfile = { name: string; location: string; language: string; confirmed: boolean };
+// tz is captured automatically from the registering browser (IANA zone,
+// e.g. "Asia/Bangkok") — not typed by hand, since free-text "location"
+// (city name) isn't reliably mappable to a timezone.
+export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean };
 export type State = {
   version: number;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;

@@ -594,6 +594,16 @@ const RAW = String.raw`<!doctype html>
   // longer notes): returns a separate translated line, styled exactly like
   // the rest of the app's dual-language display.
   function otherUiLang() {
+    // Only one extra language can show alongside English on a given device,
+    // so when the two people picked two different non-English languages,
+    // this device shows whichever one the CURRENT viewer actually reads —
+    // not always mark's, which was the old (wrong) behavior: e.g. mark set
+    // to Hindi and nikita set to Farsi used to show every device English +
+    // Hindi, leaving nikita reading UI copy in a language she doesn't speak.
+    if (viewerKey) {
+      var mine = langCodeFor(viewerKey);
+      if (mine !== "en") return mine;
+    }
     var mLang = langCodeFor("mark"), nLang = langCodeFor("nikita");
     if (mLang !== "en") return mLang;
     if (nLang !== "en") return nLang;

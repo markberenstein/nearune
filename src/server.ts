@@ -14,6 +14,7 @@ import {
   ensurePuzzleMigrated,
 } from "./storage";
 import { resolveTranslation } from "./translate";
+import { resolveTimezoneFromLocation } from "./geo";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient } from "./util";
 import { buildPageHtml, buildNewRoomPage } from "./page";
 
@@ -114,7 +115,7 @@ Bun.serve({
       const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
-      const tz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!isPerson(who) || !name || !isValidEmail(email)) {
         return json({ error: "invalid" }, { status: 400 });
       }
@@ -122,6 +123,12 @@ Bun.serve({
       if (cur.people && cur.people[who] && cur.people[who]!.confirmed) {
         return json({ error: "already_registered" }, { status: 409 });
       }
+      // The typed location is the source of truth for timezone when it
+      // resolves to a real place; the registering device's own timezone is
+      // only a fallback (covers an empty/unrecognized location, or the
+      // geocoding lookup being unreachable).
+      const resolvedTz = await resolveTimezoneFromLocation(location);
+      const tz = resolvedTz || browserTz;
       const token = crypto.randomUUID();
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
@@ -209,7 +216,7 @@ Bun.serve({
       const name = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
-      const tz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
@@ -217,6 +224,8 @@ Bun.serve({
         if (cur.pendingInvite && cur.pendingInvite[k] && cur.pendingInvite[k]!.token === token) who = k;
       });
       if (!who) return json({ error: "invalid_token" }, { status: 400 });
+      const resolvedTz = await resolveTimezoneFromLocation(location);
+      const tz = resolvedTz || browserTz;
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
         s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true };

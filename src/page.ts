@@ -1172,13 +1172,15 @@ const RAW = String.raw`<!doctype html>
     app.innerHTML = "";
 
     if (inviteParams) { app.appendChild(acceptInviteForm()); return; }
-    soloRegistration = false;
+    // A brand-new room (not the legacy one) with nobody registered yet has
+    // only one real person so far — whoever has the link. This stays true
+    // across every render (not just the one where viewerKey gets assigned),
+    // since state.people is what actually tells us nobody's registered.
+    var nobodyRegisteredYet = !!(ROOM && (!state.people || (!state.people.mark && !state.people.nikita)));
+    soloRegistration = nobodyRegisteredYet;
     if (!viewerKey) {
-      // A brand-new room (not the legacy one) with nobody registered yet has
-      // only one real person so far — whoever has the link. Skip the "who's
-      // here" picker (it would show placeholder names, not anyone real) and
-      // put them straight into registering themselves.
-      var nobodyRegisteredYet = ROOM && (!state.people || (!state.people.mark && !state.people.nikita));
+      // Skip the "who's here" picker (it would show placeholder names, not
+      // anyone real) and put the first visitor straight into registering.
       if (nobodyRegisteredYet) {
         viewerKey = "mark";
         soloRegistration = true;

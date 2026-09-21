@@ -1124,8 +1124,8 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: t("Finish setting up your Same Sky.") })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); }));
+    form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Same Sky") });
@@ -1201,9 +1201,9 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: subtitle })
     ]);
     var form = h("div", { class: "puzzle-setup" });
+    form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); }));
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; }));
-    form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Register") });

@@ -378,14 +378,25 @@ const RAW = String.raw`<!doctype html>
     return tTemplate("Next question in {h} hours and {m} minutes", { h: hrs, m: mins });
   }
 
+  // localStorage keys are scoped per room (ROOM is "" for the original
+  // legacy room), so "who am I" in one couple's room never leaks into
+  // another room created later in the same browser. The legacy room falls
+  // back to the old unscoped key so existing sessions aren't disrupted.
+  var VIEWER_LS_KEY = "sameSkyViewer:" + ROOM;
+  var TAB_LS_KEY = "sameSkyTab:" + ROOM;
+
   var state = { version: 1, answers: {}, status: {}, comments: {} };
   var viewerKey = null;
-  try { viewerKey = localStorage.getItem("sameSkyViewer"); } catch (e) {}
+  try {
+    viewerKey = localStorage.getItem(VIEWER_LS_KEY);
+    if (viewerKey === null && !ROOM) viewerKey = localStorage.getItem("sameSkyViewer");
+  } catch (e) {}
   if (viewerKey !== "mark" && viewerKey !== "nikita") viewerKey = null;
 
   var activeTab = "today";
   try {
-    var storedTab = localStorage.getItem("sameSkyTab");
+    var storedTab = localStorage.getItem(TAB_LS_KEY);
+    if (storedTab === null && !ROOM) storedTab = localStorage.getItem("sameSkyTab");
     if (storedTab === "puzzle" || storedTab === "today") activeTab = storedTab;
   } catch (e) {}
   var puzzleFlashMsg = null;
@@ -946,7 +957,7 @@ const RAW = String.raw`<!doctype html>
 
   function setActiveTab(tab, flashMsg) {
     activeTab = tab;
-    try { localStorage.setItem("sameSkyTab", tab); } catch (e) {}
+    try { localStorage.setItem(TAB_LS_KEY, tab); } catch (e) {}
     if (flashMsg) puzzleFlashMsg = flashMsg;
     renderApp();
   }
@@ -1015,7 +1026,7 @@ const RAW = String.raw`<!doctype html>
           if (!res.ok) { regError = t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
-          try { localStorage.setItem("sameSkyViewer", viewerKey); } catch (e) {}
+          try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
           try {
             var u = new URL(location.href);
             u.searchParams.delete("invite"); u.searchParams.delete("token");
@@ -1081,7 +1092,7 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(btn);
     card.appendChild(form);
     var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-    sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem("sameSkyViewer"); } catch (e) {} renderApp(); });
+    sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
     card.appendChild(h("div", { class: "switch-row" }, [sw]));
     return card;
   }
@@ -1188,7 +1199,7 @@ const RAW = String.raw`<!doctype html>
   }
   function chooseViewer(key) {
     viewerKey = key;
-    try { localStorage.setItem("sameSkyViewer", key); } catch (e) {}
+    try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     renderApp();
   }
 
@@ -1346,7 +1357,7 @@ const RAW = String.raw`<!doctype html>
     var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
     link.addEventListener("click", function () {
       viewerKey = null;
-      try { localStorage.removeItem("sameSkyViewer"); } catch (e) {}
+      try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
       renderApp();
     });
     row.appendChild(link);
@@ -1424,7 +1435,8 @@ export function buildNewRoomPage(): string {
 <body>
 <div class="card">
   <h1>Start your own Same Sky</h1>
-  <p>Create a private daily-question space for you and one other person. You'll each pick a language and location when you register — everything else works the same as the original.</p>
+  <p>Same Sky is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
+  <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your person; when you each open it, you'll register your own name, language, and location, then you're set.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
 </div>

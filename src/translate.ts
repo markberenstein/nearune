@@ -36,7 +36,22 @@ export async function translateViaMyMemory(text: string, target: string, source:
   if (!res.ok) return null;
   const data: any = await res.json();
   const translated = data && data.responseData && data.responseData.translatedText;
-  if (!translated || /MYMEMORY WARNING/i.test(translated) || /PLEASE SELECT/i.test(translated)) return null;
+  // MyMemory reports errors (bad language code, quota, etc.) as HTTP 200
+  // with the error text sitting where the translation would be, so a
+  // string check is the only way to catch it — never show that raw error
+  // text to a user as if it were a translation. responseStatus doubles as
+  // a fast check for the common case (non-200 means something went wrong).
+  if (
+    !translated ||
+    (data && data.responseStatus && data.responseStatus !== 200) ||
+    /MYMEMORY WARNING/i.test(translated) ||
+    /PLEASE SELECT/i.test(translated) ||
+    /INVALID (SOURCE|TARGET) LANGUAGE/i.test(translated) ||
+    /IS AN INVALID/i.test(translated) ||
+    /^['"][a-z-]+['"] IS/i.test(translated)
+  ) {
+    return null;
+  }
   return translated;
 }
 

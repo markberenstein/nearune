@@ -260,7 +260,12 @@ const RAW = String.raw`<!doctype html>
     if (/^[a-z]{2}$/.test(s)) return s;
     var first = s.split(/[\s(,]/)[0];
     if (LANG_NAME_TO_CODE[first]) return LANG_NAME_TO_CODE[first];
-    return s.slice(0, 2);
+    // Not a language we recognize (e.g. someone typed a country or a typo,
+    // like "Australian") — guessing a 2-letter code from the first letters
+    // (e.g. "au") produces an invalid target language for the translate
+    // API, which then shows its raw error text as if it were a translation.
+    // Safer to say "unknown" than to guess wrong.
+    return null;
   }
   function langCodeFor(key) {
     var p = state.people && state.people[key];

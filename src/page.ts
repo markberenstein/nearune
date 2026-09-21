@@ -168,11 +168,11 @@ const RAW = String.raw`<!doctype html>
   .puzzle-guess-btn { background: var(--accent-ink); color: #fff; border: none; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 700; font-size: 0.83rem; cursor: pointer; flex: none; }
   .puzzle-guess-btn:disabled { opacity: 0.55; }
   .puzzle-guess-note { font-size: 0.83rem; color: var(--ink-soft); margin: 0; text-align: center; }
-  .puzzle-batch-list { display: flex; flex-direction: column; gap: 10px; }
-  .puzzle-batch-row { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .puzzle-batch-list { display: flex; flex-direction: column; gap: 12px; }
+  .puzzle-batch-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .puzzle-batch-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .puzzle-batch-name { font-size: 0.78rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .puzzle-batch-fields { display: flex; align-items: center; gap: 6px; }
-  .puzzle-batch-fields input { flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--ink); font: inherit; font-size: 0.82rem; outline: none; }
+  .puzzle-batch-row input { width: 100%; box-sizing: border-box; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--ink); font: inherit; font-size: 0.82rem; outline: none; }
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
 
@@ -787,8 +787,6 @@ const RAW = String.raw`<!doctype html>
 
   function puzzleBatchForm() {
     var wrap = h("div", { class: "puzzle-setup" });
-    wrap.appendChild(h("p", { text: t("One of you loads a photo (or up to 10 at once) — your partner guesses to reveal it, one piece at a time.") }));
-    wrap.appendChild(h("p", { text: t("By default they're just guessing where each photo was taken, but you can ask something else instead — type your own question and answer for any photo.") }));
 
     var fileInput = document.createElement("input");
     fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.multiple = true; fileInput.style.display = "none";
@@ -805,22 +803,22 @@ const RAW = String.raw`<!doctype html>
       list.innerHTML = "";
       puzzleBatchItems.forEach(function (item, i) {
         var row = h("div", { class: "puzzle-batch-row" });
-        row.appendChild(h("span", { class: "puzzle-batch-name", text: item.file.name }));
-        var fields = h("div", { class: "puzzle-batch-fields" });
+        var head = h("div", { class: "puzzle-batch-head" });
+        head.appendChild(h("span", { class: "puzzle-batch-name", text: item.file.name }));
+        var rm = h("button", { class: "puzzle-batch-remove", text: "✕" });
+        rm.addEventListener("click", function () { puzzleBatchItems.splice(i, 1); renderList(); refreshSubmit(); });
+        head.appendChild(rm);
+        row.appendChild(head);
         var q = document.createElement("input");
         q.type = "text"; q.maxLength = 120; q.placeholder = t("Question (optional — defaults to \"where is this?\")");
         q.value = item.question || "";
         q.addEventListener("input", function () { item.question = q.value; });
-        fields.appendChild(q);
+        row.appendChild(q);
         var ans = document.createElement("input");
-        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer for this one…");
+        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer");
         ans.value = item.answer;
         ans.addEventListener("input", function () { item.answer = ans.value; refreshSubmit(); });
-        fields.appendChild(ans);
-        var rm = h("button", { class: "puzzle-batch-remove", text: "✕" });
-        rm.addEventListener("click", function () { puzzleBatchItems.splice(i, 1); renderList(); refreshSubmit(); });
-        fields.appendChild(rm);
-        row.appendChild(fields);
+        row.appendChild(ans);
         list.appendChild(row);
       });
     }
@@ -956,7 +954,7 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "puzzle-title", text: t("Us, one piece at a time") }),
         h("span", { class: "puzzle-progress", text: tTemplate("{n} / {total} pieces", { n: unlocked, total: PUZZLE_TOTAL }) })
       ]),
-      h("p", { class: "puzzle-explain", text: t("Once you both answer today's question, a puzzle piece unlocks. Whoever didn't load the picture gets one guess a day at where it was taken.") })
+      h("p", { class: "puzzle-explain", text: t("One of you loads up to 10 pictures, each with a question you both know the answer to. Every day you both answer, a new piece of the picture is revealed.") })
     ]);
     if (!inBatch) {
       card.appendChild(puzzleBatchForm());

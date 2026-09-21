@@ -155,7 +155,12 @@ Bun.serve({
           ok = true;
         }
       }
-      const backUrl = url.origin + roomPrefix + "/";
+      // ?viewer=<who> lets the client auto-select this person as "you" on
+      // load — without it, clicking the confirm link in a browser context
+      // that doesn't share localStorage with wherever they registered (e.g.
+      // an email app's in-app browser) drops them on the "who's here?"
+      // picker instead of straight into their next step.
+      const backUrl = url.origin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
       const html = ok
         ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Same Sky</a></p></body></html>"
         : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";

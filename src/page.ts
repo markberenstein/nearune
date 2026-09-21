@@ -414,6 +414,21 @@ const RAW = String.raw`<!doctype html>
   } catch (e) {}
   if (viewerKey !== "mark" && viewerKey !== "nikita") viewerKey = null;
 
+  // The confirm-email link comes back as "?viewer=mark" (or "nikita") so
+  // whoever just confirmed lands straight on their next step, even if this
+  // browser context (e.g. an email app's in-app browser) doesn't share
+  // localStorage with wherever they originally registered — without this,
+  // they'd hit the "who's here?" picker instead.
+  try {
+    var viewerParam = new URLSearchParams(location.search).get("viewer");
+    if (viewerParam === "mark" || viewerParam === "nikita") {
+      viewerKey = viewerParam;
+      localStorage.setItem(VIEWER_LS_KEY, viewerParam);
+      var cleanUrl = location.pathname;
+      history.replaceState(null, "", cleanUrl);
+    }
+  } catch (e) {}
+
   var activeTab = "today";
   try {
     var storedTab = localStorage.getItem(TAB_LS_KEY);
@@ -1234,14 +1249,21 @@ const RAW = String.raw`<!doctype html>
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
+  // A registered person shows their real name ("I'm Dan"); the not-yet-
+  // registered slot can't say "I'm Person B" in the first person, so it
+  // offers to register instead.
+  function pickerButtonLabel(key) {
+    var p = state.people && state.people[key];
+    return (p && p.name) ? "I'm " + p.name : t("I haven't registered yet");
+  }
   function pickerOverlay() {
     return h("div", { class: "picker-overlay" }, [
       h("div", { class: "picker-card" }, [
         h("h2", { text: "Who's here?" }),
         h("p", { text: "So Same Sky knows whose answer is whose." }),
         h("div", { class: "picker-choices" }, [
-          h("button", { class: "picker-btn", onclick: function () { chooseViewer("mark"); } }, [document.createTextNode("I'm " + personName("mark"))]),
-          h("button", { class: "picker-btn", onclick: function () { chooseViewer("nikita"); } }, [document.createTextNode("I'm " + personName("nikita"))])
+          h("button", { class: "picker-btn", onclick: function () { chooseViewer("mark"); } }, [document.createTextNode(pickerButtonLabel("mark"))]),
+          h("button", { class: "picker-btn", onclick: function () { chooseViewer("nikita"); } }, [document.createTextNode(pickerButtonLabel("nikita"))])
         ])
       ])
     ]);

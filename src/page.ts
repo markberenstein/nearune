@@ -485,8 +485,23 @@ const RAW = String.raw`<!doctype html>
   function totalCompleteDays() {
     return Object.keys(state.answers).filter(isComplete).length;
   }
-  function daysCompleteSince(startKey) {
-    return Object.keys(state.answers).filter(function (k) { return k >= startKey && isComplete(k); }).length;
+  // How many consecutive days (ending on dateKeyVal, inclusive) you'd both
+  // shown up as of that day — the same "streak" shown on the Today tab,
+  // just evaluated as of a past date instead of today. 0 if that day wasn't
+  // completed at all.
+  function streakLengthAt(dateKeyVal) {
+    if (!isComplete(dateKeyVal)) return 0;
+    var count = 0;
+    var cursor = dateKeyVal;
+    while (isComplete(cursor)) { count++; cursor = keyOffsetDays(cursor, -1); }
+    return count;
+  }
+  // Keeping the streak alive earns more pieces per day, not just one: 5
+  // days running bumps it to 2 a day, 10 days running bumps it to 3.
+  function piecesForStreakLength(streakLen) {
+    if (streakLen >= 10) return 3;
+    if (streakLen >= 5) return 2;
+    return 1;
   }
   function streakInfo() {
     var today = dateKey(new Date());
@@ -641,7 +656,12 @@ const RAW = String.raw`<!doctype html>
   function puzzleUnlockedCount() {
     if (state.puzzleSolved) return PUZZLE_TOTAL;
     if (!state.puzzleRoundStartDate) return 0;
-    var unlocked = daysCompleteSince(state.puzzleRoundStartDate) + (state.puzzleBonusCredits || 0);
+    var start = state.puzzleRoundStartDate;
+    var unlocked = 0;
+    Object.keys(state.answers).forEach(function (k) {
+      if (k >= start && isComplete(k)) unlocked += piecesForStreakLength(streakLengthAt(k));
+    });
+    unlocked += (state.puzzleBonusCredits || 0);
     return Math.min(Math.max(unlocked, 0), PUZZLE_TOTAL);
   }
 
@@ -954,7 +974,7 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "puzzle-title", text: t("Us, one piece at a time") }),
         h("span", { class: "puzzle-progress", text: tTemplate("{n} / {total} pieces", { n: unlocked, total: PUZZLE_TOTAL }) })
       ]),
-      h("p", { class: "puzzle-explain", text: t("One of you loads up to 10 pictures, each with a question you both know the answer to. Every day you both answer, a new piece of the picture is revealed.") })
+      h("p", { class: "puzzle-explain", text: t("One of you loads up to 10 pictures, each with a question you both know the answer to. Every day you both answer, a new piece is revealed — keep the streak going and it speeds up: 2 pieces a day after 5 days running, 3 after 10. Guess the answer right and the whole picture is revealed, then the next one begins.") })
     ]);
     if (!inBatch) {
       card.appendChild(puzzleBatchForm());

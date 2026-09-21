@@ -25,6 +25,7 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   RU: "Russian",
   BD: "Bengali",
   PK: "Urdu",
+  IN: "Hindi",
   NL: "Dutch",
   PL: "Polish",
   TR: "Turkish",

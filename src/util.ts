@@ -119,6 +119,51 @@ export function daysCompleteSince(state: State, startKey: string): number {
   return Object.keys(state.answers).filter((k) => k >= startKey && isDayComplete(state, k)).length;
 }
 
+function keyOffsetDays(key: string, delta: number): string {
+  const bits = key.split("-").map(Number);
+  const d = new Date(Date.UTC(bits[0], bits[1] - 1, bits[2]) + delta * 86400000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+// How many consecutive days (ending on key, inclusive) were both complete,
+// as of that day — 0 if that day itself wasn't completed. Mirrors the
+// "streak" shown on the Today tab, just evaluated as of a past date.
+export function streakLengthAt(state: State, key: string): number {
+  if (!isDayComplete(state, key)) return 0;
+  let count = 0;
+  let cursor = key;
+  while (isDayComplete(state, cursor)) {
+    count++;
+    cursor = keyOffsetDays(cursor, -1);
+  }
+  return count;
+}
+
+// Keeping the streak alive earns more pieces per day, not just one: 5 days
+// running bumps it to 2 a day, 10 days running bumps it to 3.
+export function piecesForStreakLength(streakLen: number): number {
+  if (streakLen >= 10) return 3;
+  if (streakLen >= 5) return 2;
+  return 1;
+}
+
+export const PUZZLE_TOTAL = 25;
+
+// The authoritative unlocked-piece count for the current puzzle round —
+// computed here (not just on the client) so every device sees the same
+// number straight from the server, including the streak speed-up above.
+export function puzzleUnlockedCount(state: State): number {
+  if (state.puzzleSolved) return PUZZLE_TOTAL;
+  if (!state.puzzleRoundStartDate) return 0;
+  const start = state.puzzleRoundStartDate;
+  let unlocked = 0;
+  for (const k of Object.keys(state.answers)) {
+    if (k >= start && isDayComplete(state, k)) unlocked += piecesForStreakLength(streakLengthAt(state, k));
+  }
+  unlocked += state.puzzleBonusCredits || 0;
+  return Math.min(Math.max(unlocked, 0), PUZZLE_TOTAL);
+}
+
 export function normalizeGuess(s: string): string {
   return (s || "")
     .toLowerCase()
@@ -175,7 +220,10 @@ export function forClient(state: State): State {
   if (pendingConfirm) for (const k of Object.keys(pendingConfirm)) pc[k] = true;
   const pi: Record<string, boolean> = {};
   if (pendingInvite) for (const k of Object.keys(pendingInvite)) pi[k] = true;
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi } as State;
+  // Computed fresh on every response — the client displays this number
+  // as-is rather than recomputing it, so both devices always agree.
+  const puzzleUnlocked = puzzleUnlockedCount(state);
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, puzzleUnlocked } as State;
   if (withFlags.puzzleSolved) return withFlags;
   const { puzzleAnswer, ...rest } = withFlags;
   return rest as State;

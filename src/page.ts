@@ -654,6 +654,10 @@ const RAW = String.raw`<!doctype html>
   var PUZZLE_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
   function puzzleUnlockedCount() {
+    // The server computes this authoritatively (same streak-speed-up rules,
+    // see util.ts puzzleUnlockedCount) so both devices always agree — this
+    // local math only covers state the server hasn't returned yet.
+    if (typeof state.puzzleUnlocked === "number") return state.puzzleUnlocked;
     if (state.puzzleSolved) return PUZZLE_TOTAL;
     if (!state.puzzleRoundStartDate) return 0;
     var start = state.puzzleRoundStartDate;

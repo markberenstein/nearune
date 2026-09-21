@@ -20,6 +20,9 @@ export type State = {
   pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string }>>;
   pendingInvite?: Partial<Record<PersonKey, { token: string; at: string }>>;
   puzzleCurrentId?: string;
+  // Server-computed on every response (not persisted) — how many pieces of
+  // the current picture are unlocked, including the streak speed-up.
+  puzzleUnlocked?: number;
   puzzleAnswer?: string;
   // What the guesser is being asked, e.g. "Where was this taken?" — defaults
   // to that when whoever loaded the photo left it blank, but they can type

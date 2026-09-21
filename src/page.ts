@@ -507,26 +507,33 @@ const RAW = String.raw`<!doctype html>
   }
 
   // UI-copy translation: every static label/button/note in the app is
-  // authored in English. t() swaps it in-place for the viewer's own
-  // registered language once a translation comes back (falls back to the
-  // English original while pending, so nothing flickers or shows blank).
-  // tTemplate() is for copy with embedded dynamic values (names, counts) —
-  // it translates the fixed template (with {tokens}) once and substitutes
-  // the live values afterward, so a changing number never triggers a fresh
-  // translation call.
-  function uiLang() {
-    if (!viewerKey) return "en";
-    var code = langCodeFor(viewerKey);
-    return code || "en";
+  // authored in English. Rather than switching each screen to just one
+  // language, both languages show together everywhere — the same
+  // convention the app already uses for exchanged answers/comments — so
+  // either person always sees the same page. t() is for inline copy
+  // (buttons, short labels, composed messages): returns "English
+  // (Translated)" once a translation comes back, or just the English
+  // original while pending or if both people are English speakers.
+  // uiTranslateBlock() is for paragraph-level copy (the daily question,
+  // longer notes): returns a separate translated line, styled exactly like
+  // the rest of the app's dual-language display.
+  function otherUiLang() {
+    var mLang = langCodeFor("mark"), nLang = langCodeFor("nikita");
+    if (mLang !== "en") return mLang;
+    if (nLang !== "en") return nLang;
+    return null;
   }
   function t(text) {
     if (!text) return text;
-    var lang = uiLang();
-    if (lang === "en") return text;
+    var lang = otherUiLang();
+    if (!lang) return text;
     var key = lang + "|en::" + text;
     scheduleTranslate(text, lang, "en");
     var val = translationCache[key];
-    return val === undefined || val === null ? text : val;
+    return val ? text + " (" + val + ")" : text;
+  }
+  function uiTranslateBlock(text) {
+    return translateBlock(text, otherUiLang(), "en");
   }
   function tTemplate(template, vars) {
     // Translation services translate the WORDS inside {name}-style tokens
@@ -1222,7 +1229,8 @@ const RAW = String.raw`<!doctype html>
 
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
-      h("p", { class: "question", text: t(q) })
+      h("p", { class: "question", text: q }),
+      uiTranslateBlock(q)
     ]);
 
     if (complete) {
@@ -1309,7 +1317,8 @@ const RAW = String.raw`<!doctype html>
           var entry = state.answers[key];
           var entryDiv = h("div", { class: "journal-entry" }, [
             h("div", { class: "journal-date", text: t(formatDateLabel(key)) }),
-            h("p", { class: "journal-q", text: t(questionForKey(key)) })
+            h("p", { class: "journal-q", text: questionForKey(key) }),
+            uiTranslateBlock(questionForKey(key))
           ]);
           ["mark", "nikita"].forEach(function (pKey) {
             if (pKey === viewerKey && editingEntry === key) { entryDiv.appendChild(ownAnswerEditor(key)); return; }

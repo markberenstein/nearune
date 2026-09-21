@@ -258,7 +258,13 @@ const RAW = String.raw`<!doctype html>
   function langCodeFor(key) {
     var p = state.people && state.people[key];
     var code = p && normalizeLangCode(p.language);
-    return code || (key === "nikita" ? "hi" : "en");
+    if (code) return code;
+    // The legacy room defaults its unregistered Nikita slot to Hindi (always
+    // has). Any other room has no idea what language its people speak until
+    // they actually register one, so it stays English (no translation) until
+    // then — a brand-new couple shouldn't see Hindi appear out of nowhere.
+    if (!ROOM && key === "nikita") return "hi";
+    return "en";
   }
   function otherKeyOf(key) { return key === "mark" ? "nikita" : "mark"; }
   function questionTargetLang() {

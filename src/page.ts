@@ -1082,7 +1082,8 @@ const RAW = String.raw`<!doctype html>
     if (mine && awaiting && !showRegisterForm) {
       var wait = h("div", { class: "card" }, [
         h("div", { class: "eyebrow" }, [h("span", { text: t("Almost there") })]),
-        h("p", { class: "question", text: t("Check your email for a confirmation link.") })
+        h("p", { class: "question", text: t("Check your email for a confirmation link.") }),
+        h("p", { class: "puzzle-guess-note", text: t("Don't see it? Check your spam folder.") })
       ]);
       if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var again = h("button", { class: "switch-link", text: t("Resend confirmation") });
@@ -1151,6 +1152,7 @@ const RAW = String.raw`<!doctype html>
     var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: personName(otherKey) }) })])]);
     if (pending && !showInviteForm) {
       card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: personName(otherKey) }) }));
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: personName(otherKey) }) }));
       if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
       if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var again = h("button", { class: "switch-link", text: t("Resend invite") });

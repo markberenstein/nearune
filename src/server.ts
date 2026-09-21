@@ -132,7 +132,11 @@ Bun.serve({
       const r = await sendEmail(
         email,
         "Confirm your Same Sky account",
-        "<p>Hi " + name + ",</p><p><a href=\"" + confirmUrl + "\">Confirm your email</a></p>"
+        "<p>Hi " + name + ",</p>" +
+          "<p>You're almost set up:</p>" +
+          "<ol><li><a href=\"" + confirmUrl + "\">Confirm your email</a></li>" +
+          "<li>Go to the Same Sky link to complete your significant other's information</li></ol>" +
+          "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error });
     }
@@ -184,7 +188,10 @@ Bun.serve({
       const r = await sendEmail(
         email,
         inviterName + " invited you to Same Sky",
-        "<p>" + inviterName + " invited you to Same Sky.</p><p><a href=\"" + inviteUrl + "\">Accept</a></p>"
+        "<p>" + inviterName + " invited you to Same Sky.</p>" +
+          "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
+          "<li>Access Same Sky to begin your togetherness bonding</li></ol>" +
+          "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl });
     }

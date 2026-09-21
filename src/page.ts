@@ -1065,8 +1065,29 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
     return null;
   })();
-  var registerDraft = { name: "", email: "", location: "", language: "" };
-  var acceptDraft = { name: "", location: "", language: "" };
+  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false };
+  var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
+  // Looks up the typed location and, unless the person has already picked
+  // a language themselves, pre-selects the language most likely spoken
+  // there — still just a starting point, freely changeable via the
+  // dropdown. Debounced so it fires once typing pauses, not per keystroke.
+  var geoSuggestTimer = null;
+  function suggestLanguageFromLocation(draft, locationText) {
+    if (geoSuggestTimer) clearTimeout(geoSuggestTimer);
+    if (draft.languageTouched || !locationText.trim()) return;
+    geoSuggestTimer = setTimeout(function () {
+      fetch(RP + "/api/geo?location=" + encodeURIComponent(locationText.trim()))
+        .then(function (r) { return r.json(); })
+        .then(function (info) {
+          if (draft.languageTouched) return; // they picked one while we were waiting
+          if (info && info.language && draft.location.trim() === locationText.trim()) {
+            draft.language = info.language;
+            safeRerender(); // skips the rebuild while they're still typing, so it doesn't steal focus
+          }
+        })
+        .catch(function () {});
+    }, 600);
+  }
   var inviteEmailDraft = "";
   var regBusy = false, regError = "", showRegisterForm = false, showInviteForm = false;
 
@@ -1104,8 +1125,8 @@ const RAW = String.raw`<!doctype html>
     ]);
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
-    form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; }));
-    form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; }));
+    form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); }));
+    form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Same Sky") });
     btn.disabled = regBusy;
@@ -1182,8 +1203,8 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; }));
-    form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; }));
-    form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; }));
+    form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); }));
+    form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Register") });
     btn.disabled = regBusy;

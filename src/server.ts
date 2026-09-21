@@ -14,7 +14,7 @@ import {
   ensurePuzzleMigrated,
 } from "./storage";
 import { resolveTranslation } from "./translate";
-import { resolveTimezoneFromLocation } from "./geo";
+import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient } from "./util";
 import { buildPageHtml, buildNewRoomPage } from "./page";
 
@@ -91,6 +91,12 @@ Bun.serve({
         s.comments[date].push({ who, text: trimmed, at: new Date().toISOString() });
       });
       return json(forClient(state));
+    }
+
+    if (req.method === "GET" && restPath === "/api/geo") {
+      const location = url.searchParams.get("location") || "";
+      const info = await resolveLocationInfo(location);
+      return json(info);
     }
 
     if (req.method === "POST" && restPath === "/api/status") {

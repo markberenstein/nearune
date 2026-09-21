@@ -151,8 +151,9 @@ Bun.serve({
           ok = true;
         }
       }
+      const backUrl = url.origin + roomPrefix + "/";
       const html = ok
-        ? "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p>Head back to the Same Sky app.</p></body>"
+        ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Same Sky</a></p></body></html>"
         : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }

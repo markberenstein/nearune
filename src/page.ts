@@ -978,7 +978,7 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "puzzle-title", text: t("Us, one piece at a time") }),
         h("span", { class: "puzzle-progress", text: tTemplate("{n} / {total} pieces", { n: unlocked, total: PUZZLE_TOTAL }) })
       ]),
-      h("p", { class: "puzzle-explain", text: t("One of you loads up to 10 pictures, each with a question you both know the answer to. Every day you both answer, a new piece is revealed — keep the streak going and it speeds up: 2 pieces a day after 5 days running, 3 after 10. Guess the answer right and the whole picture is revealed, then the next one begins.") })
+      h("p", { class: "puzzle-explain", text: t("One of you loads up to 10 pictures, each with a question you both know the answer to. Each day you both answer that day's question, a new piece is revealed — keep the streak going and it speeds up: 2 pieces a day after 5 days running, 3 after 10. Guess the puzzle's answer right and the whole picture is revealed, then the next one begins.") })
     ]);
     if (!inBatch) {
       card.appendChild(puzzleBatchForm());

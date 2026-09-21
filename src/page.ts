@@ -215,7 +215,14 @@ const RAW = String.raw`<!doctype html>
   var ROOM = "__ROOM__";
   var RP = ROOM ? "/r/" + ROOM : "";
 
-  var PEOPLE = {
+  // The original room keeps its real placeholder names (Mark & Nikita) for
+  // backward compatibility. Every other room gets generic, un-presuming
+  // placeholders — a new couple should never see someone else's name before
+  // they've registered their own.
+  var PEOPLE = ROOM ? {
+    mark: { name: "Person A", tz: "UTC", city: "", color: "var(--accent-ink)" },
+    nikita: { name: "Person B", tz: "UTC", city: "", color: "var(--accent-2)" }
+  } : {
     mark: { name: "Mark", tz: "America/Los_Angeles", city: "San Mateo", color: "var(--accent-ink)" },
     nikita: { name: "Nikita", tz: "Asia/Kolkata", city: "Delhi", color: "var(--accent-2)" }
   };
@@ -387,6 +394,7 @@ const RAW = String.raw`<!doctype html>
 
   var state = { version: 1, answers: {}, status: {}, comments: {} };
   var viewerKey = null;
+  var soloRegistration = false;
   try {
     viewerKey = localStorage.getItem(VIEWER_LS_KEY);
     if (viewerKey === null && !ROOM) viewerKey = localStorage.getItem("sameSkyViewer");
@@ -1076,9 +1084,12 @@ const RAW = String.raw`<!doctype html>
       wait.appendChild(h("div", { class: "switch-row" }, [again]));
       return wait;
     }
+    var subtitle = soloRegistration
+      ? t("You're the first one here — tell us a bit about yourself.")
+      : tTemplate("You're registering as {name}.", { name: personName(viewerKey) });
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Set up your account") })]),
-      h("p", { class: "question", text: tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) })
+      h("p", { class: "question", text: subtitle })
     ]);
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
@@ -1091,9 +1102,11 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", submitRegister);
     form.appendChild(btn);
     card.appendChild(form);
-    var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-    sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
-    card.appendChild(h("div", { class: "switch-row" }, [sw]));
+    if (!soloRegistration) {
+      var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
+      sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
+      card.appendChild(h("div", { class: "switch-row" }, [sw]));
+    }
     return card;
   }
 
@@ -1159,7 +1172,21 @@ const RAW = String.raw`<!doctype html>
     app.innerHTML = "";
 
     if (inviteParams) { app.appendChild(acceptInviteForm()); return; }
-    if (!viewerKey) { app.appendChild(pickerOverlay()); return; }
+    soloRegistration = false;
+    if (!viewerKey) {
+      // A brand-new room (not the legacy one) with nobody registered yet has
+      // only one real person so far — whoever has the link. Skip the "who's
+      // here" picker (it would show placeholder names, not anyone real) and
+      // put them straight into registering themselves.
+      var nobodyRegisteredYet = ROOM && (!state.people || (!state.people.mark && !state.people.nikita));
+      if (nobodyRegisteredYet) {
+        viewerKey = "mark";
+        soloRegistration = true;
+        try { localStorage.setItem(VIEWER_LS_KEY, "mark"); } catch (e) {}
+      } else {
+        app.appendChild(pickerOverlay()); return;
+      }
+    }
 
     var mine = state.people && state.people[viewerKey];
     if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }

@@ -1,4 +1,4 @@
-// Same Sky — Bun HTTP server. Room-scoped: "/" is the original room (same
+// Nearune — Bun HTTP server. Room-scoped: "/" is the original room (same
 // as the single-file version always was), "/r/<roomId>" is any other room,
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
@@ -80,8 +80,8 @@ Bun.serve({
         const list = links.map((l) => "<li><a href=\"" + l + "\">" + l + "</a></li>").join("");
         await sendEmail(
           email,
-          "Your Same Sky link",
-          "<p>Here's your Same Sky room:</p><ul>" + list + "</ul>" +
+          "Your Nearune link",
+          "<p>Here's your Nearune room:</p><ul>" + list + "</ul>" +
             "<p style=\"color:#888;font-size:0.9em\">Didn't request this? You can ignore this email.</p>"
         );
       }
@@ -226,11 +226,11 @@ Bun.serve({
       const confirmUrl = url.origin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
       const r = await sendEmail(
         email,
-        "Confirm your Same Sky account",
+        "Confirm your Nearune account",
         "<p>Hi " + name + ",</p>" +
           "<p>You're almost set up:</p>" +
           "<ol><li><a href=\"" + confirmUrl + "\">Confirm your email</a></li>" +
-          "<li>Go to the Same Sky link to complete your significant other's information</li></ol>" +
+          "<li>Go to the Nearune link to complete your significant other's information</li></ol>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
       // Lets this person recover their room link later if they lose it.
@@ -259,7 +259,7 @@ Bun.serve({
       // picker instead of straight into their next step.
       const backUrl = url.origin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
       const html = ok
-        ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Same Sky</a></p></body></html>"
+        ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Nearune</a></p></body></html>"
         : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }
@@ -292,10 +292,10 @@ Bun.serve({
       const inviterName = cur.people[who]!.name;
       const r = await sendEmail(
         email,
-        inviterName + " invited you to Same Sky",
-        "<p>" + inviterName + " invited you to Same Sky.</p>" +
+        inviterName + " invited you to Nearune",
+        "<p>" + inviterName + " invited you to Nearune.</p>" +
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
-          "<li>Access Same Sky to begin your togetherness bonding</li></ol>" +
+          "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl });
@@ -534,5 +534,5 @@ Bun.serve({
   },
 });
 
-console.log("Same Sky listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
+console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
 ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));

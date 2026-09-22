@@ -1,4 +1,4 @@
-// Same Sky — resolves a free-text "where you're based" string (city,
+// Nearune — resolves a free-text "where you're based" string (city,
 // country, whatever someone types) to a real IANA timezone and a likely
 // primary language, via Open-Meteo's free geocoding API (no key required).
 // The browser's own reported timezone (see util.ts/page.ts browserTz()) is

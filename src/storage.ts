@@ -1,4 +1,4 @@
-// Same Sky — room-scoped storage. S3-backed, local-file fallback.
+// Nearune — room-scoped storage. S3-backed, local-file fallback.
 //
 // roomId === "" is the original/legacy room: it reads and writes the exact
 // same keys the single-file version always used (state.json,

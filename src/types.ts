@@ -1,4 +1,4 @@
-// Same Sky — shared types.
+// Nearune — shared types.
 
 export type PersonKey = "mark" | "nikita";
 // Internal slot names only — every room has two of these slots, and each

@@ -1,11 +1,11 @@
-// Same Sky — client page template, parameterized per room.
+// Nearune — client page template, parameterized per room.
 
 const RAW = String.raw`<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Same Sky</title>
+<title>Nearune</title>
 <meta name="description" content="A private daily-question ritual for two people who live apart — one shared question a day, and a photo puzzle that slowly reveals itself as you keep your streak going.">
 <link rel="icon" type="image/png" href="/favicon.png?v=__ICON_V__">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=__ICON_V__">
@@ -1169,14 +1169,14 @@ const RAW = String.raw`<!doctype html>
   function acceptInviteForm() {
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
-      h("p", { class: "question", text: t("Finish setting up your Same Sky.") })
+      h("p", { class: "question", text: t("Finish setting up your Nearune.") })
     ]);
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); }));
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Same Sky") });
+    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Nearune") });
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
       if (!acceptDraft.name.trim()) { regError = "Enter your name."; renderApp(); return; }
@@ -1398,7 +1398,7 @@ const RAW = String.raw`<!doctype html>
     return h("div", { class: "picker-overlay" }, [
       h("div", { class: "picker-card" }, [
         h("h2", { text: "Who's here?" }),
-        h("p", { text: "So Same Sky knows whose answer is whose." }),
+        h("p", { text: "So Nearune knows whose answer is whose." }),
         h("div", { class: "picker-choices" }, [
           h("button", { class: "picker-btn", onclick: function () { chooseViewer("mark"); } }, [document.createTextNode(pickerButtonLabel("mark"))]),
           h("button", { class: "picker-btn", onclick: function () { chooseViewer("nikita"); } }, [document.createTextNode(pickerButtonLabel("nikita"))])
@@ -1413,7 +1413,7 @@ const RAW = String.raw`<!doctype html>
   }
 
   function header() {
-    var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Same Sky</span>" });
+    var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
     var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
     var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
@@ -1570,7 +1570,7 @@ const RAW = String.raw`<!doctype html>
       renderApp();
     });
     row.appendChild(link);
-    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Same Sky with someone else") });
+    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") });
     row.appendChild(newRoomLink);
     var privacyLink = h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") });
     row.appendChild(privacyLink);
@@ -1664,7 +1664,7 @@ export function buildNewRoomPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Start Same Sky</title>
+<title>Start Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
 <style>
   :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
@@ -1683,8 +1683,8 @@ export function buildNewRoomPage(): string {
 </head>
 <body>
 <div class="card">
-  <h1>Start your own Same Sky</h1>
-  <p>Same Sky is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
+  <h1>Start your own Nearune</h1>
+  <p>Nearune is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
   <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your person; when you each open it, you'll register your own name, language, and location, then you're set.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
@@ -1724,7 +1724,7 @@ export function buildRecoverPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recover your Same Sky link</title>
+<title>Recover your Nearune link</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
 <style>
   :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
@@ -1745,7 +1745,7 @@ export function buildRecoverPage(): string {
 <body>
 <div class="card">
   <h1>Lost your link?</h1>
-  <p>Enter the email you used when you registered, and if it matches, we'll send you your Same Sky room link.</p>
+  <p>Enter the email you used when you registered, and if it matches, we'll send you your Nearune room link.</p>
   <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
   <button id="go">Send my link</button>
   <p class="note" id="msg"></p>
@@ -1779,7 +1779,7 @@ function legalPageShell(title, bodyHtml) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} — Same Sky</title>
+<title>${title} — Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
 <style>
   :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
@@ -1803,7 +1803,7 @@ function legalPageShell(title, bodyHtml) {
 <div class="wrap">
   <div class="card">
     ${bodyHtml}
-    <a class="back" href="/new">&larr; Back to Same Sky</a>
+    <a class="back" href="/new">&larr; Back to Nearune</a>
   </div>
 </div>
 </body>
@@ -1815,10 +1815,10 @@ export function buildPrivacyPage() {
     "Privacy Policy",
     `<h1>Privacy Policy</h1>
     <p class="updated">Last updated September 2026</p>
-    <p>Same Sky is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
+    <p>Nearune is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
 
     <h2>How access works</h2>
-    <p>Same Sky doesn't use passwords or accounts in the traditional sense. Each room is reachable only by its private link — a random, hard-to-guess address. Anyone with that link can act as either person in the room. Treat your room link the way you'd treat a shared password, and don't post it anywhere public.</p>
+    <p>Nearune doesn't use passwords or accounts in the traditional sense. Each room is reachable only by its private link — a random, hard-to-guess address. Anyone with that link can act as either person in the room. Treat your room link the way you'd treat a shared password, and don't post it anywhere public.</p>
 
     <h2>What we store</h2>
     <ul>
@@ -1841,7 +1841,7 @@ export function buildPrivacyPage() {
     <p>Either person in a room can permanently delete that room's data at any time from within the app ("Delete my data"). This removes the room's answers, photos, and puzzle state, and removes both people's entries from the recovery index. Deletion is immediate and can't be undone.</p>
 
     <h2>Children</h2>
-    <p>Same Sky isn't directed at children and isn't intended for use by anyone under 16.</p>
+    <p>Nearune isn't directed at children and isn't intended for use by anyone under 16.</p>
 
     <h2>Changes</h2>
     <p>If this policy changes in a meaningful way, we'll update the date at the top of this page.</p>
@@ -1856,22 +1856,22 @@ export function buildTermsPage() {
     "Terms of Service",
     `<h1>Terms of Service</h1>
     <p class="updated">Last updated September 2026</p>
-    <p>These terms cover your use of Same Sky. By creating or using a room, you agree to them.</p>
+    <p>These terms cover your use of Nearune. By creating or using a room, you agree to them.</p>
 
     <h2>The service</h2>
-    <p>Same Sky lets two people share a private daily question, journal-style answers, and a slowly-revealed photo puzzle. It's provided as-is, free of charge, with no guarantee of uptime, data durability, or fitness for any particular purpose.</p>
+    <p>Nearune lets two people share a private daily question, journal-style answers, and a slowly-revealed photo puzzle. It's provided as-is, free of charge, with no guarantee of uptime, data durability, or fitness for any particular purpose.</p>
 
     <h2>Your room and its link</h2>
     <p>A room's link is its only access control. You're responsible for keeping it private and for anything done through it, by you or anyone you've shared it with.</p>
 
     <h2>Acceptable use</h2>
-    <p>Don't use Same Sky to upload or share unlawful content, content that infringes someone else's rights, or content intended to harass, threaten, or harm another person. Don't attempt to disrupt the service, probe it for vulnerabilities, or use it to spam or abuse others (including via the room-creation or invite/recovery email features).</p>
+    <p>Don't use Nearune to upload or share unlawful content, content that infringes someone else's rights, or content intended to harass, threaten, or harm another person. Don't attempt to disrupt the service, probe it for vulnerabilities, or use it to spam or abuse others (including via the room-creation or invite/recovery email features).</p>
 
     <h2>Your content</h2>
     <p>You keep whatever rights you have in the answers, comments, and photos you submit. You're solely responsible for what you upload, and you confirm you have the right to share it.</p>
 
     <h2>No warranty; limitation of liability</h2>
-    <p>Same Sky is provided "as is" without warranties of any kind. To the fullest extent permitted by law, we aren't liable for any indirect, incidental, or consequential damages arising from your use of the service, including loss of data.</p>
+    <p>Nearune is provided "as is" without warranties of any kind. To the fullest extent permitted by law, we aren't liable for any indirect, incidental, or consequential damages arising from your use of the service, including loss of data.</p>
 
     <h2>Termination and deletion</h2>
     <p>You can delete your room's data at any time from within the app. We may also remove content or disable a room that violates these terms.</p>

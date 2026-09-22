@@ -1,4 +1,4 @@
-// Same Sky — simple in-memory rate limiting for public-facing actions that
+// Nearune — simple in-memory rate limiting for public-facing actions that
 // cost money or could be abused to spam someone else's inbox (creating
 // rooms, sending confirm/invite emails). Single-process and resets on every
 // deploy — this is a speed bump against casual abuse, not a hard security

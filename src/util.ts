@@ -1,4 +1,4 @@
-// Same Sky — small shared helpers.
+// Nearune — small shared helpers.
 
 import type { State, PersonKey } from "./types";
 
@@ -47,7 +47,7 @@ export async function sendViaResend(to: string, subject: string, html: string): 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer " + key },
-      body: JSON.stringify({ from: "Same Sky <onboarding@resend.dev>", to: [to], subject, html }),
+      body: JSON.stringify({ from: "Nearune <onboarding@resend.dev>", to: [to], subject, html }),
     });
     if (res.ok) return { ok: true };
     let msg = "send_failed";
@@ -76,7 +76,7 @@ export async function sendViaSendGrid(to: string, subject: string, html: string)
       headers: { "content-type": "application/json", authorization: "Bearer " + key },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
-        from: { email: fromEmail, name: "Same Sky" },
+        from: { email: fromEmail, name: "Nearune" },
         subject,
         content: [{ type: "text/html", value: html }],
       }),

@@ -1,4 +1,4 @@
-// Same Sky — translation providers. Google first, MyMemory as fallback.
+// Nearune — translation providers. Google first, MyMemory as fallback.
 
 export async function translateViaGoogle(text: string, target: string): Promise<{ t: string | null; d: string }> {
   const gUrl =

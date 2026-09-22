@@ -7,7 +7,7 @@
 // under rooms/<roomId>/.
 
 import { S3Client } from "bun";
-import type { State } from "./types";
+import type { State, PersonKey } from "./types";
 import { todayKeyPT } from "./util";
 
 const MAX_HISTORY = 400;
@@ -145,4 +145,86 @@ export async function ensurePuzzleMigrated(roomId: string): Promise<void> {
       }
     });
   }
+}
+
+// --- Email recovery index -------------------------------------------------
+// Maps a *hashed* email (see util.ts hashEmail — the real address is never
+// stored) to the room(s)/person(s) it's registered as, so someone who loses
+// their room link can ask to have it re-sent. One shared file across every
+// room, since the whole point is looking a person up without already
+// knowing which room they're in.
+
+export type EmailIndexEntry = { roomId: string; who: PersonKey };
+type EmailIndex = Record<string, EmailIndexEntry[]>;
+
+const EMAIL_INDEX_KEY = "email-index.json";
+const LOCAL_EMAIL_INDEX_PATH = "./local-email-index.json";
+
+let emailIndexCache: EmailIndex | null = null;
+let emailIndexChain: Promise<void> = Promise.resolve();
+
+async function readEmailIndexRaw(): Promise<string | null> {
+  if (useS3 && s3) {
+    const file = s3.file(EMAIL_INDEX_KEY);
+    if (await file.exists()) return await file.text();
+    return null;
+  }
+  try {
+    return await Bun.file(LOCAL_EMAIL_INDEX_PATH).text();
+  } catch {
+    return null;
+  }
+}
+
+async function writeEmailIndexRaw(text: string): Promise<void> {
+  if (useS3 && s3) {
+    await s3.file(EMAIL_INDEX_KEY).write(text);
+  } else {
+    await Bun.write(LOCAL_EMAIL_INDEX_PATH, text);
+  }
+}
+
+async function loadEmailIndex(): Promise<EmailIndex> {
+  if (emailIndexCache) return emailIndexCache;
+  try {
+    const raw = await readEmailIndexRaw();
+    emailIndexCache = raw ? (JSON.parse(raw) as EmailIndex) : {};
+  } catch {
+    emailIndexCache = {};
+  }
+  return emailIndexCache;
+}
+
+// Looks up every room/person registered under this email's hash.
+export async function lookupEmailIndex(hash: string): Promise<EmailIndexEntry[]> {
+  const idx = await loadEmailIndex();
+  return idx[hash] || [];
+}
+
+export async function addToEmailIndex(hash: string, entry: EmailIndexEntry): Promise<void> {
+  const run = async () => {
+    const idx = await loadEmailIndex();
+    const list = idx[hash] || (idx[hash] = []);
+    if (!list.some((e) => e.roomId === entry.roomId && e.who === entry.who)) list.push(entry);
+    emailIndexCache = idx;
+    await writeEmailIndexRaw(JSON.stringify(idx));
+  };
+  emailIndexChain = emailIndexChain.then(run, run);
+  await emailIndexChain;
+}
+
+// Used when a person deletes their data — removes them from the recovery
+// index entirely, same as removing them from the room.
+export async function removeFromEmailIndex(hash: string, roomId: string, who: PersonKey): Promise<void> {
+  const run = async () => {
+    const idx = await loadEmailIndex();
+    if (idx[hash]) {
+      idx[hash] = idx[hash].filter((e) => !(e.roomId === roomId && e.who === who));
+      if (idx[hash].length === 0) delete idx[hash];
+    }
+    emailIndexCache = idx;
+    await writeEmailIndexRaw(JSON.stringify(idx));
+  };
+  emailIndexChain = emailIndexChain.then(run, run);
+  await emailIndexChain;
 }

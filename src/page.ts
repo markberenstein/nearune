@@ -1268,6 +1268,8 @@ const RAW = String.raw`<!doctype html>
       sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
+    var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
+    card.appendChild(lost);
     return card;
   }
 
@@ -1643,6 +1645,7 @@ export function buildNewRoomPage(): string {
   <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your person; when you each open it, you'll register your own name, language, and location, then you're set.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
+  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Already registered? Recover your link</a></p>
 </div>
 <script>
 document.getElementById("go").addEventListener("click", function () {
@@ -1663,6 +1666,61 @@ document.getElementById("go").addEventListener("click", function () {
     .catch(function () {
       btn.disabled = false;
       btn.textContent = "Create my room";
+      document.getElementById("msg").textContent = "Something went wrong — try again.";
+    });
+});
+</script>
+</body>
+</html>`;
+}
+
+export function buildRecoverPage(): string {
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recover your Same Sky link</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
+<style>
+  :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --bg:#161320; --surface:#201B2E; --ink:#F4EFE7; --ink-soft:#B6AAC4; --line:#352F49; --accent:#E7BA5E; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Karla',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 26px; max-width:420px; width:100%; text-align:center; }
+  h1 { font-family:'Fraunces',Georgia,serif; font-style:italic; font-weight:600; font-size:1.6rem; margin:0 0 10px; }
+  p { color:var(--ink-soft); font-size:0.95rem; line-height:1.5; margin:0 0 20px; }
+  input { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); font:inherit; font-size:0.95rem; margin-bottom:14px; }
+  button { background:var(--accent); color:#241C0A; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
+  button:disabled { opacity:0.6; }
+  .note { margin-top:16px; font-size:0.8rem; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Lost your link?</h1>
+  <p>Enter the email you used when you registered, and if it matches, we'll send you your Same Sky room link.</p>
+  <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
+  <button id="go">Send my link</button>
+  <p class="note" id="msg"></p>
+</div>
+<script>
+document.getElementById("go").addEventListener("click", function () {
+  var btn = document.getElementById("go");
+  var email = document.getElementById("email").value.trim();
+  if (!email) { document.getElementById("msg").textContent = "Enter an email first."; return; }
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  fetch("/api/recover-access", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: email }) })
+    .then(function () {
+      btn.textContent = "Sent";
+      document.getElementById("msg").textContent = "If that email matches an account, a link is on its way — check your inbox (and spam folder).";
+    })
+    .catch(function () {
+      btn.disabled = false;
+      btn.textContent = "Send my link";
       document.getElementById("msg").textContent = "Something went wrong — try again.";
     });
 });

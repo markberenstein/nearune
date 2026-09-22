@@ -6,6 +6,27 @@ export function json(data: unknown, init?: ResponseInit): Response {
   return Response.json(data, init);
 }
 
+// A keyed (HMAC) hash of an email address — used only to answer "have we
+// seen this email before, and where" without ever storing the address
+// itself anywhere. Unlike a plain hash, this can't be matched against a
+// rainbow table of common emails even if someone got hold of the index
+// file, because the secret never leaves the server.
+//
+// Set EMAIL_HASH_SECRET in the deploy environment for production; the
+// fallback here only exists so local dev doesn't crash without it.
+export async function hashEmail(email: string): Promise<string> {
+  const secret = Bun.env.EMAIL_HASH_SECRET || "same-sky-dev-secret-change-me";
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(email.trim().toLowerCase()));
+  return Buffer.from(sig).toString("hex");
+}
+
 export function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }

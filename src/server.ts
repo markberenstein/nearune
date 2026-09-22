@@ -12,11 +12,13 @@ import {
   useS3,
   s3,
   ensurePuzzleMigrated,
+  addToEmailIndex,
+  lookupEmailIndex,
 } from "./storage";
 import { resolveTranslation } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient } from "./util";
-import { buildPageHtml, buildNewRoomPage } from "./page";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail } from "./util";
+import { buildPageHtml, buildNewRoomPage, buildRecoverPage } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 
 const PORT = Number(Bun.env.PORT) || 3000;
@@ -50,6 +52,38 @@ Bun.serve({
       return new Response(buildNewRoomPage(), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/recover") {
+      return new Response(buildRecoverPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/recover-access") {
+      const body = await readJson(req);
+      const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      // Always answer the same way whether or not the email matches, so this
+      // can't be used to probe which addresses are registered.
+      const generic = { ok: true };
+      if (!isValidEmail(email)) return json(generic);
+      if (!rateLimit("recover-ip:" + clientIp(req, server), 10, HOUR) || !rateLimit("recover-email:" + email.toLowerCase(), 3, HOUR)) {
+        return json(generic);
+      }
+      const entries = await lookupEmailIndex(await hashEmail(email));
+      if (entries.length > 0) {
+        const links = entries
+          .map((e) => url.origin + (e.roomId ? "/r/" + e.roomId : ""))
+          .filter((v, i, arr) => arr.indexOf(v) === i);
+        const list = links.map((l) => "<li><a href=\"" + l + "\">" + l + "</a></li>").join("");
+        await sendEmail(
+          email,
+          "Your Same Sky link",
+          "<p>Here's your Same Sky room:</p><ul>" + list + "</ul>" +
+            "<p style=\"color:#888;font-size:0.9em\">Didn't request this? You can ignore this email.</p>"
+        );
+      }
+      return json(generic);
     }
 
     if (req.method === "GET" && restPath === "/") {
@@ -166,6 +200,9 @@ Bun.serve({
           "<li>Go to the Same Sky link to complete your significant other's information</li></ol>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
+      // Indexed by a keyed hash, never the address itself — see hashEmail.
+      // Lets this person recover their room link later if they lose it.
+      addToEmailIndex(await hashEmail(email), { roomId, who }).catch(() => {});
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error });
     }
 

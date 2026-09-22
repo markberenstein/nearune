@@ -17,6 +17,7 @@ import { resolveTranslation } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient } from "./util";
 import { buildPageHtml, buildNewRoomPage } from "./page";
+import { rateLimit, clientIp } from "./rate-limit";
 
 const PORT = Number(Bun.env.PORT) || 3000;
 
@@ -29,12 +30,18 @@ function parseRoom(pathname: string): { roomId: string; restPath: string } {
 Bun.serve({
   port: PORT,
   idleTimeout: 60,
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url);
     const { roomId, restPath } = parseRoom(url.pathname);
     const roomPrefix = roomId ? "/r/" + roomId : "";
+    const HOUR = 60 * 60 * 1000;
 
     if (req.method === "POST" && url.pathname === "/api/create-room") {
+      // Caps how many fresh rooms one visitor can spin up — a real couple
+      // needs one, ever.
+      if (!rateLimit("create-room:" + clientIp(req, server), 5, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
       const id = await createRoom();
       return json({ roomId: id });
     }
@@ -125,6 +132,13 @@ Bun.serve({
       if (!isPerson(who) || !name || !isValidEmail(email)) {
         return json({ error: "invalid" }, { status: 400 });
       }
+      // Two limits: how many confirm emails this visitor can trigger, and
+      // how many any single inbox can be sent regardless of who's asking —
+      // the second one is what actually stops someone using this as a way
+      // to spam a stranger's email address.
+      if (!rateLimit("register-ip:" + clientIp(req, server), 10, HOUR) || !rateLimit("register-email:" + email.toLowerCase(), 3, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
       const cur = await loadState(roomId);
       if (cur.people && cur.people[who] && cur.people[who]!.confirmed) {
         return json({ error: "already_registered" }, { status: 409 });
@@ -188,6 +202,9 @@ Bun.serve({
       const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
       if (!isPerson(who) || !isValidEmail(email)) {
         return json({ error: "invalid" }, { status: 400 });
+      }
+      if (!rateLimit("invite-ip:" + clientIp(req, server), 10, HOUR) || !rateLimit("invite-email:" + email.toLowerCase(), 3, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
       }
       const cur = await loadState(roomId);
       if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) {

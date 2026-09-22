@@ -1216,7 +1216,12 @@ const RAW = String.raw`<!doctype html>
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
-        if (!res.ok) { regError = t("Couldn't register — try again."); renderApp(); return; }
+        if (!res.ok) {
+          regError = res.data && res.data.error === "rate_limited"
+            ? t("Too many attempts — wait a bit and try again.")
+            : t("Couldn't register — try again.");
+          renderApp(); return;
+        }
         state = res.data;
         showRegisterForm = false;
         regError = res.data._emailSent === false ? t("Registered, but the email failed to send — try again.") : "";
@@ -1276,7 +1281,12 @@ const RAW = String.raw`<!doctype html>
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
-        if (!res.ok) { regError = t("Couldn't send invite — try again."); renderApp(); return; }
+        if (!res.ok) {
+          regError = res.data && res.data.error === "rate_limited"
+            ? t("Too many attempts — wait a bit and try again.")
+            : t("Couldn't send invite — try again.");
+          renderApp(); return;
+        }
         lastInviteUrl = res.data._inviteUrl || "";
         state = res.data;
         showInviteForm = false;
@@ -1640,10 +1650,15 @@ document.getElementById("go").addEventListener("click", function () {
   btn.disabled = true;
   btn.textContent = "Creating…";
   fetch("/api/create-room", { method: "POST" })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (data && data.roomId) { location.href = "/r/" + data.roomId; return; }
-      throw new Error("no room id");
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
+      var msg = res.data && res.data.error === "rate_limited"
+        ? "Too many rooms created from here recently — wait a bit and try again."
+        : "Something went wrong — try again.";
+      btn.disabled = false;
+      btn.textContent = "Create my room";
+      document.getElementById("msg").textContent = msg;
     })
     .catch(function () {
       btn.disabled = false;

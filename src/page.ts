@@ -1136,6 +1136,7 @@ const RAW = String.raw`<!doctype html>
   }
   var inviteEmailDraft = "";
   var regBusy = false, regError = "", showRegisterForm = false, showInviteForm = false;
+  var showDeleteConfirm = false, deleteConfirmText = "", deleteBusy = false, deleteError = "";
 
   function textField(value, placeholder, onInput) {
     var i = document.createElement("input");
@@ -1367,6 +1368,8 @@ const RAW = String.raw`<!doctype html>
     var other = state.people && state.people[otherKey];
     if (!other || !other.confirmed) { app.appendChild(inviteFlow(otherKey)); return; }
 
+    if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
+
     app.appendChild(header());
     app.appendChild(statusRow());
     app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
@@ -1569,7 +1572,47 @@ const RAW = String.raw`<!doctype html>
     row.appendChild(link);
     var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Same Sky for another couple") });
     row.appendChild(newRoomLink);
+    var privacyLink = h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") });
+    row.appendChild(privacyLink);
+    var termsLink = h("a", { class: "switch-link", href: "/terms", text: t("Terms") });
+    row.appendChild(termsLink);
+    var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
+    deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
+    row.appendChild(deleteLink);
     return row;
+  }
+
+  function deleteConfirmScreen() {
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Delete this room") })]),
+      h("p", { class: "question", text: t("This permanently deletes everything in this room — both people's answers, photos, and puzzle progress. It can't be undone, and it deletes it for both of you, not just you.") }),
+      h("p", { class: "puzzle-guess-note", text: t("Type DELETE below to confirm.") })
+    ]);
+    var input = document.createElement("input");
+    input.type = "text"; input.value = deleteConfirmText; input.placeholder = "DELETE";
+    input.addEventListener("input", function () { deleteConfirmText = input.value; });
+    card.appendChild(input);
+    if (deleteError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(deleteError) }));
+    var btnRow = h("div", { class: "switch-row" });
+    var cancel = h("button", { class: "switch-link", text: t("Cancel") });
+    cancel.addEventListener("click", function () { showDeleteConfirm = false; renderApp(); });
+    btnRow.appendChild(cancel);
+    var confirmBtn = h("button", { class: "puzzle-upload-btn", text: deleteBusy ? t("Deleting…") : t("Permanently delete") });
+    confirmBtn.disabled = deleteBusy || deleteConfirmText.trim().toUpperCase() !== "DELETE";
+    confirmBtn.addEventListener("click", function () {
+      deleteBusy = true; deleteError = ""; renderApp();
+      fetch(RP + "/api/delete-room", { method: "POST" })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!res.ok) { deleteBusy = false; deleteError = t("Something went wrong — try again."); renderApp(); return; }
+          try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
+          location.href = "/new";
+        })
+        .catch(function () { deleteBusy = false; deleteError = t("Something went wrong — try again."); renderApp(); });
+    });
+    btnRow.appendChild(confirmBtn);
+    card.appendChild(btnRow);
+    return card;
   }
 
   function tickClocks() {
@@ -1646,6 +1689,7 @@ export function buildNewRoomPage(): string {
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Already registered? Recover your link</a></p>
+  <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>
 </div>
 <script>
 document.getElementById("go").addEventListener("click", function () {
@@ -1727,4 +1771,118 @@ document.getElementById("go").addEventListener("click", function () {
 </script>
 </body>
 </html>`;
+}
+
+function legalPageShell(title, bodyHtml) {
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title} — Same Sky</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
+<style>
+  :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --bg:#161320; --surface:#201B2E; --ink:#F4EFE7; --ink-soft:#B6AAC4; --line:#352F49; --accent:#E7BA5E; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Karla',sans-serif; display:flex; justify-content:center; padding:50px 16px 80px; }
+  .wrap { max-width:640px; width:100%; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:36px 30px; }
+  h1 { font-family:'Fraunces',Georgia,serif; font-style:italic; font-weight:600; font-size:1.7rem; margin:0 0 4px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:1.1rem; margin:28px 0 8px; }
+  p, li { color:var(--ink-soft); font-size:0.95rem; line-height:1.6; }
+  .updated { color:var(--ink-soft); font-size:0.8rem; margin:0 0 28px; }
+  a { color:var(--accent); }
+  ul { padding-left:20px; margin:8px 0; }
+  .back { display:inline-block; margin-top:28px; color:var(--ink-soft); font-size:0.85rem; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    ${bodyHtml}
+    <a class="back" href="/new">&larr; Back to Same Sky</a>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+export function buildPrivacyPage() {
+  return legalPageShell(
+    "Privacy Policy",
+    `<h1>Privacy Policy</h1>
+    <p class="updated">Last updated September 2026</p>
+    <p>Same Sky is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
+
+    <h2>How access works</h2>
+    <p>Same Sky doesn't use passwords or accounts in the traditional sense. Each room is reachable only by its private link — a random, hard-to-guess address. Anyone with that link can act as either person in the room. Treat your room link the way you'd treat a shared password, and don't post it anywhere public.</p>
+
+    <h2>What we store</h2>
+    <ul>
+      <li>The name, self-reported location text, and language you enter when you register.</li>
+      <li>A timezone, resolved from that location text (or your browser's reported timezone if that fails) — used only to schedule the daily question rollover.</li>
+      <li>Your daily answers, comments, and short status line.</li>
+      <li>Photos you upload for the puzzle feature, and the questions/answers attached to them.</li>
+    </ul>
+
+    <h2>What we do with your email</h2>
+    <p>We ask for an email address once, during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. We do not store your email address in plain text anywhere. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
+
+    <h2>Where data lives</h2>
+    <p>Room data and uploaded photos are stored in a cloud object-storage bucket. Outgoing emails (confirmations, invites, recovery links) are sent through a transactional email provider (Resend or SendGrid) — the email content passes through that provider but isn't retained by us beyond what's needed to send it. Location text you enter is sent to a free geocoding service (Open-Meteo) solely to resolve a timezone and language default; it isn't stored by us beyond the fields above.</p>
+
+    <h2>What we don't do</h2>
+    <p>We don't run ads, use ad trackers or analytics pixels, or sell or share your data with third parties for marketing. We don't read your answers except as needed to operate or debug the service.</p>
+
+    <h2>Deleting your data</h2>
+    <p>Either person in a room can permanently delete that room's data at any time from within the app ("Delete my data"). This removes the room's answers, photos, and puzzle state, and removes both people's entries from the recovery index. Deletion is immediate and can't be undone.</p>
+
+    <h2>Children</h2>
+    <p>Same Sky isn't directed at children and isn't intended for use by anyone under 16.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes in a meaningful way, we'll update the date at the top of this page.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy or your data: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+  );
+}
+
+export function buildTermsPage() {
+  return legalPageShell(
+    "Terms of Service",
+    `<h1>Terms of Service</h1>
+    <p class="updated">Last updated September 2026</p>
+    <p>These terms cover your use of Same Sky. By creating or using a room, you agree to them.</p>
+
+    <h2>The service</h2>
+    <p>Same Sky lets two people share a private daily question, journal-style answers, and a slowly-revealed photo puzzle. It's provided as-is, free of charge, with no guarantee of uptime, data durability, or fitness for any particular purpose.</p>
+
+    <h2>Your room and its link</h2>
+    <p>A room's link is its only access control. You're responsible for keeping it private and for anything done through it, by you or anyone you've shared it with.</p>
+
+    <h2>Acceptable use</h2>
+    <p>Don't use Same Sky to upload or share unlawful content, content that infringes someone else's rights, or content intended to harass, threaten, or harm another person. Don't attempt to disrupt the service, probe it for vulnerabilities, or use it to spam or abuse others (including via the room-creation or invite/recovery email features).</p>
+
+    <h2>Your content</h2>
+    <p>You keep whatever rights you have in the answers, comments, and photos you submit. You're solely responsible for what you upload, and you confirm you have the right to share it.</p>
+
+    <h2>No warranty; limitation of liability</h2>
+    <p>Same Sky is provided "as is" without warranties of any kind. To the fullest extent permitted by law, we aren't liable for any indirect, incidental, or consequential damages arising from your use of the service, including loss of data.</p>
+
+    <h2>Termination and deletion</h2>
+    <p>You can delete your room's data at any time from within the app. We may also remove content or disable a room that violates these terms.</p>
+
+    <h2>Changes</h2>
+    <p>We may update these terms from time to time; the date above reflects the latest revision.</p>
+
+    <h2>Governing law</h2>
+    <p>These terms are governed by the laws of the State of California, without regard to conflict-of-law principles.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about these terms: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+  );
 }

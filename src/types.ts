@@ -10,7 +10,10 @@ export type Comment = { who: PersonKey; text: string; at: string };
 // tz is captured automatically from the registering browser (IANA zone,
 // e.g. "Asia/Bangkok") — not typed by hand, since free-text "location"
 // (city name) isn't reliably mappable to a timezone.
-export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean };
+// emailHash: a one-way keyed hash of the email used to register (see
+// util.ts hashEmail) — kept so a room deletion can also clean up that
+// person's entry in the recovery index. The actual address is never stored.
+export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string };
 export type State = {
   version: number;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;

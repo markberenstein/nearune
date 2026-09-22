@@ -7,6 +7,7 @@ import {
   loadState,
   saveState,
   createRoom,
+  deleteRoom,
   puzzleImageKey,
   localPuzzlePath,
   useS3,
@@ -14,11 +15,12 @@ import {
   ensurePuzzleMigrated,
   addToEmailIndex,
   lookupEmailIndex,
+  removeFromEmailIndex,
 } from "./storage";
 import { resolveTranslation } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail } from "./util";
-import { buildPageHtml, buildNewRoomPage, buildRecoverPage } from "./page";
+import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 
 const PORT = Number(Bun.env.PORT) || 3000;
@@ -86,6 +88,18 @@ Bun.serve({
       return json(generic);
     }
 
+    if (req.method === "GET" && url.pathname === "/privacy") {
+      return new Response(buildPrivacyPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/terms") {
+      return new Response(buildTermsPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
     if (req.method === "GET" && restPath === "/") {
       // Date-tag icon URLs so iOS treats each day's icon as a fresh resource.
       const html = buildPageHtml(roomId, todayKeyPT());
@@ -97,6 +111,22 @@ Bun.serve({
     if (req.method === "GET" && restPath === "/api/state") {
       const state = await loadState(roomId);
       return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/delete-room") {
+      // No password auth exists in this app — possessing the room link is
+      // already the same trust level everything else here relies on, so
+      // that's the bar for this too. Removes both people from the recovery
+      // index (if they registered one), then wipes the room's data entirely.
+      const cur = await loadState(roomId);
+      if (cur.people) {
+        for (const key of Object.keys(cur.people) as PersonKey[]) {
+          const hash = cur.people[key]?.emailHash;
+          if (hash) removeFromEmailIndex(hash, roomId, key).catch(() => {});
+        }
+      }
+      await deleteRoom(roomId);
+      return json({ ok: true });
     }
 
     if (req.method === "POST" && restPath === "/api/answer") {
@@ -184,9 +214,12 @@ Bun.serve({
       const resolvedTz = await resolveTimezoneFromLocation(location);
       const tz = resolvedTz || browserTz;
       const token = crypto.randomUUID();
+      // Keyed hash only — the address itself is never stored on the person's
+      // profile, just this one-way fingerprint (see hashEmail).
+      const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false, emailHash };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
       });
@@ -200,9 +233,8 @@ Bun.serve({
           "<li>Go to the Same Sky link to complete your significant other's information</li></ol>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
-      // Indexed by a keyed hash, never the address itself — see hashEmail.
       // Lets this person recover their room link later if they lose it.
-      addToEmailIndex(await hashEmail(email), { roomId, who }).catch(() => {});
+      addToEmailIndex(emailHash, { roomId, who }).catch(() => {});
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error });
     }
 

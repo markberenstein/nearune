@@ -134,6 +134,26 @@ export async function createRoom(): Promise<string> {
   return id;
 }
 
+// Permanently wipes a room's state (and its cache entry / write chain), plus
+// its currently-loaded puzzle photo if any. Older puzzle photos already
+// queued or solved past aren't individually tracked once superseded, so
+// this clears what's reachable — the state itself is what actually mattered.
+export async function deleteRoom(roomId: string): Promise<void> {
+  const state = await loadState(roomId);
+  if (state.puzzleCurrentId) {
+    try {
+      if (useS3 && s3) await s3.file(puzzleImageKey(roomId, state.puzzleCurrentId)).delete();
+      else await Bun.file(localPuzzlePath(roomId, state.puzzleCurrentId)).delete();
+    } catch {}
+  }
+  try {
+    if (useS3 && s3) await s3.file(stateKey(roomId)).delete();
+    else await Bun.file(localStatePath(roomId)).delete();
+  } catch {}
+  caches.delete(roomId);
+  writeChains.delete(roomId);
+}
+
 // One-time migration for a round active before puzzleRoundStartDate existed.
 export async function ensurePuzzleMigrated(roomId: string): Promise<void> {
   const s = await loadState(roomId);

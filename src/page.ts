@@ -6,7 +6,7 @@ const RAW = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Same Sky</title>
-<meta name="description" content="A private daily-question ritual for Mark and Nikita, synced between San Mateo and Delhi.">
+<meta name="description" content="A private daily-question ritual for two people who live apart — one shared question a day, and a photo puzzle that slowly reveals itself as you keep your streak going.">
 <link rel="icon" type="image/png" href="/favicon.png?v=__ICON_V__">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=__ICON_V__">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
@@ -1570,7 +1570,7 @@ const RAW = String.raw`<!doctype html>
       renderApp();
     });
     row.appendChild(link);
-    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Same Sky for another couple") });
+    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Same Sky with someone else") });
     row.appendChild(newRoomLink);
     var privacyLink = h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") });
     row.appendChild(privacyLink);

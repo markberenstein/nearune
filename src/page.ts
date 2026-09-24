@@ -1409,12 +1409,16 @@ const RAW = String.raw`<!doctype html>
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
-  // A registered person shows their real name ("I'm Dan"); the not-yet-
-  // registered slot can't say "I'm Person B" in the first person, so it
-  // offers to register instead.
+  // A registered person shows their real name ("I'm Dan"). The legacy room
+  // (no ROOM id) keeps real placeholder names too, so it can always say
+  // "I'm Mark"/"I'm Nikita" even before anyone's gone through registration.
+  // Any other room's not-yet-registered slot can't say "I'm Person B" in
+  // the first person, so it offers to register instead.
   function pickerButtonLabel(key) {
     var p = state.people && state.people[key];
-    return (p && p.name) ? "I'm " + p.name : t("I haven't registered yet");
+    if (p && p.name) return "I'm " + p.name;
+    if (!ROOM) return "I'm " + PEOPLE[key].name;
+    return t("I haven't registered yet");
   }
   function pickerOverlay() {
     return h("div", { class: "picker-overlay" }, [

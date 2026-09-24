@@ -1,0 +1,25 @@
+{
+  "appId": "com.nearune.app",
+  "appName": "Nearune",
+  "webDir": "www",
+  "server": {
+    "url": "https://same-sky-rooms-production.up.railway.app",
+    "cleartext": false,
+    "allowNavigation": [
+      "same-sky-rooms-production.up.railway.app",
+      "*.nearune.com",
+      "*.nearune.app"
+    ]
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#FAF6EE"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#FAF6EE",
+      "showSpinner": false
+    }
+  }
+}

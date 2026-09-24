@@ -1,0 +1,58 @@
+workflows:
+  nearune-ios:
+    name: Nearune iOS (App Store)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # Name of the App Store Connect API key integration you create in the
+      # Codemagic dashboard (Teams > Integrations > App Store Connect).
+      # Must match exactly.
+      app_store_connect: nearune_asc_api_key
+    environment:
+      ios_signing:
+        # Codemagic auto-creates/downloads the right certificate and
+        # provisioning profile using the App Store Connect API key above —
+        # no manual certificate wrangling needed.
+        distribution_type: app_store
+        bundle_identifier: com.nearune.app
+      vars:
+        XCODE_PROJECT: "ios-app/ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.nearune.app"
+      node: 20
+      xcode: latest
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          cd ios-app
+          npm ci
+      - name: Capacitor sync (copies config + plugins into the native project)
+        script: |
+          cd ios-app
+          npx cap sync ios
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Increment build number to match App Store Connect
+        script: |
+          cd $(dirname "$XCODE_PROJECT")
+          LATEST_BUILD_NUMBER=$(app-store-build-number --live --bundle-id "$BUNDLE_ID" || echo 0)
+          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+      - name: Build ipa for App Store distribution
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      # Automatically uploads the signed build to TestFlight after every
+      # successful build on the configured branch. Flip submit_to_app_store
+      # to true only once you're ready to actually kick off App Review —
+      # TestFlight review is much lighter and lets you test on real devices
+      # first.
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false

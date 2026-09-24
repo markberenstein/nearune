@@ -1381,12 +1381,19 @@ const RAW = String.raw`<!doctype html>
       }
     }
 
-    var mine = state.people && state.people[viewerKey];
-    if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }
+    // The legacy room (no ROOM id) predates this registration/confirm
+    // system entirely — Mark and Nikita have real hardcoded placeholder
+    // identities there (see PEOPLE) and have always used the app without
+    // ever going through it, so it never gates them. Every other room
+    // (created via /new) is registration-required from the start.
+    if (ROOM) {
+      var mine = state.people && state.people[viewerKey];
+      if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }
 
-    var otherKey = viewerKey === "mark" ? "nikita" : "mark";
-    var other = state.people && state.people[otherKey];
-    if (!other || !other.confirmed) { app.appendChild(inviteFlow(otherKey)); return; }
+      var otherKey = viewerKey === "mark" ? "nikita" : "mark";
+      var other = state.people && state.people[otherKey];
+      if (!other || !other.confirmed) { app.appendChild(inviteFlow(otherKey)); return; }
+    }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
 

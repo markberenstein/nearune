@@ -16,12 +16,14 @@ import {
   addToEmailIndex,
   lookupEmailIndex,
   removeFromEmailIndex,
+  listRoomIds,
 } from "./storage";
 import { resolveTranslation } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail } from "./util";
-import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage } from "./page";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount } from "./util";
+import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
+import { sendPush, pushConfigured, vapidPublicKey } from "./push";
 
 const PORT = Number(Bun.env.PORT) || 3000;
 
@@ -100,6 +102,97 @@ Bun.serve({
       });
     }
 
+    if (req.method === "GET" && restPath === "/manifest.json") {
+      return new Response(buildManifestJson(roomId), {
+        headers: { "content-type": "application/manifest+json", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && restPath === "/sw.js") {
+      return new Response(buildServiceWorkerJs(), {
+        headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store", "service-worker-allowed": "/" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/push-public-key") {
+      return json({ key: vapidPublicKey, configured: pushConfigured });
+    }
+
+    if (req.method === "POST" && restPath === "/api/push-subscribe") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      const subscription = body && body.subscription;
+      if (
+        !isPerson(who) ||
+        !subscription ||
+        typeof subscription.endpoint !== "string" ||
+        !subscription.keys ||
+        typeof subscription.keys.p256dh !== "string" ||
+        typeof subscription.keys.auth !== "string"
+      ) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      await saveState(roomId, (s) => {
+        if (!s.pushSubs) s.pushSubs = {};
+        s.pushSubs[who] = { endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } };
+      });
+      return json({ ok: true });
+    }
+
+    if (req.method === "POST" && restPath === "/api/push-unsubscribe") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      await saveState(roomId, (s) => {
+        if (s.pushSubs) delete s.pushSubs[who];
+      });
+      return json({ ok: true });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
+      const secret = Bun.env.CRON_SECRET;
+      const given = req.headers.get("x-cron-secret") || "";
+      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
+      if (!pushConfigured) return json({ ok: true, sent: 0, note: "push not configured" });
+      const today = todayKeyPT();
+      const ids = await listRoomIds();
+      let sent = 0;
+      for (const id of ids) {
+        try {
+          const state = await loadState(id);
+          if (!state.pushSubs) continue;
+          if (state.pushLastMorningKey === today) continue;
+          const count = unansweredCount(state, today);
+          if (count > 0) {
+            for (const who of ["mark", "nikita"] as PersonKey[]) {
+              const a = state.answers[today];
+              const answered = !!(a && a[who] && a[who]!.text);
+              const sub = state.pushSubs[who];
+              if (answered || !sub) continue;
+              const res = await sendPush(sub, {
+                title: "Today's question is up",
+                body: "Your Nearune question for today is ready.",
+                badge: count,
+                tag: "morning",
+              });
+              if (res.ok) sent++;
+              if (res.gone) {
+                await saveState(id, (s) => {
+                  if (s.pushSubs) delete s.pushSubs[who];
+                });
+              }
+            }
+          }
+          await saveState(id, (s) => {
+            s.pushLastMorningKey = today;
+          });
+        } catch (err) {
+          console.error("[cron-push] room " + id + " failed", err);
+        }
+      }
+      return json({ ok: true, sent });
+    }
+
     if (req.method === "GET" && restPath === "/") {
       // Date-tag icon URLs so iOS treats each day's icon as a fresh resource.
       const html = buildPageHtml(roomId, todayKeyPT());
@@ -146,6 +239,36 @@ Bun.serve({
           ...(prev ? { editedAt: new Date().toISOString() } : {}),
         };
       });
+      // Nudge whoever hasn't answered yet with the updated shared badge
+      // count. Fire-and-forget — a slow or failed push shouldn't delay the
+      // answer response, and a dead subscription is cleaned up in the
+      // background rather than blocking this request.
+      if (pushConfigured && state.pushSubs) {
+        const count = unansweredCount(state, date);
+        if (count > 0) {
+          const answererName = state.people?.[who]?.name || "Your partner";
+          for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
+            const a = state.answers[date];
+            const answered = !!(a && a[other] && a[other]!.text);
+            const sub = state.pushSubs[other];
+            if (answered || !sub) continue;
+            sendPush(sub, {
+              title: answererName + " answered today's question",
+              body: "Your turn on Nearune.",
+              badge: count,
+              tag: "partner-answered",
+            })
+              .then((res) => {
+                if (res.gone) {
+                  saveState(roomId, (s) => {
+                    if (s.pushSubs) delete s.pushSubs[other];
+                  }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      }
       return json(forClient(state));
     }
 

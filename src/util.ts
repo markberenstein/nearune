@@ -131,6 +131,17 @@ export function isDayComplete(state: State, key: string): boolean {
   return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text);
 }
 
+// How many of the two people (0/1/2) have NOT yet answered the given day's
+// question — used as the shared app-icon badge count.
+export function unansweredCount(state: State, key: string): number {
+  const a = state.answers[key];
+  let n = 0;
+  for (const who of ["mark", "nikita"] as PersonKey[]) {
+    if (!a || !a[who] || !a[who]!.text) n++;
+  }
+  return n;
+}
+
 export function totalCompleteDays(state: State): number {
   return Object.keys(state.answers).filter((k) => isDayComplete(state, k)).length;
 }

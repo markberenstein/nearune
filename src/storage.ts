@@ -7,6 +7,7 @@
 // under rooms/<roomId>/.
 
 import { S3Client } from "bun";
+import { readdirSync } from "node:fs";
 import type { State, PersonKey } from "./types";
 import { todayKeyPT } from "./util";
 
@@ -152,6 +153,33 @@ export async function deleteRoom(roomId: string): Promise<void> {
   } catch {}
   caches.delete(roomId);
   writeChains.delete(roomId);
+}
+
+// Every room id that exists, including "" for the legacy room — used by the
+// daily cron job to iterate every room and push a badge update to anyone
+// subscribed. Not cheap (lists the whole bucket), so only the cron job
+// should call this, never a per-request path.
+export async function listRoomIds(): Promise<string[]> {
+  const ids: string[] = [""];
+  if (useS3 && s3) {
+    let continuationToken: string | undefined;
+    do {
+      const resp = await s3.list({ prefix: "rooms/", maxKeys: 1000, continuationToken });
+      for (const obj of resp.contents || []) {
+        const m = /^rooms\/([^/]+)\/state\.json$/.exec(obj.key);
+        if (m) ids.push(m[1]);
+      }
+      continuationToken = resp.isTruncated ? resp.nextContinuationToken : undefined;
+    } while (continuationToken);
+  } else {
+    try {
+      for (const name of readdirSync(".")) {
+        const m = /^local-state-(.+)\.json$/.exec(name);
+        if (m) ids.push(m[1]);
+      }
+    } catch {}
+  }
+  return ids;
 }
 
 // One-time migration for a round active before puzzleRoundStartDate existed.

@@ -208,6 +208,13 @@ const RAW = String.raw`<!doctype html>
   .cdt { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; }
   [hidden] { display: none !important; }
 </style>
+<link rel="manifest" id="manifestLink" href="/manifest.json">
+<meta name="theme-color" content="#FAF6EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161320" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Nearune">
 </head>
 <body>
 <div id="app"></div>
@@ -217,6 +224,10 @@ const RAW = String.raw`<!doctype html>
 
   var ROOM = "__ROOM__";
   var RP = ROOM ? "/r/" + ROOM : "";
+  try {
+    var manifestLinkEl = document.getElementById("manifestLink");
+    if (manifestLinkEl) manifestLinkEl.href = RP + "/manifest.json";
+  } catch (e) {}
 
   // The original room keeps its real placeholder names (Mark & Nikita) for
   // backward compatibility. Every other room gets generic, un-presuming
@@ -477,6 +488,15 @@ const RAW = String.raw`<!doctype html>
   var editingEntry = null;
   var editDraftText = "";
   var commentDrafts = {};
+
+  // Push notifications / app-icon badge. "unsupported" means this browser
+  // can't do Web Push at all (e.g. Safari in a regular tab rather than an
+  // installed home-screen app); "off"/"on"/"busy" track this device's own
+  // subscription state, kept in localStorage so the button doesn't flicker
+  // between checks.
+  var PUSH_LS_KEY = ROOM ? "nearunePush_" + ROOM : "nearunePush";
+  var pushState = "off"; // "unsupported" | "off" | "on" | "busy"
+  try { if (localStorage.getItem(PUSH_LS_KEY) === "on") pushState = "on"; } catch (e) {}
 
   function isComplete(key) {
     var a = state.answers[key];
@@ -1383,6 +1403,8 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(streakCard());
       app.appendChild(journalSection());
     }
+    var pushRow = pushToggleRow();
+    if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
@@ -1561,6 +1583,112 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // --- Push notifications ---------------------------------------------
+
+  function pushSupported() {
+    return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var rawData = atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  // Pushes the shared "how many of you two haven't answered yet" count to
+  // this tab's own icon (works while the app is open; the service worker
+  // handles it the rest of the time via incoming pushes).
+  function syncAppBadge() {
+    if (!("setAppBadge" in navigator)) return;
+    var today = todayKeyStr();
+    var count = unansweredCountLocal(today);
+    try {
+      if (count > 0) navigator.setAppBadge(count); else navigator.clearAppBadge();
+    } catch (e) {}
+  }
+
+  function todayKeyStr() {
+    // Mirrors the server's date key (falls back to local date if state
+    // hasn't loaded a puzzle date hint yet — the server is the source of
+    // truth either way since /api/state is polled continuously).
+    var keys = Object.keys(state.answers || {}).sort();
+    var latest = keys.length ? keys[keys.length - 1] : null;
+    var d = new Date();
+    var iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    return latest && latest >= iso ? latest : iso;
+  }
+
+  function unansweredCountLocal(key) {
+    var a = state.answers && state.answers[key];
+    var n = 0;
+    ["mark", "nikita"].forEach(function (who) { if (!a || !a[who] || !a[who].text) n++; });
+    return n;
+  }
+
+  async function enablePush() {
+    if (!pushSupported() || !viewerKey) return;
+    pushState = "busy"; renderApp();
+    try {
+      var keyRes = await fetch(RP + "/api/push-public-key");
+      var keyData = await keyRes.json();
+      if (!keyData.configured || !keyData.key) { pushState = "off"; renderApp(); return; }
+      var reg = await navigator.serviceWorker.register(RP + "/sw.js");
+      await navigator.serviceWorker.ready;
+      var sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(keyData.key) });
+      await fetch(RP + "/api/push-subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ who: viewerKey, subscription: sub.toJSON() })
+      });
+      pushState = "on";
+      try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
+      syncAppBadge();
+    } catch (e) {
+      pushState = "off";
+    }
+    renderApp();
+  }
+
+  async function disablePush() {
+    if (!viewerKey) return;
+    pushState = "busy"; renderApp();
+    try {
+      if ("serviceWorker" in navigator) {
+        var reg = await navigator.serviceWorker.getRegistration(RP + "/sw.js");
+        if (reg) {
+          var sub = await reg.pushManager.getSubscription();
+          if (sub) await sub.unsubscribe();
+        }
+      }
+      await fetch(RP + "/api/push-unsubscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ who: viewerKey })
+      });
+    } catch (e) {}
+    pushState = "off";
+    try { localStorage.removeItem(PUSH_LS_KEY); } catch (e) {}
+    renderApp();
+  }
+
+  function pushToggleRow() {
+    if (!pushSupported() || !viewerKey) return null;
+    var row = h("div", { class: "switch-row" });
+    var label = pushState === "on" ? t("Reminders on — turn off")
+      : pushState === "busy" ? t("Working…")
+      : t("Enable reminders");
+    var btn = h("button", { class: "switch-link", text: label });
+    btn.disabled = pushState === "busy";
+    btn.addEventListener("click", function () {
+      if (pushState === "on") disablePush(); else enablePush();
+    });
+    row.appendChild(btn);
+    return row;
+  }
+
   function switchRow() {
     var row = h("div", { class: "switch-row" });
     var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
@@ -1630,6 +1758,14 @@ const RAW = String.raw`<!doctype html>
       online = true;
     } catch (e) { online = false; }
     renderApp();
+    syncAppBadge();
+    // A returning device that already enabled reminders re-registers the
+    // service worker quietly (no permission prompt — that only happens on
+    // an actual new subscribe) so badge pushes keep working after a browser
+    // restart or PWA reinstall-free update.
+    if (pushState === "on" && pushSupported()) {
+      navigator.serviceWorker.register(RP + "/sw.js").catch(function () {});
+    }
   }
 
   async function poll() {
@@ -1641,6 +1777,7 @@ const RAW = String.raw`<!doctype html>
       var active = document.activeElement;
       var busy = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT");
       if (!busy) renderApp();
+      syncAppBadge();
     } catch (e) {
       online = false;
     }
@@ -1656,6 +1793,71 @@ const RAW = String.raw`<!doctype html>
 
 export function buildPageHtml(roomId: string, iconV: string): string {
   return RAW.replace(/__ICON_V__/g, iconV).replace(/__ROOM__/g, roomId);
+}
+
+// Web App Manifest — lets the app be added to the home screen and, on
+// iOS 16.4+, is what makes it eligible for Web Push at all (only installed
+// home-screen apps get it there, not a regular Safari tab).
+export function buildManifestJson(roomId: string): string {
+  var scope = roomId ? "/r/" + roomId + "/" : "/";
+  return JSON.stringify({
+    name: "Nearune",
+    short_name: "Nearune",
+    description: "A private daily-question ritual for two people who live apart.",
+    start_url: scope,
+    scope: scope,
+    display: "standalone",
+    background_color: "#FAF6EE",
+    theme_color: "#FAF6EE",
+    icons: [
+      { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { src: "/favicon.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    ],
+  });
+}
+
+// Service worker: only job is receiving push events and turning each one
+// into a notification (required alongside any badge update — iOS revokes
+// the subscription if a push is ever silent) plus the app-icon badge count
+// that came in the payload, and focusing/opening the app on tap.
+export function buildServiceWorkerJs(): string {
+  return `self.addEventListener("install", function (event) {
+  self.skipWaiting();
+});
+self.addEventListener("activate", function (event) {
+  event.waitUntil(self.clients.claim());
+});
+self.addEventListener("push", function (event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) {}
+  var title = data.title || "Nearune";
+  var body = data.body || "";
+  var badge = typeof data.badge === "number" ? data.badge : null;
+  var tag = data.tag || "nearune";
+  var work = [];
+  if (badge !== null && "setAppBadge" in self.registration) {
+    work.push(badge > 0 ? self.registration.setAppBadge(badge) : self.registration.clearAppBadge());
+  }
+  work.push(self.registration.showNotification(title, {
+    body: body,
+    tag: tag,
+    icon: "/apple-touch-icon.png",
+    badge: "/favicon.png"
+  }));
+  event.waitUntil(Promise.all(work));
+});
+self.addEventListener("notificationclick", function (event) {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clientList) {
+      for (var i = 0; i < clientList.length; i++) {
+        if ("focus" in clientList[i]) return clientList[i].focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow("/");
+    })
+  );
+});
+`;
 }
 
 export function buildNewRoomPage(): string {

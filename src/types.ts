@@ -14,6 +14,11 @@ export type Comment = { who: PersonKey; text: string; at: string };
 // util.ts hashEmail) — kept so a room deletion can also clean up that
 // person's entry in the recovery index. The actual address is never stored.
 export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string };
+
+// A browser's Web Push subscription (from the PushSubscription object) —
+// endpoint + keys needed to encrypt and deliver a push to that browser.
+export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string } };
+
 export type State = {
   version: number;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
@@ -46,6 +51,11 @@ export type State = {
   puzzleQueueBy?: PersonKey;
   puzzleQueueAt?: string;
   puzzleQueueTotal?: number;
+  // Web Push subscriptions per person, and the last date key (PT) the
+  // morning "new question" push was sent for, so the daily cron job never
+  // double-sends if it fires more than once for the same day.
+  pushSubs?: Partial<Record<PersonKey, PushSubscriptionRecord>>;
+  pushLastMorningKey?: string;
 };
 
 export function isPerson(v: unknown): v is PersonKey {

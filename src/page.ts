@@ -496,6 +496,16 @@ const RAW = String.raw`<!doctype html>
   // between checks.
   var PUSH_LS_KEY = ROOM ? "nearunePush_" + ROOM : "nearunePush";
   var pushState = "off"; // "unsupported" | "off" | "on" | "busy"
+  var pushError = "";
+  // Warmed eagerly on load (see warmPush() below) so tapping "Enable
+  // reminders" can call pushManager.subscribe() with as little as possible
+  // between the tap and the permission request — Safari on iOS only shows
+  // the permission prompt when it's tightly tied to a real tap, and a
+  // network round-trip (fetching the VAPID key, registering the service
+  // worker) in between is enough to make it silently refuse with no prompt
+  // and no visible error at all.
+  var vapidKeyCache = null;
+  var swRegistrationCache = null;
   try { if (localStorage.getItem(PUSH_LS_KEY) === "on") pushState = "on"; } catch (e) {}
 
   function isComplete(key) {
@@ -1639,16 +1649,42 @@ const RAW = String.raw`<!doctype html>
     return n;
   }
 
+  // Fetches the VAPID key and registers the service worker ahead of time
+  // (neither needs a user gesture), so enablePush() below has as little as
+  // possible to do between the tap and the permission-gated subscribe call.
+  function warmPush() {
+    if (!pushSupported()) return;
+    if (!vapidKeyCache) {
+      fetch(RP + "/api/push-public-key")
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.configured && d.key) vapidKeyCache = d.key; })
+        .catch(function () {});
+    }
+    if (!swRegistrationCache) {
+      navigator.serviceWorker.register(RP + "/sw.js")
+        .then(function (reg) { swRegistrationCache = reg; })
+        .catch(function () {});
+    }
+  }
+
   async function enablePush() {
     if (!pushSupported() || !viewerKey) return;
-    pushState = "busy"; renderApp();
+    pushState = "busy"; pushError = ""; renderApp();
     try {
-      var keyRes = await fetch(RP + "/api/push-public-key");
-      var keyData = await keyRes.json();
-      if (!keyData.configured || !keyData.key) { pushState = "off"; renderApp(); return; }
-      var reg = await navigator.serviceWorker.register(RP + "/sw.js");
-      await navigator.serviceWorker.ready;
-      var sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(keyData.key) });
+      var keyStr = vapidKeyCache;
+      if (!keyStr) {
+        var keyRes = await fetch(RP + "/api/push-public-key");
+        var keyData = await keyRes.json();
+        if (!keyData.configured || !keyData.key) {
+          pushState = "off"; pushError = t("Push isn't set up on the server yet."); renderApp(); return;
+        }
+        keyStr = keyData.key;
+      }
+      var reg = swRegistrationCache || await navigator.serviceWorker.register(RP + "/sw.js");
+      // This is the one call that needs to still be "attached" to your tap —
+      // everything above was pre-warmed on page load specifically so this
+      // is the first (and only) real wait after tapping.
+      var sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(keyStr) });
       await fetch(RP + "/api/push-subscribe", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1659,6 +1695,14 @@ const RAW = String.raw`<!doctype html>
       syncAppBadge();
     } catch (e) {
       pushState = "off";
+      // NotAllowedError: permission denied (either just now, or a past
+      // denial iOS won't re-prompt for — Settings > Notifications is the
+      // only way back in that case). Anything else is a real bug.
+      if (e && e.name === "NotAllowedError") {
+        pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
+      } else {
+        pushError = t("Couldn't enable reminders") + ": " + ((e && e.message) || String(e));
+      }
     }
     renderApp();
   }
@@ -1687,6 +1731,7 @@ const RAW = String.raw`<!doctype html>
 
   function pushToggleRow() {
     if (!pushSupported() || !viewerKey) return null;
+    var wrap = h("div", {});
     var row = h("div", { class: "switch-row" });
     var label = pushState === "on" ? t("Reminders on — turn off")
       : pushState === "busy" ? t("Working…")
@@ -1697,7 +1742,9 @@ const RAW = String.raw`<!doctype html>
       if (pushState === "on") disablePush(); else enablePush();
     });
     row.appendChild(btn);
-    return row;
+    wrap.appendChild(row);
+    if (pushError) wrap.appendChild(h("p", { class: "offline-note", text: pushError }));
+    return wrap;
   }
 
   function switchRow() {
@@ -1770,13 +1817,13 @@ const RAW = String.raw`<!doctype html>
     } catch (e) { online = false; }
     renderApp();
     syncAppBadge();
-    // A returning device that already enabled reminders re-registers the
-    // service worker quietly (no permission prompt — that only happens on
-    // an actual new subscribe) so badge pushes keep working after a browser
-    // restart or PWA reinstall-free update.
-    if (pushState === "on" && pushSupported()) {
-      navigator.serviceWorker.register(RP + "/sw.js").catch(function () {});
-    }
+    // Pre-fetch the VAPID key and pre-register the service worker now,
+    // neither of which needs a user gesture, so a later tap on "Enable
+    // reminders" has the shortest possible path to the permission-gated
+    // subscribe call (see warmPush()'s comment). Also what keeps a
+    // returning already-enabled device's service worker registered after a
+    // browser restart or PWA reinstall-free update.
+    warmPush();
   }
 
   async function poll() {

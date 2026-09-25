@@ -36,7 +36,7 @@ workflows:
       - name: Increment build number to match App Store Connect
         script: |
           cd $(dirname "$XCODE_PROJECT")
-          LATEST_BUILD_NUMBER=$(app-store-build-number --live --bundle-id "$BUNDLE_ID" || echo 0)
+          LATEST_BUILD_NUMBER=$(app-store-build-number --bundle-id "$BUNDLE_ID" || echo 0)
           agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
       - name: Build ipa for App Store distribution
         script: |

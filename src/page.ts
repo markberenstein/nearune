@@ -1882,6 +1882,18 @@ const RAW = String.raw`<!doctype html>
       try { localStorage.setItem(MY_ROOM_LS_KEY, ""); } catch (e) {}
       return false;
     }
+    // Manual escape hatch (linked from the "Create my room" screen) for a
+    // legacy-room device that lost ALL of its localStorage at once (e.g.
+    // the app was deleted and reinstalled) — there's nothing left on the
+    // device to recognize automatically, so this has to be a deliberate,
+    // explicit click rather than something auto-detected.
+    var params = null;
+    try { params = new URLSearchParams(location.search); } catch (e) {}
+    if (params && params.get("legacy") === "1") {
+      try { localStorage.setItem(MY_ROOM_LS_KEY, ""); } catch (e) {}
+      try { history.replaceState(null, "", location.pathname); } catch (e) {}
+      return false;
+    }
     location.href = "/new";
     return true;
   }
@@ -2027,6 +2039,7 @@ export function buildNewRoomPage(): string {
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Already registered? Recover your link</a></p>
+  <p class="note"><a href="/?legacy=1" style="color:var(--ink-soft)">Mark or Nikita, on a new device? Tap here</a></p>
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>
 </div>
 <script>

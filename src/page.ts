@@ -445,6 +445,11 @@ const RAW = String.raw`<!doctype html>
   // back to the old unscoped key so existing sessions aren't disrupted.
   var VIEWER_LS_KEY = "sameSkyViewer:" + ROOM;
   var TAB_LS_KEY = "sameSkyTab:" + ROOM;
+  // Unlike the keys above, this one is NOT room-scoped — it's how a device
+  // remembers which single room it belongs to, so a fresh visit to "/" can
+  // send a brand-new visitor straight into registering their own room
+  // instead of landing them in the legacy room (see redirectToMyRoom()).
+  var MY_ROOM_LS_KEY = "nearuneMyRoom";
 
   var state = { version: 1, answers: {}, status: {}, comments: {} };
   var viewerKey = null;
@@ -465,6 +470,7 @@ const RAW = String.raw`<!doctype html>
     if (viewerParam === "mark" || viewerParam === "nikita") {
       viewerKey = viewerParam;
       localStorage.setItem(VIEWER_LS_KEY, viewerParam);
+      if (ROOM) localStorage.setItem(MY_ROOM_LS_KEY, ROOM);
       var cleanUrl = location.pathname;
       history.replaceState(null, "", cleanUrl);
     }
@@ -1221,6 +1227,7 @@ const RAW = String.raw`<!doctype html>
           state = res.data;
           viewerKey = res.data.who;
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
+          if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
           try {
             var u = new URL(location.href);
             u.searchParams.delete("invite"); u.searchParams.delete("token");
@@ -1255,6 +1262,7 @@ const RAW = String.raw`<!doctype html>
         }
         state = res.data;
         showRegisterForm = false;
+        if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
         regError = res.data._emailSent === false ? t("Registered, but the email failed to send — try again.") : "";
         renderApp();
       })
@@ -1809,7 +1817,31 @@ const RAW = String.raw`<!doctype html>
     if (cd) cd.textContent = countdownText();
   }
 
+  // Only matters on "/" (ROOM === ""), the legacy room's URL. Returns true
+  // if it redirected away — callers should stop and not render/fetch.
+  function redirectToMyRoom() {
+    if (ROOM) return false;
+    var myRoom = null;
+    try { myRoom = localStorage.getItem(MY_ROOM_LS_KEY); } catch (e) {}
+    if (myRoom) { location.href = "/r/" + myRoom; return true; }
+    if (myRoom === "") return false; // this device's room IS the legacy one
+    // Never decided yet. A device that already has a legacy viewer identity
+    // saved (from before this check existed) belongs to the legacy room —
+    // remember that and carry on so Mark/Nikita's existing devices aren't
+    // disrupted. Anyone else is a brand-new visitor: send them to register
+    // their own room instead of dropping them into Mark & Nikita's room.
+    var legacyViewer = null;
+    try { legacyViewer = localStorage.getItem(VIEWER_LS_KEY) || localStorage.getItem("sameSkyViewer"); } catch (e) {}
+    if (legacyViewer === "mark" || legacyViewer === "nikita") {
+      try { localStorage.setItem(MY_ROOM_LS_KEY, ""); } catch (e) {}
+      return false;
+    }
+    location.href = "/new";
+    return true;
+  }
+
   async function initialLoad() {
+    if (redirectToMyRoom()) return;
     try {
       var res = await fetch(RP + "/api/state");
       state = await res.json();

@@ -1614,8 +1614,17 @@ const RAW = String.raw`<!doctype html>
 
   // --- Push notifications ---------------------------------------------
 
+  // True inside the native iOS app shell (Capacitor injects `window.Capacitor`
+  // into every page it loads, even a remote URL like this one — no bundling
+  // or import needed to reach it from here).
+  function isNativeApp() {
+    try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
+  }
+
   function pushSupported() {
-    return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    // The native app doesn't have the Web Push API (WKWebView never does),
+    // but it has its own native path via the PushNotifications plugin below.
+    return isNativeApp() || ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window);
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -1661,7 +1670,7 @@ const RAW = String.raw`<!doctype html>
   // (neither needs a user gesture), so enablePush() below has as little as
   // possible to do between the tap and the permission-gated subscribe call.
   function warmPush() {
-    if (!pushSupported()) return;
+    if (!pushSupported() || isNativeApp()) return; // nothing to pre-warm on the native path
     if (!vapidKeyCache) {
       fetch(RP + "/api/push-public-key")
         .then(function (r) { return r.json(); })
@@ -1678,6 +1687,41 @@ const RAW = String.raw`<!doctype html>
   async function enablePush() {
     if (!pushSupported() || !viewerKey) return;
     pushState = "busy"; pushError = ""; renderApp();
+    if (isNativeApp()) {
+      try {
+        var PN = window.Capacitor.Plugins.PushNotifications;
+        var perm = await PN.requestPermissions();
+        if (perm.receive !== "granted") {
+          pushState = "off";
+          pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
+          renderApp(); return;
+        }
+        await new Promise(function (resolve, reject) {
+          var settled = false;
+          PN.addListener("registration", function (token) {
+            if (settled) return; settled = true;
+            fetch(RP + "/api/push-subscribe", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ who: viewerKey, subscription: { kind: "apns", token: token.value } })
+            }).then(function () { resolve(); }).catch(reject);
+          });
+          PN.addListener("registrationError", function (err) {
+            if (settled) return; settled = true;
+            reject(err);
+          });
+          PN.register();
+        });
+        pushState = "on";
+        try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
+        syncAppBadge();
+      } catch (e) {
+        pushState = "off";
+        pushError = t("Couldn't enable reminders") + ": " + ((e && e.message) || String(e));
+      }
+      renderApp();
+      return;
+    }
     try {
       var keyStr = vapidKeyCache;
       if (!keyStr) {
@@ -1719,7 +1763,9 @@ const RAW = String.raw`<!doctype html>
     if (!viewerKey) return;
     pushState = "busy"; renderApp();
     try {
-      if ("serviceWorker" in navigator) {
+      // Native: there's no OS-level "unregister" call worth making here —
+      // telling the server to stop sending (below) is what actually matters.
+      if (!isNativeApp() && "serviceWorker" in navigator) {
         var reg = await navigator.serviceWorker.getRegistration(RP + "/sw.js");
         if (reg) {
           var sub = await reg.pushManager.getSubscription();

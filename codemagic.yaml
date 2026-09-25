@@ -25,7 +25,7 @@ workflows:
       - name: Install npm dependencies
         script: |
           cd ios-app
-          npm ci
+          npm install
       - name: Capacitor sync (copies config + plugins into the native project)
         script: |
           cd ios-app

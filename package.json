@@ -6,6 +6,7 @@
     "start": "bun run src/server.ts"
   },
   "dependencies": {
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "jsonwebtoken": "^9.0.2"
   }
 }

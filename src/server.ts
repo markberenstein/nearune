@@ -23,7 +23,7 @@ import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
-import { sendPush, pushConfigured, vapidPublicKey } from "./push";
+import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
 
 const PORT = Number(Bun.env.PORT) || 3000;
 
@@ -122,9 +122,20 @@ Bun.serve({
       const body = await readJson(req);
       const who = body && body.who;
       const subscription = body && body.subscription;
+      if (!isPerson(who) || !subscription) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (subscription.kind === "apns") {
+        if (typeof subscription.token !== "string" || !subscription.token) {
+          return json({ error: "invalid" }, { status: 400 });
+        }
+        await saveState(roomId, (s) => {
+          if (!s.pushSubs) s.pushSubs = {};
+          s.pushSubs[who] = { kind: "apns", token: subscription.token };
+        });
+        return json({ ok: true });
+      }
       if (
-        !isPerson(who) ||
-        !subscription ||
         typeof subscription.endpoint !== "string" ||
         !subscription.keys ||
         typeof subscription.keys.p256dh !== "string" ||
@@ -153,7 +164,7 @@ Bun.serve({
       const secret = Bun.env.CRON_SECRET;
       const given = req.headers.get("x-cron-secret") || "";
       if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
-      if (!pushConfigured) return json({ ok: true, sent: 0, note: "push not configured" });
+      if (!anyPushConfigured) return json({ ok: true, sent: 0, note: "push not configured" });
       const today = todayKeyPT();
       const ids = await listRoomIds();
       let sent = 0;
@@ -243,7 +254,7 @@ Bun.serve({
       // count. Fire-and-forget — a slow or failed push shouldn't delay the
       // answer response, and a dead subscription is cleaned up in the
       // background rather than blocking this request.
-      if (pushConfigured && state.pushSubs) {
+      if (anyPushConfigured && state.pushSubs) {
         const count = unansweredCount(state, date);
         if (count > 0) {
           const answererName = state.people?.[who]?.name || "Your partner";

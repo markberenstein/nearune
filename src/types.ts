@@ -17,7 +17,13 @@ export type PersonProfile = { name: string; location: string; language: string; 
 
 // A browser's Web Push subscription (from the PushSubscription object) —
 // endpoint + keys needed to encrypt and deliver a push to that browser.
-export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string } };
+// Existing records predate the `kind` tag (they're all Web Push, from
+// before the native app existed) — treat a missing `kind` as "web".
+export type WebPushSubscriptionRecord = { kind?: "web"; endpoint: string; keys: { p256dh: string; auth: string } };
+// A device token from the native iOS app (Capacitor's PushNotifications
+// plugin), delivered via Apple Push Notification service instead.
+export type ApnsSubscriptionRecord = { kind: "apns"; token: string };
+export type PushSubscriptionRecord = WebPushSubscriptionRecord | ApnsSubscriptionRecord;
 
 export type State = {
   version: number;

@@ -30,6 +30,9 @@ workflows:
         script: |
           cd ios-app
           npx cap sync ios
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
       - name: Increment build number to match App Store Connect
         script: |
           cd $(dirname "$XCODE_PROJECT")

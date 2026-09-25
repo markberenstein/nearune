@@ -36,8 +36,11 @@ workflows:
       - name: Increment build number to match App Store Connect
         script: |
           cd $(dirname "$XCODE_PROJECT")
-          LATEST_BUILD_NUMBER=$(app-store-build-number --bundle-id "$BUNDLE_ID" || echo 0)
-          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+          # Codemagic's own build counter for this workflow ($CM_BUILD_NUMBER,
+          # the "Index" shown on each build) only ever goes up, one per build
+          # — a simpler and more reliable source of a unique, increasing
+          # build number than querying App Store Connect for the latest one.
+          agvtool new-version -all "$CM_BUILD_NUMBER"
       - name: Build ipa for App Store distribution
         script: |
           xcode-project build-ipa \

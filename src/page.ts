@@ -1614,7 +1614,7 @@ const RAW = String.raw`<!doctype html>
 
   // --- Push notifications ---------------------------------------------
 
-  // True inside the native iOS app shell (Capacitor injects `window.Capacitor`
+  // True inside the native iOS app shell (Capacitor injects 'window.Capacitor'
   // into every page it loads, even a remote URL like this one — no bundling
   // or import needed to reach it from here).
   function isNativeApp() {

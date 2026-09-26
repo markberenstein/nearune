@@ -253,7 +253,7 @@ const RAW = String.raw`<!doctype html>
   // name on file, that's used instead.
   function inviteeLabel(key) {
     var p = state.people && state.people[key];
-    return (p && p.name) || t("your significant other");
+    return (p && p.name) || t("your Nearune partner");
   }
   function personLocation(key) {
     var p = state.people && state.people[key];
@@ -2041,7 +2041,7 @@ export function buildNewRoomPage(): string {
 <div class="card">
   <h1>Start your own Nearune</h1>
   <p>Nearune is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
-  <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your person; when you each open it, you'll register your own name, language, and location, then you're set.</p>
+  <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your Nearune partner; when you each open it, you'll register your own name, language, and location, then you're set.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Already registered? Recover your link</a></p>

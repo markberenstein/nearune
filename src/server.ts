@@ -394,7 +394,7 @@ Bun.serve({
         "<p>Hi " + name + ",</p>" +
           "<p>You're almost set up:</p>" +
           "<ol><li><a href=\"" + confirmUrl + "\">Confirm your email</a></li>" +
-          "<li>Go to the Nearune link to complete your significant other's information</li></ol>" +
+          "<li>Go to the Nearune link to complete your partner's information</li></ol>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
       // Lets this person recover their room link later if they lose it.

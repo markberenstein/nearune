@@ -1700,8 +1700,8 @@ const RAW = String.raw`<!doctype html>
           var settled = false;
           var timeoutId = setTimeout(function () {
             if (settled) return; settled = true;
-            reject(new Error("Timed out waiting for Apple to register this device for push (no response after 20s)."));
-          }, 20000);
+            reject(new Error("Timed out waiting for Apple to register this device for push (no response after 45s)."));
+          }, 45000);
           PN.addListener("registration", function (token) {
             if (settled) return; settled = true;
             clearTimeout(timeoutId);

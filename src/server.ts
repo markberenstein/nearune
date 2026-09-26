@@ -180,6 +180,14 @@ Bun.serve({
               const answered = !!(a && a[who] && a[who]!.text);
               const sub = state.pushSubs[who];
               if (answered || !sub) continue;
+              // Temporary debug line — helps tell an old, no-longer-live web
+              // push subscription apart from a real APNs device token when
+              // troubleshooting why a "successful" send doesn't arrive.
+              // Safe to remove once push notifications are confirmed working.
+              console.log(
+                "[cron-push] room " + id + " who=" + who + " kind=" + (sub.kind || "web") +
+                " id=" + ((sub as any).token || (sub as any).endpoint || "").slice(-24)
+              );
               const res = await sendPush(sub, {
                 title: "Today's question is up",
                 body: "Your Nearune question for today is ready.",

@@ -487,6 +487,28 @@ Bun.serve({
         s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
+      // Let the person who sent the invite know their partner is in —
+      // otherwise the only way they'd find out is having the app open when
+      // the 6s poll happens to catch it. Push only (not email): we never
+      // keep a raw email on file past sending the original invite, so
+      // there's nothing to email this back to.
+      const inviter: PersonKey = who === "mark" ? "nikita" : "mark";
+      const inviterSub = state.pushSubs && state.pushSubs[inviter];
+      if (inviterSub) {
+        const today = todayKeyPT();
+        sendPush(inviterSub, {
+          title: "Your Nearune partner joined!",
+          body: name + " just joined Nearune — today's question is ready for you both.",
+          badge: unansweredCount(state, today),
+          tag: "partner-joined",
+        }).then((res) => {
+          if (res.gone) {
+            saveState(roomId, (s) => {
+              if (s.pushSubs) delete s.pushSubs[inviter];
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
       return json({ who, ...forClient(state) });
     }
 

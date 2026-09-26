@@ -160,6 +160,28 @@ Bun.serve({
       return json({ ok: true });
     }
 
+    // Temporary debug endpoint — dumps what kind of push subscription (old
+    // web-push vs. real APNs device token) is currently stored for a room,
+    // without touching anything or going through the once-a-day cron guard.
+    // Safe to remove once push notifications are confirmed working.
+    if (req.method === "GET" && url.pathname === "/api/debug/push-subs") {
+      const secret = Bun.env.CRON_SECRET;
+      const given = req.headers.get("x-cron-secret") || "";
+      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const roomId = url.searchParams.get("room") || "";
+      const state = await loadState(roomId);
+      const subs = state.pushSubs || {};
+      const out: any = {};
+      for (const who of Object.keys(subs)) {
+        const sub = (subs as any)[who];
+        out[who] = {
+          kind: sub.kind || "web",
+          idTail: (sub.token || sub.endpoint || "").slice(-24),
+        };
+      }
+      return json({ roomId, subs: out });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
       const secret = Bun.env.CRON_SECRET;
       const given = req.headers.get("x-cron-secret") || "";

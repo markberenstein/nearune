@@ -22,6 +22,15 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- Answers TestFlight/App Store's export-compliance question automatically
+	     for every future build, instead of each new build getting stuck in
+	     "Missing Compliance" until someone answers it by hand in App Store
+	     Connect. Nearune only uses standard HTTPS/TLS (via fetch() and the
+	     OS's own networking) — no custom or non-exempt encryption — so
+	     "false" here is accurate and is the standard answer for apps in
+	     this situation. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

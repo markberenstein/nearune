@@ -9,35 +9,35 @@ const RAW = String.raw`<!doctype html>
 <meta name="description" content="A private daily-question ritual for two people who live apart — one shared question a day, and a photo puzzle that slowly reveals itself as you keep your streak going.">
 <link rel="icon" type="image/png" href="/favicon.png?v=__ICON_V__">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=__ICON_V__">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
   :root {
     color-scheme: light;
-    --bg: #FAF6EE;
+    --bg: #FBF3EC;
     --surface: #FFFFFF;
-    --surface-2: #F1E9D8;
-    --ink: #2A2333;
-    --ink-soft: #786C82;
-    --line: #E8DFCB;
-    --accent: #C6912E;
-    --accent-ink: #4A4368;
-    --accent-2: #8C6FA8;
+    --surface-2: #F3E4D6;
+    --ink: #2B211B;
+    --ink-soft: #8B7A6C;
+    --line: #E8D9C8;
+    --accent: #C1673B;
+    --accent-ink: #8A4A2B;
+    --accent-2: #B98A52;
     --good: #7C8F63;
-    --shadow: rgba(43,35,51,.10);
+    --shadow: rgba(43,33,25,.10);
     --radius: 18px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --bg: #161320;
-      --surface: #201B2E;
-      --surface-2: #2A2440;
-      --ink: #F4EFE7;
-      --ink-soft: #B6AAC4;
-      --line: #352F49;
-      --accent: #E7BA5E;
-      --accent-ink: #B3A6DD;
-      --accent-2: #C79FE0;
+      --bg: #14171F;
+      --surface: #1D2130;
+      --surface-2: #2B3040;
+      --ink: #F2EFE9;
+      --ink-soft: #A9AAB8;
+      --line: #2B3040;
+      --accent: #E8B75A;
+      --accent-ink: #E8B75A;
+      --accent-2: #9576BE;
       --good: #9FB77E;
       --shadow: rgba(0,0,0,.45);
     }
@@ -47,7 +47,7 @@ const RAW = String.raw`<!doctype html>
   body {
     background: var(--bg);
     color: var(--ink);
-    font-family: 'Karla', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     padding: 28px 16px 48px;
     display: flex;
     justify-content: center;
@@ -56,10 +56,10 @@ const RAW = String.raw`<!doctype html>
 
   .wordmark {
     display: flex; align-items: center; justify-content: center; gap: 10px;
-    font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 600;
-    font-size: 1.4rem; letter-spacing: 0.01em; color: var(--accent-ink);
+    font-family: 'Manrope', sans-serif; font-weight: 800;
+    font-size: 1.7rem; letter-spacing: 0.01em; color: var(--accent);
   }
-  .wordmark svg { width: 34px; height: 34px; flex: none; }
+  .wordmark svg { width: 42px; height: 42px; flex: none; }
 
   .clocks {
     display: flex; align-items: center; justify-content: center; gap: 14px;
@@ -84,7 +84,7 @@ const RAW = String.raw`<!doctype html>
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 24px; box-shadow: 0 2px 10px var(--shadow); }
   .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-  .question { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 500; font-size: 1.5rem; line-height: 1.35; text-wrap: balance; margin: 0 0 22px; }
+  .question { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.5rem; line-height: 1.3; text-wrap: balance; margin: 0 0 22px; }
 
   .answer-form { display: flex; flex-direction: column; gap: 10px; }
   textarea {
@@ -94,7 +94,7 @@ const RAW = String.raw`<!doctype html>
   }
   textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .send-btn {
-    align-self: flex-end; background: var(--accent); color: #241C0A; border: none;
+    align-self: flex-end; background: var(--accent); color: #FFF8F1; border: none;
     border-radius: 999px; padding: 10px 22px; font: inherit; font-weight: 700; font-size: 0.9rem; cursor: pointer;
   }
   .send-btn:hover { filter: brightness(1.05); }
@@ -118,7 +118,7 @@ const RAW = String.raw`<!doctype html>
   .edit-form textarea { min-height: 64px; }
   .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
   .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
-  .mini-btn.primary { background: var(--accent); color: #241C0A; }
+  .mini-btn.primary { background: var(--accent); color: #FFF8F1; }
   .mini-btn.ghost { background: var(--surface-2); color: var(--ink); }
   .own-answer-visible { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 2px; }
 
@@ -141,7 +141,7 @@ const RAW = String.raw`<!doctype html>
 
   .puzzle-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; gap: 14px; }
   .puzzle-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .puzzle-title { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 600; font-size: 1.1rem; margin: 0; }
+  .puzzle-title { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.1rem; margin: 0; }
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
   .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); }
@@ -149,7 +149,7 @@ const RAW = String.raw`<!doctype html>
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .puzzle-cell.locked svg { width: 16px; height: 16px; opacity: 0.28; }
   .puzzle-empty { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; padding: 20px 10px; color: var(--ink-soft); font-size: 0.88rem; }
-  .puzzle-upload-btn { background: var(--accent); color: #241C0A; border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+  .puzzle-upload-btn { background: var(--accent); color: #FFF8F1; border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .puzzle-upload-btn:disabled { opacity: 0.6; cursor: default; }
   .puzzle-replace { text-align: center; }
   .puzzle-replace-btn { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.76rem; text-decoration: underline; cursor: pointer; padding: 4px; }
@@ -178,9 +178,9 @@ const RAW = String.raw`<!doctype html>
 
   .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
   .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .tab-btn.active { background: var(--accent); color: #241C0A; }
+  .tab-btn.active { background: var(--accent); color: #FFF8F1; }
   .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.68rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
-  .tab-btn.active .tab-badge { background: #241C0A; color: var(--accent); }
+  .tab-btn.active .tab-badge { background: #FFF8F1; color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
   .journal-toggle { background: none; border: none; color: var(--accent-ink); font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; padding: 6px 2px; text-align: left; display: flex; align-items: center; gap: 6px; }
@@ -189,14 +189,14 @@ const RAW = String.raw`<!doctype html>
   .journal { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
   .journal-entry { border-left: 2px solid var(--line); padding-left: 14px; }
   .journal-date { font-size: 0.72rem; color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 4px; }
-  .journal-q { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: 0.95rem; margin: 0 0 8px; }
+  .journal-q { font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 0.95rem; margin: 0 0 8px; }
   .journal-a { font-size: 0.85rem; margin-bottom: 4px; }
   .journal-a b { font-weight: 700; }
   .journal-empty { color: var(--ink-soft); font-size: 0.88rem; }
 
   .picker-overlay { position: fixed; inset: 0; background: rgba(20,16,28,0.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
   .picker-card { background: var(--surface); border-radius: var(--radius); padding: 30px 26px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 8px 30px var(--shadow); }
-  .picker-card h2 { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 600; font-size: 1.3rem; margin: 0 0 6px; }
+  .picker-card h2 { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.3rem; margin: 0 0 6px; }
   .picker-card p { color: var(--ink-soft); font-size: 0.88rem; margin: 0 0 20px; }
   .picker-choices { display: flex; flex-direction: column; gap: 10px; }
   .picker-btn { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 12px; padding: 12px 16px; font: inherit; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
@@ -271,7 +271,8 @@ const RAW = String.raw`<!doctype html>
     ["Telugu", "te"], ["Urdu", "ur"], ["Dutch", "nl"], ["Polish", "pl"], ["Turkish", "tr"],
     ["Vietnamese", "vi"], ["Thai", "th"], ["Indonesian", "id"], ["Tagalog (Filipino)", "tl"],
     ["Greek", "el"], ["Hebrew", "he"], ["Swedish", "sv"], ["Norwegian", "no"],
-    ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"]
+    ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"],
+    ["Gibberish", "gib"]
   ];
   var LANG_NAME_TO_CODE = (function () {
     var m = {};
@@ -2021,18 +2022,18 @@ export function buildNewRoomPage(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Start Nearune</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#161320; --surface:#201B2E; --ink:#F4EFE7; --ink-soft:#B6AAC4; --line:#352F49; --accent:#E7BA5E; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; }
   }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Karla',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
   .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 26px; max-width:420px; width:100%; text-align:center; }
-  h1 { font-family:'Fraunces',Georgia,serif; font-style:italic; font-weight:600; font-size:1.6rem; margin:0 0 10px; }
+  h1 { font-family:'Manrope',sans-serif; font-weight:800; font-size:1.6rem; margin:0 0 10px; }
   p { color:var(--ink-soft); font-size:0.95rem; line-height:1.5; margin:0 0 24px; }
-  button { background:var(--accent); color:#241C0A; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
+  button { background:var(--accent); color:#FFF8F1; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
   button:disabled { opacity:0.6; }
   .note { margin-top:16px; font-size:0.8rem; }
 </style>
@@ -2082,19 +2083,19 @@ export function buildRecoverPage(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Recover your Nearune link</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#161320; --surface:#201B2E; --ink:#F4EFE7; --ink-soft:#B6AAC4; --line:#352F49; --accent:#E7BA5E; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; }
   }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Karla',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
   .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 26px; max-width:420px; width:100%; text-align:center; }
-  h1 { font-family:'Fraunces',Georgia,serif; font-style:italic; font-weight:600; font-size:1.6rem; margin:0 0 10px; }
+  h1 { font-family:'Manrope',sans-serif; font-weight:800; font-size:1.6rem; margin:0 0 10px; }
   p { color:var(--ink-soft); font-size:0.95rem; line-height:1.5; margin:0 0 20px; }
   input { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); font:inherit; font-size:0.95rem; margin-bottom:14px; }
-  button { background:var(--accent); color:#241C0A; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
+  button { background:var(--accent); color:#FFF8F1; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
   button:disabled { opacity:0.6; }
   .note { margin-top:16px; font-size:0.8rem; }
 </style>
@@ -2137,18 +2138,18 @@ function legalPageShell(title, bodyHtml) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} — Nearune</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Karla:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FAF6EE; --surface:#FFFFFF; --ink:#2A2333; --ink-soft:#786C82; --line:#E8DFCB; --accent:#C6912E; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#161320; --surface:#201B2E; --ink:#F4EFE7; --ink-soft:#B6AAC4; --line:#352F49; --accent:#E7BA5E; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; }
   }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Karla',sans-serif; display:flex; justify-content:center; padding:50px 16px 80px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:50px 16px 80px; }
   .wrap { max-width:640px; width:100%; }
   .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:36px 30px; }
-  h1 { font-family:'Fraunces',Georgia,serif; font-style:italic; font-weight:600; font-size:1.7rem; margin:0 0 4px; }
-  h2 { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:1.1rem; margin:28px 0 8px; }
+  h1 { font-family:'Manrope',sans-serif; font-weight:800; font-size:1.7rem; margin:0 0 4px; }
+  h2 { font-family:'Manrope',sans-serif; font-weight:700; font-size:1.1rem; margin:28px 0 8px; }
   p, li { color:var(--ink-soft); font-size:0.95rem; line-height:1.6; }
   .updated { color:var(--ink-soft); font-size:0.8rem; margin:0 0 28px; }
   a { color:var(--accent); }

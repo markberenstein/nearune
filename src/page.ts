@@ -146,7 +146,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
   .puzzle-grid-wrap { position: relative; border-radius: 14px; overflow: hidden; touch-action: none; }
   .puzzle-zoom-overlay { position: fixed; inset: 0; background: #14100C; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; }
-  .puzzle-zoom-overlay .puzzle-grid-wrap { width: min(100vw, 100vh); aspect-ratio: 1; border-radius: 0; box-shadow: none; }
+  .puzzle-zoom-overlay .puzzle-grid-wrap { width: 100vw; height: 100vh; border-radius: 0; box-shadow: none; }
+  .puzzle-zoom-overlay .puzzle-grid { width: 100vmax; height: 100vmax; }
   .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); will-change: transform; }
   .puzzle-cell { background-repeat: no-repeat; background-size: 500% 500%; }
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }

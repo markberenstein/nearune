@@ -145,8 +145,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
   .puzzle-grid-wrap { position: relative; border-radius: 14px; overflow: hidden; touch-action: none; }
-  .puzzle-zoom-overlay { position: fixed; inset: 0; background: rgba(20,14,10,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
-  .puzzle-zoom-overlay .puzzle-grid-wrap { width: min(92vw, 92vh); aspect-ratio: 1; border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,0.5); }
+  .puzzle-zoom-overlay { position: fixed; inset: 0; background: #14100C; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; }
+  .puzzle-zoom-overlay .puzzle-grid-wrap { width: min(100vw, 100vh); aspect-ratio: 1; border-radius: 0; box-shadow: none; }
   .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); will-change: transform; }
   .puzzle-cell { background-repeat: no-repeat; background-size: 500% 500%; }
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }

@@ -175,6 +175,10 @@ Bun.serve({
       if (!rateLimit("push-trace-ip:" + clientIp(req, server), 60, HOUR)) {
         return json({ error: "rate_limited" }, { status: 429 });
       }
+      // Also print to the deploy log, so the trail can be read straight from
+      // Railway's logs without needing curl + CRON_SECRET at all. Safe to
+      // remove alongside the rest of this diagnostic code.
+      console.log("[push-trace] room=" + roomId + " who=" + who + " stage=" + stage + " detail=" + detail);
       await saveState(roomId, (s) => {
         if (!s.pushDebugTrace) s.pushDebugTrace = {};
         const list = s.pushDebugTrace[who] || [];

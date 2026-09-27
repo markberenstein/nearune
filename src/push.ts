@@ -21,9 +21,7 @@ if (pushConfigured) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
 
-// APNs auth-key (.p8) credentials for the native app. A Codemagic
-// `distribution_type: app_store` build is always signed for the production
-// APNs environment, never sandbox, so the host below is fixed.
+// APNs auth-key (.p8) credentials for the native app.
 const APNS_KEY_ID = Bun.env.APNS_KEY_ID || "";
 const APNS_TEAM_ID = Bun.env.APNS_TEAM_ID || "";
 // Stored as one line in Railway, so real newlines come back as literal
@@ -31,7 +29,14 @@ const APNS_TEAM_ID = Bun.env.APNS_TEAM_ID || "";
 // JWT signer, which needs real PEM formatting.
 const APNS_PRIVATE_KEY = (Bun.env.APNS_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 const APNS_BUNDLE_ID = Bun.env.APNS_BUNDLE_ID || "com.nearune.app";
-const APNS_ORIGIN = "https://api.push.apple.com";
+// Every device token is tied to whichever APNs environment signed the app
+// that registered it — a development-signed build (run straight from
+// Xcode) gets a sandbox token; an App Store/TestFlight build gets a
+// production one. There's no way to tell which from the token itself, so
+// sendApnsPush tries production first and falls back to sandbox on a
+// same "wrong bearer for this token" error.
+const APNS_HOST_PRODUCTION = "https://api.push.apple.com";
+const APNS_HOST_SANDBOX = "https://api.sandbox.push.apple.com";
 
 export const apnsConfigured = !!(APNS_KEY_ID && APNS_TEAM_ID && APNS_PRIVATE_KEY);
 // True if either delivery path is set up — the two call sites in
@@ -77,24 +82,24 @@ async function sendWebPush(sub: any, payload: PushPayload): Promise<{ ok: boolea
 // talks HTTP/2 directly via Node's http2 module instead of fetch(). A fresh
 // client connection per push is simplest and fine at this volume; if push
 // volume ever grows, this could keep one persistent session open instead.
-function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
-  if (!apnsConfigured) {
-    console.log("[apns] not configured — keyId=" + !!APNS_KEY_ID + " teamId=" + !!APNS_TEAM_ID + " privateKey=" + !!APNS_PRIVATE_KEY);
-    return Promise.resolve({ ok: false, gone: false });
-  }
+function sendApnsPushToHost(
+  host: string,
+  deviceToken: string,
+  payload: PushPayload
+): Promise<{ ok: boolean; gone: boolean; wrongEnvironment: boolean }> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (result: { ok: boolean; gone: boolean }) => {
+    const finish = (result: { ok: boolean; gone: boolean; wrongEnvironment: boolean }) => {
       if (settled) return;
       settled = true;
       try { client.close(); } catch (e) {}
       resolve(result);
     };
 
-    const client = http2.connect(APNS_ORIGIN);
+    const client = http2.connect(host);
     client.on("error", (err) => {
-      console.log("[apns] http2 connect error — " + err.message);
-      finish({ ok: false, gone: false });
+      console.log("[apns] http2 connect error (" + host + ") — " + err.message);
+      finish({ ok: false, gone: false, wrongEnvironment: false });
     });
 
     const req = client.request({
@@ -119,21 +124,24 @@ function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: 
     });
     req.on("end", () => {
       if (status >= 200 && status < 300) {
-        console.log("[apns] sent ok, status=" + status);
-        finish({ ok: true, gone: false });
+        console.log("[apns] sent ok via " + host + ", status=" + status);
+        finish({ ok: true, gone: false, wrongEnvironment: false });
         return;
       }
       // A stale/uninstalled-app token comes back as 400 BadDeviceToken or
-      // 410 Unregistered — either way, stop retrying it.
+      // 410 Unregistered — either way, stop retrying it. A token minted by
+      // the other APNs environment comes back as 403 BadEnvironmentKeyInToken
+      // — worth one retry against the other host, not a dead token.
       let reason = "";
       try { reason = JSON.parse(body).reason || ""; } catch (e) {}
-      console.log("[apns] rejected — status=" + status + " reason=" + reason + " body=" + body + " topic=" + APNS_BUNDLE_ID + " tokenTail=" + deviceToken.slice(-12));
+      console.log("[apns] rejected via " + host + " — status=" + status + " reason=" + reason + " body=" + body + " topic=" + APNS_BUNDLE_ID + " tokenTail=" + deviceToken.slice(-12));
       const gone = status === 410 || reason === "BadDeviceToken" || reason === "Unregistered";
-      finish({ ok: false, gone });
+      const wrongEnvironment = reason === "BadEnvironmentKeyInToken";
+      finish({ ok: false, gone, wrongEnvironment });
     });
     req.on("error", (err) => {
-      console.log("[apns] http2 request error — " + err.message);
-      finish({ ok: false, gone: false });
+      console.log("[apns] http2 request error (" + host + ") — " + err.message);
+      finish({ ok: false, gone: false, wrongEnvironment: false });
     });
 
     req.end(
@@ -146,6 +154,19 @@ function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: 
       })
     );
   });
+}
+
+async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
+  if (!apnsConfigured) {
+    console.log("[apns] not configured — keyId=" + !!APNS_KEY_ID + " teamId=" + !!APNS_TEAM_ID + " privateKey=" + !!APNS_PRIVATE_KEY);
+    return { ok: false, gone: false };
+  }
+  const first = await sendApnsPushToHost(APNS_HOST_PRODUCTION, deviceToken, payload);
+  if (first.ok || !first.wrongEnvironment) return { ok: first.ok, gone: first.gone };
+  // Production rejected it as a sandbox token — this device's build is
+  // development-signed, so retry against the sandbox host.
+  const second = await sendApnsPushToHost(APNS_HOST_SANDBOX, deviceToken, payload);
+  return { ok: second.ok, gone: second.gone };
 }
 
 // Sends one push. Returns { ok, gone } — gone=true means the subscription is

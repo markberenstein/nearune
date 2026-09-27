@@ -159,7 +159,9 @@ const RAW = String.raw`<!doctype html>
     position: fixed; inset: 0; background: rgba(20,14,10,0.92); z-index: 1000;
     display: flex; align-items: center; justify-content: center; padding: 28px;
   }
-  .puzzle-lightbox .puzzle-grid { width: min(92vw, 520px); cursor: default; }
+  .puzzle-lightbox-stage { width: min(92vw, 520px); aspect-ratio: 1; overflow: hidden; touch-action: none; border-radius: 14px; }
+  .puzzle-lightbox-stage .puzzle-grid { width: 100%; height: 100%; cursor: default; transform-origin: 0 0; will-change: transform; border-radius: 0; }
+  .puzzle-lightbox-hint { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; color: rgba(255,248,241,0.7); font-size: 0.78rem; }
   .puzzle-lightbox-close {
     position: absolute; top: 18px; right: 18px; width: 40px; height: 40px; border-radius: 50%;
     background: rgba(255,255,255,0.14); border: none; color: #FFF8F1; font-size: 20px; line-height: 1;
@@ -854,6 +856,67 @@ const RAW = String.raw`<!doctype html>
   function openPuzzleLightbox(imgSrc) {
     var overlay = h("div", { class: "puzzle-lightbox" });
     var closeBtn = h("button", { class: "puzzle-lightbox-close", "aria-label": t("Close"), text: "✕" });
+    var stage = h("div", { class: "puzzle-lightbox-stage" });
+    var grid = puzzleGrid(imgSrc);
+    var hint = h("p", { class: "puzzle-lightbox-hint", text: t("Pinch or double-tap to zoom") });
+    stage.appendChild(grid);
+
+    var scale = 1, panX = 0, panY = 0;
+    var pinchStartDist = 0, pinchStartScale = 1;
+    var panStartX = 0, panStartY = 0, pointerStartX = 0, pointerStartY = 0;
+    var lastTapTime = 0;
+
+    function clampPan() {
+      var maxX = (stage.clientWidth * (scale - 1)) / 2;
+      var maxY = (stage.clientHeight * (scale - 1)) / 2;
+      panX = Math.min(Math.max(panX, -maxX), maxX);
+      panY = Math.min(Math.max(panY, -maxY), maxY);
+    }
+    function applyTransform() {
+      clampPan();
+      grid.style.transform = "translate(-50%,-50%) translate(" + panX + "px," + panY + "px) scale(" + scale + ")";
+      grid.style.position = "relative";
+      grid.style.left = "50%";
+      grid.style.top = "50%";
+    }
+    function clampScale(s) { return Math.min(Math.max(s, 1), 4); }
+    function dist(t1, t2) {
+      var dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    function resetView() { scale = 1; panX = 0; panY = 0; applyTransform(); }
+
+    stage.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        pinchStartDist = dist(e.touches[0], e.touches[1]);
+        pinchStartScale = scale;
+      } else if (e.touches.length === 1) {
+        pointerStartX = e.touches[0].clientX;
+        pointerStartY = e.touches[0].clientY;
+        panStartX = panX; panStartY = panY;
+        var now = Date.now();
+        if (now - lastTapTime < 300) {
+          scale = scale > 1 ? 1 : 2.5;
+          if (scale === 1) { panX = 0; panY = 0; }
+          applyTransform();
+        }
+        lastTapTime = now;
+      }
+    }, { passive: true });
+    stage.addEventListener("touchmove", function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var d = dist(e.touches[0], e.touches[1]);
+        scale = clampScale(pinchStartScale * (d / pinchStartDist));
+        applyTransform();
+      } else if (e.touches.length === 1 && scale > 1) {
+        e.preventDefault();
+        panX = panStartX + (e.touches[0].clientX - pointerStartX);
+        panY = panStartY + (e.touches[0].clientY - pointerStartY);
+        applyTransform();
+      }
+    }, { passive: false });
+
     function close() {
       overlay.removeEventListener("click", onOverlayClick);
       document.removeEventListener("keydown", onKeydown);
@@ -864,7 +927,8 @@ const RAW = String.raw`<!doctype html>
     closeBtn.addEventListener("click", close);
     overlay.addEventListener("click", onOverlayClick);
     document.addEventListener("keydown", onKeydown);
-    overlay.appendChild(puzzleGrid(imgSrc));
+    overlay.appendChild(stage);
+    overlay.appendChild(hint);
     overlay.appendChild(closeBtn);
     document.body.appendChild(overlay);
   }

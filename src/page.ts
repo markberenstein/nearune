@@ -895,7 +895,7 @@ const RAW = String.raw`<!doctype html>
       grid.style.left = "50%";
       grid.style.top = "50%";
     }
-    function clampScale(s) { return Math.min(Math.max(s, 1), 4); }
+    function clampScale(s) { return Math.min(Math.max(s, 1), 8); }
     function dist(t1, t2) {
       var dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
       return Math.sqrt(dx * dx + dy * dy);

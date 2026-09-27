@@ -880,8 +880,10 @@ const RAW = String.raw`<!doctype html>
       applyTransform();
     }
     function clampPan() {
-      var maxX = (wrap.clientWidth * (scale - 1)) / 2;
-      var maxY = (wrap.clientHeight * (scale - 1)) / 2;
+      var gw = grid.offsetWidth * scale;
+      var gh = grid.offsetHeight * scale;
+      var maxX = Math.max(0, (gw - wrap.clientWidth) / 2);
+      var maxY = Math.max(0, (gh - wrap.clientHeight) / 2);
       panX = Math.min(Math.max(panX, -maxX), maxX);
       panY = Math.min(Math.max(panY, -maxY), maxY);
     }

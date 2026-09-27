@@ -59,14 +59,24 @@ function apnsProviderToken(): string {
 }
 
 export type PushPayload = {
-  title: string;
-  body: string;
+  // Omitted (or silent: true) for a badge-only sync — see `silent` below.
+  title?: string;
+  body?: string;
   badge: number; // 0 clears the badge
   tag?: string; // collapses repeats of the same notification type
+  // A background push that only updates the badge — no visible alert or
+  // sound. Used to keep a native badge in sync (e.g. clear it to 0) for
+  // someone who already answered today, where a "your turn" banner would
+  // make no sense. Web push has no equivalent that stays invisible (the
+  // service worker's push handler always shows a notification), so
+  // sendWebPush treats a silent payload as a no-op — callers should only
+  // route silent pushes to APNs subscriptions in the first place.
+  silent?: boolean;
 };
 
 async function sendWebPush(sub: any, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
   if (!pushConfigured) return { ok: false, gone: false };
+  if (payload.silent) return { ok: true, gone: false };
   try {
     await webpush.sendNotification(sub, JSON.stringify(payload));
     return { ok: true, gone: false };
@@ -107,8 +117,11 @@ function sendApnsPushToHost(
       ":path": "/3/device/" + deviceToken,
       authorization: "bearer " + apnsProviderToken(),
       "apns-topic": APNS_BUNDLE_ID,
-      "apns-push-type": "alert",
-      "apns-priority": "10",
+      // A silent badge-sync push must go as a "background" push type — Apple
+      // requires apns-priority 5 (not 10) for those, and rejects the
+      // combination otherwise.
+      "apns-push-type": payload.silent ? "background" : "alert",
+      "apns-priority": payload.silent ? "5" : "10",
       ...(payload.tag ? { "apns-collapse-id": payload.tag.slice(0, 64) } : {}),
       "content-type": "application/json",
     });
@@ -147,11 +160,9 @@ function sendApnsPushToHost(
 
     req.end(
       JSON.stringify({
-        aps: {
-          alert: { title: payload.title, body: payload.body },
-          badge: payload.badge,
-          sound: "default",
-        },
+        aps: payload.silent
+          ? { "content-available": 1, badge: payload.badge }
+          : { alert: { title: payload.title, body: payload.body }, badge: payload.badge, sound: "default" },
       })
     );
   });

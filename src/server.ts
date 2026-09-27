@@ -279,6 +279,31 @@ Bun.serve({
               .catch(() => {});
           }
         }
+        // Also keep native badges in sync for anyone who has ALREADY
+        // answered today (including whoever just submitted this answer) —
+        // native has no client-side badge API (no navigator.setAppBadge in
+        // Capacitor's WebView), so a push is the only way to update it, even
+        // just to refresh it to the current shared count — e.g. clearing it
+        // to 0 once both people have answered. A silent push carries no
+        // alert or sound, so it's safe to send even though no one's "turn"
+        // actually changed. Web subscriptions already sync their own badge
+        // client-side, so this only targets APNs.
+        for (const person of ["mark", "nikita"] as PersonKey[]) {
+          const a = state.answers[date];
+          const answered = !!(a && a[person] && a[person]!.text);
+          if (!answered) continue;
+          const sub = state.pushSubs[person];
+          if (!sub || sub.kind !== "apns") continue;
+          sendPush(sub, { badge: count, tag: "badge-sync", silent: true })
+            .then((res) => {
+              if (res.gone) {
+                saveState(roomId, (s) => {
+                  if (s.pushSubs) delete s.pushSubs[person];
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
       }
       return json(forClient(state));
     }

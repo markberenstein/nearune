@@ -144,10 +144,27 @@ const RAW = String.raw`<!doctype html>
   .puzzle-title { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.1rem; margin: 0; }
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
-  .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); }
+  .puzzle-grid-wrap { position: relative; }
+  .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
   .puzzle-cell { background-repeat: no-repeat; background-size: 500% 500%; }
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .puzzle-cell.locked svg { width: 16px; height: 16px; opacity: 0.28; }
+  .puzzle-expand-btn {
+    position: absolute; bottom: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(43,33,25,0.55); border: none; color: #FFF8F1; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; backdrop-filter: blur(2px);
+  }
+  .puzzle-expand-btn svg { width: 16px; height: 16px; }
+  .puzzle-lightbox {
+    position: fixed; inset: 0; background: rgba(20,14,10,0.92); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 28px;
+  }
+  .puzzle-lightbox .puzzle-grid { width: min(92vw, 520px); cursor: default; }
+  .puzzle-lightbox-close {
+    position: absolute; top: 18px; right: 18px; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,0.14); border: none; color: #FFF8F1; font-size: 20px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
   .puzzle-empty { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; padding: 20px 10px; color: var(--ink-soft); font-size: 0.88rem; }
   .puzzle-upload-btn { background: var(--accent); color: #FFF8F1; border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .puzzle-upload-btn:disabled { opacity: 0.6; cursor: default; }
@@ -832,6 +849,37 @@ const RAW = String.raw`<!doctype html>
     return grid;
   }
 
+  var PUZZLE_EXPAND_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>';
+
+  function openPuzzleLightbox(imgSrc) {
+    var overlay = h("div", { class: "puzzle-lightbox" });
+    var closeBtn = h("button", { class: "puzzle-lightbox-close", "aria-label": t("Close"), text: "✕" });
+    function close() {
+      overlay.removeEventListener("click", onOverlayClick);
+      document.removeEventListener("keydown", onKeydown);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+    function onOverlayClick(e) { if (e.target === overlay) close(); }
+    function onKeydown(e) { if (e.key === "Escape") close(); }
+    closeBtn.addEventListener("click", close);
+    overlay.addEventListener("click", onOverlayClick);
+    document.addEventListener("keydown", onKeydown);
+    overlay.appendChild(puzzleGrid(imgSrc));
+    overlay.appendChild(closeBtn);
+    document.body.appendChild(overlay);
+  }
+
+  function puzzleGridWithExpand(imgSrc) {
+    var wrap = h("div", { class: "puzzle-grid-wrap" });
+    var grid = puzzleGrid(imgSrc);
+    grid.addEventListener("click", function () { openPuzzleLightbox(imgSrc); });
+    var expandBtn = h("button", { class: "puzzle-expand-btn", "aria-label": t("Expand puzzle"), html: PUZZLE_EXPAND_SVG });
+    expandBtn.addEventListener("click", function (e) { e.stopPropagation(); openPuzzleLightbox(imgSrc); });
+    wrap.appendChild(grid);
+    wrap.appendChild(expandBtn);
+    return wrap;
+  }
+
   var puzzleGuessDraft = "";
   var puzzleBatchItems = []; // { file, answer }
 
@@ -1023,7 +1071,7 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
       }
     } else {
-      card.appendChild(puzzleGrid(puzzleImgSrc()));
+      card.appendChild(puzzleGridWithExpand(puzzleImgSrc()));
       if (state.puzzleSolved) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {

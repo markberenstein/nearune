@@ -256,6 +256,7 @@ Bun.serve({
       // background rather than blocking this request.
       if (anyPushConfigured && state.pushSubs) {
         const count = unansweredCount(state, date);
+        console.log("[answer] who=" + who + " date=" + date + " count=" + count + " subs=" + JSON.stringify(Object.keys(state.pushSubs)));
         if (count > 0) {
           const answererName = state.people?.[who]?.name || "Your partner";
           for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
@@ -292,6 +293,7 @@ Bun.serve({
         if (count === 0) {
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
+            console.log("[day-complete] " + person + " sub=" + (sub ? sub.kind || "web" : "none"));
             if (!sub || sub.kind !== "apns") continue;
             sendPush(sub, {
               title: "You're all caught up",
@@ -300,13 +302,14 @@ Bun.serve({
               tag: "day-complete",
             })
               .then((res) => {
+                console.log("[day-complete] " + person + " result=" + JSON.stringify(res));
                 if (res.gone) {
                   saveState(roomId, (s) => {
                     if (s.pushSubs) delete s.pushSubs[person];
                   }).catch(() => {});
                 }
               })
-              .catch(() => {});
+              .catch((err) => console.log("[day-complete] " + person + " threw " + (err && err.message)));
           }
         }
       }

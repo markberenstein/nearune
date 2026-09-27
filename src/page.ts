@@ -1667,21 +1667,6 @@ const RAW = String.raw`<!doctype html>
     return n;
   }
 
-  // Temporary diagnostic trail for the native push-registration hang —
-  // fires a tiny, fire-and-forget POST at each checkpoint in enablePush()
-  // so we can see exactly how far a given attempt got by checking the
-  // server, without needing Xcode or unredacted Console.app logs. Safe to
-  // remove once push notifications are confirmed working.
-  function debugPing(stage, detail) {
-    try {
-      fetch(RP + "/api/debug/push-trace", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ who: viewerKey, stage: stage, detail: detail || "" })
-      }).catch(function () {});
-    } catch (e) {}
-  }
-
   // Fetches the VAPID key and registers the service worker ahead of time
   // (neither needs a user gesture), so enablePush() below has as little as
   // possible to do between the tap and the permission-gated subscribe call.
@@ -1704,28 +1689,23 @@ const RAW = String.raw`<!doctype html>
     if (!pushSupported() || !viewerKey) return;
     pushState = "busy"; pushError = ""; renderApp();
     if (isNativeApp()) {
-      debugPing("start");
       try {
         var PN = window.Capacitor.Plugins.PushNotifications;
         var perm = await PN.requestPermissions();
         if (perm.receive !== "granted") {
-          debugPing("permission_denied", perm.receive);
           pushState = "off";
           pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
           renderApp(); return;
         }
-        debugPing("permission_granted");
         await new Promise(function (resolve, reject) {
           var settled = false;
           var timeoutId = setTimeout(function () {
             if (settled) return; settled = true;
-            debugPing("timeout");
             reject(new Error("Timed out waiting for Apple to register this device for push (no response after 45s)."));
           }, 45000);
           PN.addListener("registration", function (token) {
             if (settled) return; settled = true;
             clearTimeout(timeoutId);
-            debugPing("registration_success");
             fetch(RP + "/api/push-subscribe", {
               method: "POST",
               headers: { "content-type": "application/json" },
@@ -1735,18 +1715,14 @@ const RAW = String.raw`<!doctype html>
           PN.addListener("registrationError", function (err) {
             if (settled) return; settled = true;
             clearTimeout(timeoutId);
-            debugPing("registration_error", (err && err.message) || String(err));
             reject(err);
           });
-          debugPing("register_calling");
           PN.register();
-          debugPing("register_called");
         });
         pushState = "on";
         try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
         syncAppBadge();
       } catch (e) {
-        debugPing("catch_error", (e && e.message) || String(e));
         pushState = "off";
         pushError = t("Couldn't enable reminders") + ": " + ((e && e.message) || String(e));
       }

@@ -62,10 +62,6 @@ export type State = {
   // double-sends if it fires more than once for the same day.
   pushSubs?: Partial<Record<PersonKey, PushSubscriptionRecord>>;
   pushLastMorningKey?: string;
-  // Temporary diagnostic trail for the native push-registration hang — the
-  // last few checkpoints enablePush() on the client reported reaching, per
-  // person. Safe to remove once push notifications are confirmed working.
-  pushDebugTrace?: Partial<Record<PersonKey, { stage: string; detail: string; at: string }[]>>;
 };
 
 export function isPerson(v: unknown): v is PersonKey {

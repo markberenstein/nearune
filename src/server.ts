@@ -160,92 +160,6 @@ Bun.serve({
       return json({ ok: true });
     }
 
-    // Temporary diagnostic endpoint — the client pings this at each
-    // checkpoint of enablePush() (permission granted, register() called,
-    // registration success/error, 45s timeout) so we can see exactly how
-    // far a given attempt got without needing Xcode or Console.app. Keeps
-    // only the last 20 entries per person. Safe to remove once push
-    // notifications are confirmed working.
-    if (req.method === "POST" && restPath === "/api/debug/push-trace") {
-      const body = await readJson(req);
-      const who = body && body.who;
-      const stage = typeof body?.stage === "string" ? body.stage.slice(0, 60) : "";
-      const detail = typeof body?.detail === "string" ? body.detail.slice(0, 200) : "";
-      if (!isPerson(who) || !stage) return json({ error: "invalid" }, { status: 400 });
-      if (!rateLimit("push-trace-ip:" + clientIp(req, server), 60, HOUR)) {
-        return json({ error: "rate_limited" }, { status: 429 });
-      }
-      // Also print to the deploy log, so the trail can be read straight from
-      // Railway's logs without needing curl + CRON_SECRET at all. Safe to
-      // remove alongside the rest of this diagnostic code.
-      console.log("[push-trace] room=" + roomId + " who=" + who + " stage=" + stage + " detail=" + detail);
-      await saveState(roomId, (s) => {
-        if (!s.pushDebugTrace) s.pushDebugTrace = {};
-        const list = s.pushDebugTrace[who] || [];
-        list.push({ stage, detail, at: new Date().toISOString() });
-        s.pushDebugTrace[who] = list.slice(-20);
-      });
-      return json({ ok: true });
-    }
-
-    // Temporary debug endpoint — fires one real push at whoever's push
-    // subscription is on file for this room, right now, so a fresh
-    // registration can be confirmed without waiting for tomorrow's cron or
-    // for the other person to answer. No secret needed: worst case someone
-    // with the room link pushes themselves a harmless test notification.
-    // Safe to remove once push notifications are confirmed working.
-    if (req.method === "POST" && restPath === "/api/debug/test-push") {
-      const body = await readJson(req);
-      const who = body && body.who;
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const state = await loadState(roomId);
-      const sub = state.pushSubs && state.pushSubs[who];
-      if (!sub) return json({ error: "no_subscription" }, { status: 404 });
-      const today = todayKeyPT();
-      const res = await sendPush(sub, {
-        title: "Test push from Nearune",
-        body: "If you can see this, push is working.",
-        badge: unansweredCount(state, today) || 1,
-        tag: "debug-test",
-      });
-      return json({ sent: res.ok, gone: res.gone });
-    }
-
-    // Temporary debug endpoint — dumps what kind of push subscription (old
-    // web-push vs. real APNs device token) is currently stored for a room,
-    // without touching anything or going through the once-a-day cron guard.
-    // Safe to remove once push notifications are confirmed working.
-    if (req.method === "GET" && url.pathname === "/api/debug/push-subs") {
-      const secret = Bun.env.CRON_SECRET;
-      const given = req.headers.get("x-cron-secret") || "";
-      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
-      const roomId = url.searchParams.get("room") || "";
-      const state = await loadState(roomId);
-      const subs = state.pushSubs || {};
-      const out: any = {};
-      for (const who of Object.keys(subs)) {
-        const sub = (subs as any)[who];
-        out[who] = {
-          kind: sub.kind || "web",
-          idTail: (sub.token || sub.endpoint || "").slice(-24),
-        };
-      }
-      return json({ roomId, subs: out });
-    }
-
-    // Temporary debug endpoint — reads back the checkpoint trail written by
-    // POST /api/debug/push-trace, so a given "Enable reminders" attempt can
-    // be checked from a curl instead of Console.app. Safe to remove once
-    // push notifications are confirmed working.
-    if (req.method === "GET" && url.pathname === "/api/debug/push-trace") {
-      const secret = Bun.env.CRON_SECRET;
-      const given = req.headers.get("x-cron-secret") || "";
-      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
-      const roomId = url.searchParams.get("room") || "";
-      const state = await loadState(roomId);
-      return json({ roomId, trace: state.pushDebugTrace || {} });
-    }
-
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
       const secret = Bun.env.CRON_SECRET;
       const given = req.headers.get("x-cron-secret") || "";
@@ -266,14 +180,6 @@ Bun.serve({
               const answered = !!(a && a[who] && a[who]!.text);
               const sub = state.pushSubs[who];
               if (answered || !sub) continue;
-              // Temporary debug line — helps tell an old, no-longer-live web
-              // push subscription apart from a real APNs device token when
-              // troubleshooting why a "successful" send doesn't arrive.
-              // Safe to remove once push notifications are confirmed working.
-              console.log(
-                "[cron-push] room " + id + " who=" + who + " kind=" + (sub.kind || "web") +
-                " id=" + ((sub as any).token || (sub as any).endpoint || "").slice(-24)
-              );
               const res = await sendPush(sub, {
                 title: "Today's question is up",
                 body: "Your Nearune question for today is ready.",

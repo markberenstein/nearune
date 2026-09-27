@@ -98,7 +98,7 @@ function sendApnsPushToHost(
 
     const client = http2.connect(host);
     client.on("error", (err) => {
-      console.log("[apns] http2 connect error (" + host + ") — " + err.message);
+      console.error("[apns] connect error (" + host + ") — " + err.message);
       finish({ ok: false, gone: false, wrongEnvironment: false });
     });
 
@@ -124,7 +124,6 @@ function sendApnsPushToHost(
     });
     req.on("end", () => {
       if (status >= 200 && status < 300) {
-        console.log("[apns] sent ok via " + host + ", status=" + status);
         finish({ ok: true, gone: false, wrongEnvironment: false });
         return;
       }
@@ -134,13 +133,15 @@ function sendApnsPushToHost(
       // — worth one retry against the other host, not a dead token.
       let reason = "";
       try { reason = JSON.parse(body).reason || ""; } catch (e) {}
-      console.log("[apns] rejected via " + host + " — status=" + status + " reason=" + reason + " body=" + body + " topic=" + APNS_BUNDLE_ID + " tokenTail=" + deviceToken.slice(-12));
+      if (reason !== "BadEnvironmentKeyInToken") {
+        console.error("[apns] rejected via " + host + " — status=" + status + " reason=" + reason);
+      }
       const gone = status === 410 || reason === "BadDeviceToken" || reason === "Unregistered";
       const wrongEnvironment = reason === "BadEnvironmentKeyInToken";
       finish({ ok: false, gone, wrongEnvironment });
     });
     req.on("error", (err) => {
-      console.log("[apns] http2 request error (" + host + ") — " + err.message);
+      console.error("[apns] request error (" + host + ") — " + err.message);
       finish({ ok: false, gone: false, wrongEnvironment: false });
     });
 
@@ -157,10 +158,7 @@ function sendApnsPushToHost(
 }
 
 async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
-  if (!apnsConfigured) {
-    console.log("[apns] not configured — keyId=" + !!APNS_KEY_ID + " teamId=" + !!APNS_TEAM_ID + " privateKey=" + !!APNS_PRIVATE_KEY);
-    return { ok: false, gone: false };
-  }
+  if (!apnsConfigured) return { ok: false, gone: false };
   const first = await sendApnsPushToHost(APNS_HOST_PRODUCTION, deviceToken, payload);
   if (first.ok || !first.wrongEnvironment) return { ok: first.ok, gone: first.gone };
   // Production rejected it as a sandbox token — this device's build is

@@ -1,5 +1,34 @@
 // Nearune — translation providers. Google first, MyMemory as fallback.
 
+// "Gibberish" is a just-for-fun language option (code "gib") with no real
+// translation service behind it, so it's handled entirely locally: each
+// word is deterministically remapped to invented syllables (same word
+// always renders the same way, so it reads as a consistent language rather
+// than random noise), while punctuation, spacing and numbers pass through
+// untouched so sentence shape stays readable.
+const GIBBERISH_SYLLABLES = [
+  "zo", "ra", "fen", "glim", "tik", "mor", "blu", "nex", "quo", "vash",
+  "dree", "plor", "snig", "wob", "yth", "zeel", "ur", "ith", "aka", "emo",
+];
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+function gibberishWord(word: string): string {
+  let h = hashStr(word.toLowerCase());
+  const syllableCount = Math.max(1, Math.min(4, Math.ceil(word.length / 3)));
+  let out = "";
+  for (let i = 0; i < syllableCount; i++) {
+    out += GIBBERISH_SYLLABLES[h % GIBBERISH_SYLLABLES.length];
+    h = Math.floor(h / 7) + i * 13;
+  }
+  return /^[A-Z]/.test(word) ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+}
+export function translateToGibberish(text: string): string {
+  return text.replace(/[A-Za-z]+/g, gibberishWord);
+}
+
 export async function translateViaGoogle(text: string, target: string): Promise<{ t: string | null; d: string }> {
   const gUrl =
     "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" +
@@ -73,6 +102,9 @@ export function scriptGuessSource(text: string, target: string, alt: string): st
 // effective target) when the intended translation truly failed — never
 // shows an untranslated "identity" result back as if it were a translation.
 export async function resolveTranslation(text: string, target: string, alt: string): Promise<{ translated: string; via: string; eff: string }> {
+  if (target === "gib" || alt === "gib") {
+    return { translated: translateToGibberish(text), via: "gibberish", eff: "gib" };
+  }
   let translated: string | null = null;
   let eff = target;
   let via = "none";

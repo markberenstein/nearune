@@ -145,9 +145,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
   .puzzle-grid-wrap { position: relative; border-radius: 14px; overflow: hidden; touch-action: none; }
-  .puzzle-grid-wrap.puzzle-zoomed { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(92vw, 92vh); aspect-ratio: 1; z-index: 1000; box-shadow: 0 24px 70px rgba(0,0,0,0.45); }
-  .puzzle-zoom-backdrop { position: fixed; inset: 0; background: rgba(20,14,10,0.82); z-index: 999; opacity: 0; pointer-events: none; transition: opacity .18s ease; }
-  .puzzle-zoom-backdrop.active { opacity: 1; pointer-events: auto; }
+  .puzzle-zoom-overlay { position: fixed; inset: 0; background: rgba(20,14,10,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+  .puzzle-zoom-overlay .puzzle-grid-wrap { width: min(92vw, 92vh); aspect-ratio: 1; border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,0.5); }
   .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); transform-origin: 0 0; will-change: transform; }
   .puzzle-cell { background-repeat: no-repeat; background-size: 500% 500%; }
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
@@ -845,24 +844,35 @@ const RAW = String.raw`<!doctype html>
     var pinchStartDist = 0, pinchStartScale = 1;
     var panStartX = 0, panStartY = 0, pointerStartX = 0, pointerStartY = 0;
     var lastTapTime = 0;
-    var backdrop = null;
+    var overlay = null, placeholder = null;
 
-    function ensureBackdrop() {
-      if (!backdrop) {
-        backdrop = h("div", { class: "puzzle-zoom-backdrop" });
-        backdrop.addEventListener("click", function () { resetZoom(); });
-        document.body.appendChild(backdrop);
+    function ensurePlaceholder() {
+      if (!placeholder && wrap.parentNode) {
+        placeholder = document.createComment("puzzle-zoom-placeholder");
+        wrap.parentNode.insertBefore(placeholder, wrap);
       }
-      return backdrop;
+    }
+    function activateZoom() {
+      ensurePlaceholder();
+      if (!overlay) {
+        overlay = h("div", { class: "puzzle-zoom-overlay" });
+        overlay.addEventListener("click", function (e) { if (e.target === overlay) resetZoom(); });
+      }
+      if (!overlay.parentNode) {
+        document.body.appendChild(overlay);
+        overlay.appendChild(wrap);
+      }
+    }
+    function deactivateZoom() {
+      if (overlay && overlay.parentNode) {
+        if (placeholder && placeholder.parentNode) {
+          placeholder.parentNode.insertBefore(wrap, placeholder);
+        }
+        overlay.parentNode.removeChild(overlay);
+      }
     }
     function updateZoomState() {
-      if (scale > 1) {
-        wrap.classList.add("puzzle-zoomed");
-        ensureBackdrop().classList.add("active");
-      } else {
-        wrap.classList.remove("puzzle-zoomed");
-        if (backdrop) backdrop.classList.remove("active");
-      }
+      if (scale > 1) activateZoom(); else deactivateZoom();
     }
     function resetZoom() {
       scale = 1; panX = 0; panY = 0;

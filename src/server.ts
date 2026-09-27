@@ -188,6 +188,29 @@ Bun.serve({
       return json({ ok: true });
     }
 
+    // Temporary debug endpoint — fires one real push at whoever's push
+    // subscription is on file for this room, right now, so a fresh
+    // registration can be confirmed without waiting for tomorrow's cron or
+    // for the other person to answer. No secret needed: worst case someone
+    // with the room link pushes themselves a harmless test notification.
+    // Safe to remove once push notifications are confirmed working.
+    if (req.method === "POST" && restPath === "/api/debug/test-push") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const state = await loadState(roomId);
+      const sub = state.pushSubs && state.pushSubs[who];
+      if (!sub) return json({ error: "no_subscription" }, { status: 404 });
+      const today = todayKeyPT();
+      const res = await sendPush(sub, {
+        title: "Test push from Nearune",
+        body: "If you can see this, push is working.",
+        badge: unansweredCount(state, today) || 1,
+        tag: "debug-test",
+      });
+      return json({ sent: res.ok, gone: res.gone });
+    }
+
     // Temporary debug endpoint — dumps what kind of push subscription (old
     // web-push vs. real APNs device token) is currently stored for a room,
     // without touching anything or going through the once-a-day cron guard.

@@ -271,8 +271,7 @@ const RAW = String.raw`<!doctype html>
     ["Telugu", "te"], ["Urdu", "ur"], ["Dutch", "nl"], ["Polish", "pl"], ["Turkish", "tr"],
     ["Vietnamese", "vi"], ["Thai", "th"], ["Indonesian", "id"], ["Tagalog (Filipino)", "tl"],
     ["Greek", "el"], ["Hebrew", "he"], ["Swedish", "sv"], ["Norwegian", "no"],
-    ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"],
-    ["Gibberish", "gib"]
+    ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"]
   ];
   var LANG_NAME_TO_CODE = (function () {
     var m = {};

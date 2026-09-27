@@ -72,7 +72,10 @@ async function sendWebPush(sub: any, payload: PushPayload): Promise<{ ok: boolea
 }
 
 async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
-  if (!apnsConfigured) return { ok: false, gone: false };
+  if (!apnsConfigured) {
+    console.log("[apns] not configured — keyId=" + !!APNS_KEY_ID + " teamId=" + !!APNS_TEAM_ID + " privateKey=" + !!APNS_PRIVATE_KEY);
+    return { ok: false, gone: false };
+  }
   try {
     const res = await fetch(APNS_HOST + "/3/device/" + deviceToken, {
       method: "POST",
@@ -92,14 +95,23 @@ async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<
         },
       }),
     });
-    if (res.ok) return { ok: true, gone: false };
+    if (res.ok) {
+      console.log("[apns] sent ok, status=" + res.status);
+      return { ok: true, gone: false };
+    }
     // A stale/uninstalled-app token comes back as 400 BadDeviceToken or 410
     // Unregistered — either way, stop retrying it.
     let reason = "";
-    try { reason = (await res.json()).reason || ""; } catch (e) {}
+    let rawBody = "";
+    try {
+      rawBody = await res.text();
+      reason = JSON.parse(rawBody).reason || "";
+    } catch (e) {}
+    console.log("[apns] rejected — status=" + res.status + " reason=" + reason + " body=" + rawBody + " topic=" + APNS_BUNDLE_ID + " tokenTail=" + deviceToken.slice(-12));
     const gone = res.status === 410 || reason === "BadDeviceToken" || reason === "Unregistered";
     return { ok: false, gone };
-  } catch (err) {
+  } catch (err: any) {
+    console.log("[apns] fetch threw — " + ((err && err.message) || String(err)));
     return { ok: false, gone: false };
   }
 }

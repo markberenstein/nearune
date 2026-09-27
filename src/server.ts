@@ -160,6 +160,30 @@ Bun.serve({
       return json({ ok: true });
     }
 
+    // Temporary diagnostic endpoint — the client pings this at each
+    // checkpoint of enablePush() (permission granted, register() called,
+    // registration success/error, 45s timeout) so we can see exactly how
+    // far a given attempt got without needing Xcode or Console.app. Keeps
+    // only the last 20 entries per person. Safe to remove once push
+    // notifications are confirmed working.
+    if (req.method === "POST" && restPath === "/api/debug/push-trace") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      const stage = typeof body?.stage === "string" ? body.stage.slice(0, 60) : "";
+      const detail = typeof body?.detail === "string" ? body.detail.slice(0, 200) : "";
+      if (!isPerson(who) || !stage) return json({ error: "invalid" }, { status: 400 });
+      if (!rateLimit("push-trace-ip:" + clientIp(req, server), 60, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      await saveState(roomId, (s) => {
+        if (!s.pushDebugTrace) s.pushDebugTrace = {};
+        const list = s.pushDebugTrace[who] || [];
+        list.push({ stage, detail, at: new Date().toISOString() });
+        s.pushDebugTrace[who] = list.slice(-20);
+      });
+      return json({ ok: true });
+    }
+
     // Temporary debug endpoint — dumps what kind of push subscription (old
     // web-push vs. real APNs device token) is currently stored for a room,
     // without touching anything or going through the once-a-day cron guard.
@@ -180,6 +204,19 @@ Bun.serve({
         };
       }
       return json({ roomId, subs: out });
+    }
+
+    // Temporary debug endpoint — reads back the checkpoint trail written by
+    // POST /api/debug/push-trace, so a given "Enable reminders" attempt can
+    // be checked from a curl instead of Console.app. Safe to remove once
+    // push notifications are confirmed working.
+    if (req.method === "GET" && url.pathname === "/api/debug/push-trace") {
+      const secret = Bun.env.CRON_SECRET;
+      const given = req.headers.get("x-cron-secret") || "";
+      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const roomId = url.searchParams.get("room") || "";
+      const state = await loadState(roomId);
+      return json({ roomId, trace: state.pushDebugTrace || {} });
     }
 
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {

@@ -7,6 +7,7 @@
 
 import webpush from "web-push";
 import jwt from "jsonwebtoken";
+import http2 from "node:http2";
 import type { PushSubscriptionRecord } from "./types";
 
 const VAPID_PUBLIC_KEY = Bun.env.VAPID_PUBLIC_KEY || "";
@@ -30,7 +31,7 @@ const APNS_TEAM_ID = Bun.env.APNS_TEAM_ID || "";
 // JWT signer, which needs real PEM formatting.
 const APNS_PRIVATE_KEY = (Bun.env.APNS_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 const APNS_BUNDLE_ID = Bun.env.APNS_BUNDLE_ID || "com.nearune.app";
-const APNS_HOST = "https://api.push.apple.com";
+const APNS_ORIGIN = "https://api.push.apple.com";
 
 export const apnsConfigured = !!(APNS_KEY_ID && APNS_TEAM_ID && APNS_PRIVATE_KEY);
 // True if either delivery path is set up — the two call sites in
@@ -71,49 +72,80 @@ async function sendWebPush(sub: any, payload: PushPayload): Promise<{ ok: boolea
   }
 }
 
-async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
+// Bun's fetch() can't reliably parse APNs' HTTP/2 responses (throws
+// "Malformed_HTTP_Response" — a known Bun bug: oven-sh/bun#17242), so this
+// talks HTTP/2 directly via Node's http2 module instead of fetch(). A fresh
+// client connection per push is simplest and fine at this volume; if push
+// volume ever grows, this could keep one persistent session open instead.
+function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
   if (!apnsConfigured) {
     console.log("[apns] not configured — keyId=" + !!APNS_KEY_ID + " teamId=" + !!APNS_TEAM_ID + " privateKey=" + !!APNS_PRIVATE_KEY);
-    return { ok: false, gone: false };
+    return Promise.resolve({ ok: false, gone: false });
   }
-  try {
-    const res = await fetch(APNS_HOST + "/3/device/" + deviceToken, {
-      method: "POST",
-      headers: {
-        authorization: "bearer " + apnsProviderToken(),
-        "apns-topic": APNS_BUNDLE_ID,
-        "apns-push-type": "alert",
-        "apns-priority": "10",
-        ...(payload.tag ? { "apns-collapse-id": payload.tag.slice(0, 64) } : {}),
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: { ok: boolean; gone: boolean }) => {
+      if (settled) return;
+      settled = true;
+      try { client.close(); } catch (e) {}
+      resolve(result);
+    };
+
+    const client = http2.connect(APNS_ORIGIN);
+    client.on("error", (err) => {
+      console.log("[apns] http2 connect error — " + err.message);
+      finish({ ok: false, gone: false });
+    });
+
+    const req = client.request({
+      ":method": "POST",
+      ":path": "/3/device/" + deviceToken,
+      authorization: "bearer " + apnsProviderToken(),
+      "apns-topic": APNS_BUNDLE_ID,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+      ...(payload.tag ? { "apns-collapse-id": payload.tag.slice(0, 64) } : {}),
+      "content-type": "application/json",
+    });
+
+    let status = 0;
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("response", (headers) => {
+      status = Number(headers[":status"]) || 0;
+    });
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      if (status >= 200 && status < 300) {
+        console.log("[apns] sent ok, status=" + status);
+        finish({ ok: true, gone: false });
+        return;
+      }
+      // A stale/uninstalled-app token comes back as 400 BadDeviceToken or
+      // 410 Unregistered — either way, stop retrying it.
+      let reason = "";
+      try { reason = JSON.parse(body).reason || ""; } catch (e) {}
+      console.log("[apns] rejected — status=" + status + " reason=" + reason + " body=" + body + " topic=" + APNS_BUNDLE_ID + " tokenTail=" + deviceToken.slice(-12));
+      const gone = status === 410 || reason === "BadDeviceToken" || reason === "Unregistered";
+      finish({ ok: false, gone });
+    });
+    req.on("error", (err) => {
+      console.log("[apns] http2 request error — " + err.message);
+      finish({ ok: false, gone: false });
+    });
+
+    req.end(
+      JSON.stringify({
         aps: {
           alert: { title: payload.title, body: payload.body },
           badge: payload.badge,
           sound: "default",
         },
-      }),
-    });
-    if (res.ok) {
-      console.log("[apns] sent ok, status=" + res.status);
-      return { ok: true, gone: false };
-    }
-    // A stale/uninstalled-app token comes back as 400 BadDeviceToken or 410
-    // Unregistered — either way, stop retrying it.
-    let reason = "";
-    let rawBody = "";
-    try {
-      rawBody = await res.text();
-      reason = JSON.parse(rawBody).reason || "";
-    } catch (e) {}
-    console.log("[apns] rejected — status=" + res.status + " reason=" + reason + " body=" + rawBody + " topic=" + APNS_BUNDLE_ID + " tokenTail=" + deviceToken.slice(-12));
-    const gone = res.status === 410 || reason === "BadDeviceToken" || reason === "Unregistered";
-    return { ok: false, gone };
-  } catch (err: any) {
-    console.log("[apns] fetch threw — " + ((err && err.message) || String(err)));
-    return { ok: false, gone: false };
-  }
+      })
+    );
+  });
 }
 
 // Sends one push. Returns { ok, gone } — gone=true means the subscription is

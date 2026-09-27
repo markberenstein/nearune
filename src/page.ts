@@ -144,29 +144,11 @@ const RAW = String.raw`<!doctype html>
   .puzzle-title { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.1rem; margin: 0; }
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
-  .puzzle-grid-wrap { position: relative; }
-  .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
+  .puzzle-grid-wrap { position: relative; border-radius: 14px; overflow: hidden; touch-action: none; }
+  .puzzle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--surface-2); transform-origin: 0 0; will-change: transform; }
   .puzzle-cell { background-repeat: no-repeat; background-size: 500% 500%; }
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .puzzle-cell.locked svg { width: 16px; height: 16px; opacity: 0.28; }
-  .puzzle-expand-btn {
-    position: absolute; bottom: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%;
-    background: rgba(43,33,25,0.55); border: none; color: #FFF8F1; display: flex; align-items: center;
-    justify-content: center; cursor: pointer; backdrop-filter: blur(2px);
-  }
-  .puzzle-expand-btn svg { width: 16px; height: 16px; }
-  .puzzle-lightbox {
-    position: fixed; inset: 0; background: rgba(20,14,10,0.92); z-index: 1000;
-    display: flex; align-items: center; justify-content: center; padding: 28px;
-  }
-  .puzzle-lightbox-stage { width: min(92vw, 520px); aspect-ratio: 1; overflow: hidden; touch-action: none; border-radius: 14px; }
-  .puzzle-lightbox-stage .puzzle-grid { width: 100%; height: 100%; cursor: default; transform-origin: 0 0; will-change: transform; border-radius: 0; }
-  .puzzle-lightbox-hint { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; color: rgba(255,248,241,0.7); font-size: 0.78rem; }
-  .puzzle-lightbox-close {
-    position: absolute; top: 18px; right: 18px; width: 40px; height: 40px; border-radius: 50%;
-    background: rgba(255,255,255,0.14); border: none; color: #FFF8F1; font-size: 20px; line-height: 1;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-  }
   .puzzle-empty { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; padding: 20px 10px; color: var(--ink-soft); font-size: 0.88rem; }
   .puzzle-upload-btn { background: var(--accent); color: #FFF8F1; border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .puzzle-upload-btn:disabled { opacity: 0.6; cursor: default; }
@@ -851,15 +833,10 @@ const RAW = String.raw`<!doctype html>
     return grid;
   }
 
-  var PUZZLE_EXPAND_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>';
-
-  function openPuzzleLightbox(imgSrc) {
-    var overlay = h("div", { class: "puzzle-lightbox" });
-    var closeBtn = h("button", { class: "puzzle-lightbox-close", "aria-label": t("Close"), text: "✕" });
-    var stage = h("div", { class: "puzzle-lightbox-stage" });
+  function puzzleZoomableGrid(imgSrc) {
+    var wrap = h("div", { class: "puzzle-grid-wrap" });
     var grid = puzzleGrid(imgSrc);
-    var hint = h("p", { class: "puzzle-lightbox-hint", text: t("Pinch or double-tap to zoom") });
-    stage.appendChild(grid);
+    wrap.appendChild(grid);
 
     var scale = 1, panX = 0, panY = 0;
     var pinchStartDist = 0, pinchStartScale = 1;
@@ -867,8 +844,8 @@ const RAW = String.raw`<!doctype html>
     var lastTapTime = 0;
 
     function clampPan() {
-      var maxX = (stage.clientWidth * (scale - 1)) / 2;
-      var maxY = (stage.clientHeight * (scale - 1)) / 2;
+      var maxX = (wrap.clientWidth * (scale - 1)) / 2;
+      var maxY = (wrap.clientHeight * (scale - 1)) / 2;
       panX = Math.min(Math.max(panX, -maxX), maxX);
       panY = Math.min(Math.max(panY, -maxY), maxY);
     }
@@ -884,9 +861,8 @@ const RAW = String.raw`<!doctype html>
       var dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
       return Math.sqrt(dx * dx + dy * dy);
     }
-    function resetView() { scale = 1; panX = 0; panY = 0; applyTransform(); }
 
-    stage.addEventListener("touchstart", function (e) {
+    wrap.addEventListener("touchstart", function (e) {
       if (e.touches.length === 2) {
         pinchStartDist = dist(e.touches[0], e.touches[1]);
         pinchStartScale = scale;
@@ -903,7 +879,7 @@ const RAW = String.raw`<!doctype html>
         lastTapTime = now;
       }
     }, { passive: true });
-    stage.addEventListener("touchmove", function (e) {
+    wrap.addEventListener("touchmove", function (e) {
       if (e.touches.length === 2) {
         e.preventDefault();
         var d = dist(e.touches[0], e.touches[1]);
@@ -917,30 +893,6 @@ const RAW = String.raw`<!doctype html>
       }
     }, { passive: false });
 
-    function close() {
-      overlay.removeEventListener("click", onOverlayClick);
-      document.removeEventListener("keydown", onKeydown);
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    }
-    function onOverlayClick(e) { if (e.target === overlay) close(); }
-    function onKeydown(e) { if (e.key === "Escape") close(); }
-    closeBtn.addEventListener("click", close);
-    overlay.addEventListener("click", onOverlayClick);
-    document.addEventListener("keydown", onKeydown);
-    overlay.appendChild(stage);
-    overlay.appendChild(hint);
-    overlay.appendChild(closeBtn);
-    document.body.appendChild(overlay);
-  }
-
-  function puzzleGridWithExpand(imgSrc) {
-    var wrap = h("div", { class: "puzzle-grid-wrap" });
-    var grid = puzzleGrid(imgSrc);
-    grid.addEventListener("click", function () { openPuzzleLightbox(imgSrc); });
-    var expandBtn = h("button", { class: "puzzle-expand-btn", "aria-label": t("Expand puzzle"), html: PUZZLE_EXPAND_SVG });
-    expandBtn.addEventListener("click", function (e) { e.stopPropagation(); openPuzzleLightbox(imgSrc); });
-    wrap.appendChild(grid);
-    wrap.appendChild(expandBtn);
     return wrap;
   }
 
@@ -1135,7 +1087,7 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
       }
     } else {
-      card.appendChild(puzzleGridWithExpand(puzzleImgSrc()));
+      card.appendChild(puzzleZoomableGrid(puzzleImgSrc()));
       if (state.puzzleSolved) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {

@@ -1631,8 +1631,9 @@ const RAW = String.raw`<!doctype html>
     previewAsKey = null;
     weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
+    applyWeatherSky(); // instant, from whatever weather data is already loaded
     renderApp();
-    loadWeather(); // wasn't known yet during initialLoad's call, now it is
+    loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
   }
 
   // SANDBOX EXPERIMENT: whose home screen is effectively being shown right
@@ -1718,7 +1719,7 @@ const RAW = String.raw`<!doctype html>
       var person = PEOPLE[key];
       var current = (state.status[key] && state.status[key].text) || "";
       var isSelf = viewerKey === key;
-      var chipClass = "status-chip" + (!isSelf ? " status-chip-preview" : "") + (previewAsKey === key ? " status-chip-active" : "");
+      var chipClass = "status-chip" + (!isSelf ? " status-chip-preview" : "");
       var chip = h("div", { class: chipClass }, [h("span", { class: "status-dot", style: "background:" + person.color })]);
       var input = document.createElement("input");
       input.type = "text"; input.maxLength = 60; input.placeholder = tTemplate("{name}'s world right now…", { name: personName(key) });
@@ -1729,19 +1730,19 @@ const RAW = String.raw`<!doctype html>
           api("/api/status", { who: key, text: input.value }).catch(function () { online = false; renderApp(); });
         });
       } else {
-        // SANDBOX EXPERIMENT: tapping your partner's chip previews what
-        // their home screen looks like right now — the background switches
-        // to show weather at YOUR location, since from their side you're
-        // "the other person". Tap again (or the other chip) to return.
-        // The input itself is disabled, so clicks on it wouldn't otherwise
-        // reach this handler — pointer-events routes them to the chip.
+        // SANDBOX EXPERIMENT: tapping your partner's chip actually switches
+        // you into their view — same as picking them on the "who's here?"
+        // screen (chooseViewer), so their status becomes editable, the
+        // background shows the weather their home screen would show, and
+        // it's remembered on reload. Tapping your OWN chip's counterpart
+        // (now the non-self one, after switching) switches back — same
+        // handler, symmetric. The input itself is disabled, so clicks on
+        // it wouldn't otherwise reach this handler — pointer-events routes
+        // them to the chip.
         input.style.pointerEvents = "none";
         chip.style.cursor = "pointer";
         chip.addEventListener("click", function () {
-          previewAsKey = previewAsKey === key ? null : key;
-          weatherExpanded = false;
-          applyWeatherSky();
-          renderApp();
+          chooseViewer(key);
         });
       }
       chip.appendChild(input);

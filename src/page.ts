@@ -93,9 +93,11 @@ const RAW = String.raw`<!doctype html>
   }
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
+  /* Lives under the weather widget's badge now, so it's left-aligned and
+     narrow rather than the old full-width centered line under the clocks. */
   .sky-line {
-    text-align: center; font-style: italic; color: var(--ink-soft);
-    font-size: 0.8rem; line-height: 1.5; margin: 12px 6px 0; text-wrap: balance;
+    text-align: left; font-style: italic; color: var(--ink-soft);
+    font-size: 0.74rem; line-height: 1.4; margin: 6px 0 0; max-width: 190px; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -1688,6 +1690,12 @@ const RAW = String.raw`<!doctype html>
       [h("span", { class: "clock-weather-icon", text: icon }), document.createTextNode(w.tempF + "°F")]
     );
     el.appendChild(badge);
+    // The why-is-the-background-doing-this blurb now lives under the
+    // widget itself (used to be its own line under the clocks) — always
+    // shown once weather has loaded, not just when the badge is expanded.
+    el.appendChild(
+      h("p", { class: "sky-line", text: (icon ? icon + " " : "") + "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." })
+    );
     if (weatherExpanded) {
       el.appendChild(
         h("div", { class: "weather-widget-detail" }, [
@@ -1698,25 +1706,13 @@ const RAW = String.raw`<!doctype html>
       );
     }
   }
-  // SANDBOX EXPERIMENT: the small why-is-the-background-doing-this line.
-  // Only shows once weather has actually loaded for someone whose partner
-  // is known, so it never appears as an empty or half-true sentence.
-  function skyLine() {
-    var w = currentSkyWeather();
-    if (!w || !viewerKey) return null;
-    var shownName = personName(otherKeyOf(effectiveViewKey()));
-    var icon = (w.theme && w.theme.icon) || "";
-    var prefix = icon ? icon + " " : "";
-    return h("p", { class: "sky-line", text: prefix + "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." });
-  }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
     var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
     var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    var line = skyLine();
-    return h("div", {}, line ? [wordmark, clocks, line] : [wordmark, clocks]);
+    return h("div", {}, [wordmark, clocks]);
   }
 
   function statusRow() {

@@ -271,6 +271,11 @@ const RAW = String.raw`<!doctype html>
   .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.78rem; text-decoration: underline; cursor: pointer; padding: 4px; }
   .offline-note { text-align: center; font-size: 0.8rem; color: var(--ink-soft); padding: 4px 8px; }
   .cdt { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; }
+  /* SANDBOX EXPERIMENT: the fun-local-news line — same muted, centered
+     treatment as .cdt so it doesn't compete for attention, just the
+     headline itself underlined as a link out to the source. */
+  .news-line { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; margin: 0; text-wrap: balance; }
+  .news-link { color: var(--accent); text-decoration: underline; }
   [hidden] { display: none !important; }
 </style>
 <link rel="manifest" id="manifestLink" href="/manifest.json">
@@ -528,6 +533,12 @@ const RAW = String.raw`<!doctype html>
   // tap the badge to toggle. Resets whenever who you're viewing as changes
   // so a stale detail card never lingers.
   var weatherExpanded = false;
+  // SANDBOX EXPERIMENT: top local news story (biased toward fun/quirky) at
+  // each person's location, as last fetched from /api/news — null entries
+  // until the first fetch resolves, or if nothing came back for that
+  // location. See currentPartnerNews() — always the OTHER person's story,
+  // same "peek into their world" idea as the weather badge.
+  var newsByPerson = { mark: null, nikita: null };
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -1606,8 +1617,6 @@ const RAW = String.raw`<!doctype html>
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     app.appendChild(tabBar());
-    // The countdown sits here, above the Today/Puzzle content.
-    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     if (activeTab === "puzzle") {
       var flash = puzzleFlashBanner();
       if (flash) app.appendChild(flash);
@@ -1617,6 +1626,11 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(streakCard());
       app.appendChild(journalSection());
     }
+    // The fun local-news line sits here, between the Today/Puzzle content
+    // and the countdown.
+    var newsBlock = newsLineBlock();
+    if (newsBlock) app.appendChild(newsBlock);
+    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());
@@ -1653,6 +1667,7 @@ const RAW = String.raw`<!doctype html>
     applyWeatherSky(); // instant, from whatever weather data is already loaded
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
+    loadNews();
   }
 
   // SANDBOX EXPERIMENT: whose home screen is effectively being shown right
@@ -1668,6 +1683,28 @@ const RAW = String.raw`<!doctype html>
     var key = effectiveViewKey();
     if (!key) return null;
     return weatherByPerson[otherKeyOf(key)] || null;
+  }
+  // SANDBOX EXPERIMENT: same "other person's" rule as currentSkyWeather(),
+  // for the top local news line instead of the weather badge.
+  function currentPartnerNews() {
+    var key = effectiveViewKey();
+    if (!key) return null;
+    return newsByPerson[otherKeyOf(key)] || null;
+  }
+  // SANDBOX EXPERIMENT: a single muted line — "Fun story near <name>: ..."
+  // — sitting between the Today/Puzzle content and the "next question"
+  // countdown. Returns null when there's no story to show yet.
+  function newsLineBlock() {
+    var story = currentPartnerNews();
+    if (!story || !story.headline) return null;
+    var shownName = personName(otherKeyOf(effectiveViewKey()));
+    var line = h("p", { class: "news-line" });
+    line.appendChild(document.createTextNode("📰 Fun story near " + shownName + ": "));
+    line.appendChild(
+      h("a", { class: "news-link", href: story.url || "#", target: "_blank", rel: "noopener noreferrer", text: story.headline })
+    );
+    if (story.source) line.appendChild(document.createTextNode(" (" + story.source + ")"));
+    return line;
   }
   // SANDBOX EXPERIMENT: the weather badge (#weather-widget) — built inline
   // as part of renderApp() now (per feedback: moved out of its old fixed
@@ -2213,6 +2250,7 @@ const RAW = String.raw`<!doctype html>
     renderApp();
     syncAppBadge();
     loadWeather();
+    loadNews();
     // Pre-fetch the VAPID key and pre-register the service worker now,
     // neither of which needs a user gesture, so a later tap on "Enable
     // reminders" has the shortest possible path to the permission-gated
@@ -2244,8 +2282,22 @@ const RAW = String.raw`<!doctype html>
     applyWeatherSky();
     renderApp();
   }
+  // SANDBOX EXPERIMENT: same shape as loadWeather() above, for the fun
+  // local-news line — server caches it for a couple hours (see
+  // localnews.ts) so polling this often costs nothing extra.
+  async function loadNews() {
+    if (!viewerKey) return;
+    try {
+      var res = await fetch(RP + "/api/news");
+      var data = await res.json();
+      newsByPerson = (data && data.news) || { mark: null, nikita: null };
+    } catch (e) {
+      return;
+    }
+    renderApp();
+  }
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") loadWeather();
+    if (document.visibilityState === "visible") { loadWeather(); loadNews(); }
   });
   function applyWeatherSky() {
     var el = document.getElementById("weather-sky");
@@ -2288,6 +2340,7 @@ const RAW = String.raw`<!doctype html>
   setInterval(tickClocks, 30000);
   setInterval(poll, POLL_MS);
   setInterval(loadWeather, WEATHER_POLL_MS);
+  setInterval(loadNews, WEATHER_POLL_MS);
 })();
 </script>
 </body>

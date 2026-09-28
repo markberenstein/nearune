@@ -21,6 +21,7 @@ import {
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
+import { topLocalStory } from "./localnews";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
@@ -386,6 +387,19 @@ Bun.serve({
         currentWeather(state.people?.nikita?.location || ""),
       ]);
       return json({ weather: { mark: markWeather, nikita: nikitaWeather } });
+    }
+
+    // SANDBOX EXPERIMENT: top local news story (biased toward lighter/fun
+    // stories) at each person's registered location — same shape and
+    // caching approach as /api/weather above, no API key required (see
+    // localnews.ts).
+    if (req.method === "GET" && restPath === "/api/news") {
+      const state = await loadState(roomId);
+      const [markNews, nikitaNews] = await Promise.all([
+        topLocalStory(state.people?.mark?.location || ""),
+        topLocalStory(state.people?.nikita?.location || ""),
+      ]);
+      return json({ news: { mark: markNews, nikita: nikitaNews } });
     }
 
     if (req.method === "POST" && restPath === "/api/status") {

@@ -2363,8 +2363,11 @@ function adminEsc(s: string): string {
 
 // Simple secret-gated page listing every room's creation time and recent
 // activity — no answer text or photos, just enough to tell whether a room
-// was created and whether it's being used.
-export function buildAdminPage(rooms: AdminRoomSummary[]): string {
+// was created and whether it's being used. `secret` is embedded into each
+// row's delete form so the action stays gated the same way the page itself
+// is, without a separate login step.
+export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): string {
+  const secretQS = "secret=" + encodeURIComponent(secret);
   const rows = rooms
     .map((r) => {
       const label = r.roomId ? adminEsc(r.roomId) : "(main room)";
@@ -2375,6 +2378,15 @@ export function buildAdminPage(rooms: AdminRoomSummary[]): string {
           : r.people.map((p) => adminEsc(p.name) + (p.confirmed ? "" : " <span class=\"muted\">(pending)</span>")).join(", ");
       const active = r.lastActive ? adminEsc(r.lastActive) : "<span class=\"muted\">no answers yet</span>";
       const status = r.daysAnswered > 0 ? "active" : r.people.length > 0 ? "joined" : "empty";
+      // The legacy "main room" (empty roomId) has no delete control here —
+      // it's reachable only through the in-app "Delete my data" flow, so a
+      // stray click on this page can't wipe the room actually in use.
+      const action = r.roomId
+        ? `<form method="POST" action="/api/admin/delete-room?${secretQS}" onsubmit="return confirm('Delete room ${adminEsc(r.roomId)}? This permanently erases its answers, comments, and photos. This cannot be undone.');">
+            <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
+            <button type="submit" class="del-btn">Delete</button>
+          </form>`
+        : `<span class="muted">—</span>`;
       return `<tr>
         <td>${label}</td>
         <td><span class="pill pill-${status}">${status}</span></td>
@@ -2383,6 +2395,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[]): string {
         <td>${active}</td>
         <td>${r.daysAnswered}</td>
         <td>${r.pushCount}</td>
+        <td>${action}</td>
       </tr>`;
     })
     .join("");
@@ -2417,6 +2430,8 @@ export function buildAdminPage(rooms: AdminRoomSummary[]): string {
     .pill-active { background:#1E3A1B; color:#8FD98A; }
     .pill-joined { background:#3A2E12; color:#E8B75A; }
   }
+  .del-btn { background:none; border:1px solid var(--line); color:#B3442F; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; }
+  .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
 </style>
 </head>
 <body>
@@ -2424,7 +2439,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[]): string {
   <h1>Rooms</h1>
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>
   <table>
-    <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Last active</th><th>Days answered</th><th>Push subs</th></tr></thead>
+    <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
 </div>

@@ -239,9 +239,33 @@ Bun.serve({
         }
       }
       summaries.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-      return new Response(buildAdminPage(summaries), {
+      return new Response(buildAdminPage(summaries, given), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/admin/delete-room") {
+      const secret = Bun.env.ADMIN_SECRET || Bun.env.CRON_SECRET;
+      const given = url.searchParams.get("secret") || "";
+      if (!secret || given !== secret) return new Response("Not found", { status: 404 });
+      let targetRoomId = "";
+      try {
+        const body = await req.formData();
+        targetRoomId = String(body.get("roomId") || "");
+      } catch {}
+      // The legacy main room (empty id) is never deletable from here — see
+      // the note on buildAdminPage's rows for why.
+      if (targetRoomId) {
+        const cur = await loadState(targetRoomId);
+        if (cur.people) {
+          for (const key of Object.keys(cur.people) as PersonKey[]) {
+            const hash = cur.people[key]?.emailHash;
+            if (hash) removeFromEmailIndex(hash, targetRoomId, key).catch(() => {});
+          }
+        }
+        await deleteRoom(targetRoomId);
+      }
+      return Response.redirect(url.origin + "/admin?secret=" + encodeURIComponent(given), 303);
     }
 
     if (req.method === "GET" && restPath === "/") {

@@ -113,12 +113,24 @@ export async function weatherKitCurrentWeather(lat: number, lon: number): Promis
     const url =
       "https://weatherkit.apple.com/api/v1/weather/en/" + lat + "/" + lon + "?dataSets=currentWeather&timezone=UTC";
     const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Temporary diagnostic — surfaces *why* a call failed (Apple's status
+      // + body) instead of silently falling back, so intermittent failures
+      // can actually be diagnosed from the Railway logs.
+      let bodySnippet = "";
+      try { bodySnippet = (await res.text()).slice(0, 300); } catch {}
+      console.log("[weatherkit] " + lat + "," + lon + " -> HTTP " + res.status + " " + res.statusText + " " + bodySnippet);
+      return null;
+    }
     const data: any = await res.json();
     const cur = data && data.currentWeather;
-    if (!cur || typeof cur.temperature !== "number" || !cur.conditionCode) return null;
+    if (!cur || typeof cur.temperature !== "number" || !cur.conditionCode) {
+      console.log("[weatherkit] " + lat + "," + lon + " -> unexpected response shape: " + JSON.stringify(data).slice(0, 300));
+      return null;
+    }
     return { tempC: cur.temperature, conditionCode: cur.conditionCode, isDay: cur.daylight !== false };
-  } catch {
+  } catch (err: any) {
+    console.log("[weatherkit] " + lat + "," + lon + " -> threw: " + (err && err.message ? err.message : String(err)));
     return null;
   }
 }

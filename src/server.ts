@@ -281,15 +281,27 @@ Bun.serve({
         }
         // The answerer's own native badge still shows the old count — a real
         // alert push only went to the person who hasn't answered yet, and
-        // native has no client-side badge API to update it locally. Sync the
-        // answerer's own icon with a silent (no banner, no sound) push so it
-        // reflects the new count right away instead of staying stale until
-        // the day completes. Only needed for APNs; web subs sync locally.
-        // Skipped when count is 0 — the day-complete block below already
-        // sends both people a real badge-clearing push in that case.
+        // native has no client-side badge API to update it locally. A silent
+        // (content-available) push would be the quiet way to sync it, but
+        // iOS treats those as low-priority background pushes and can defer
+        // delivery unpredictably — the same reason the day-complete push
+        // below uses a real alert instead of a silent one. So this sends a
+        // real push too. It won't show as a visible banner in practice: this
+        // fires immediately after the person's own answer request completes,
+        // so their app is in the foreground, and the app has no
+        // `presentationOptions` configured, which means iOS presents nothing
+        // for a foregrounded notification — only the badge updates. Only
+        // needed for APNs; web subs sync locally. Skipped when count is 0 —
+        // the day-complete block below already sends both people a real
+        // badge-clearing push in that case.
         const ownSub = state.pushSubs[who];
         if (count > 0 && ownSub && ownSub.kind === "apns") {
-          sendPush(ownSub, { badge: count, silent: true })
+          sendPush(ownSub, {
+            title: "Answer saved",
+            body: "Waiting on your partner to answer today's question.",
+            badge: count,
+            tag: "own-answered",
+          })
             .then((res) => {
               if (res.gone) {
                 saveState(roomId, (s) => {

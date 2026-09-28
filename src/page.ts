@@ -73,15 +73,17 @@ const RAW = String.raw`<!doctype html>
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
   /* SANDBOX EXPERIMENT: the weather badge — the partner's current weather
      as a colored tile (like a native Home Screen weather widget) rather
-     than a plain pill button, with the why-is-the-background-doing-this
-     blurb right above it. Tap the tile to expand a detail card with the
-     place name, full condition, and a last-6-hours trend. Sits inline in
-     the main app flow (built in renderApp(), where the "next question"
-     countdown used to be) rather than as a fixed overlay. */
-  #weather-widget { display: flex; flex-direction: column; align-items: flex-start; }
+     than a plain pill button, sitting side by side with the
+     why-is-the-background-doing-this blurb. Tap the tile to expand a
+     detail card (full width, below the row) with the place name, full
+     condition, and a last-6-hours trend. Sits inline in the main app flow
+     (built in renderApp(), where the "next question" countdown used to
+     be) rather than as a fixed overlay. */
+  #weather-widget { display: flex; flex-direction: column; gap: 10px; }
+  .weather-widget-row { display: flex; flex-direction: row; align-items: center; gap: 14px; }
   .weather-widget-tile {
     display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
-    width: 92px; height: 92px; border-radius: 20px; padding: 10px 12px;
+    flex: none; width: 92px; height: 92px; border-radius: 20px; padding: 10px 12px;
     border: none; cursor: pointer; box-shadow: 0 4px 14px var(--shadow);
     color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   }
@@ -90,9 +92,9 @@ const RAW = String.raw`<!doctype html>
   .weather-widget-tile-temp { font-size: 1.5rem; font-weight: 700; line-height: 1; }
   .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.9; }
   .weather-widget-detail {
-    margin-top: 8px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
+    padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
     border-radius: 12px; font-size: 0.78rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
-    max-width: 200px;
+    max-width: 320px;
   }
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
@@ -101,11 +103,11 @@ const RAW = String.raw`<!doctype html>
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
   .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
-  /* Sits right above the weather tile, so left-aligned and narrow rather
-     than the old full-width centered line under the clocks. */
+  /* Sits beside the weather tile, so left-aligned rather than the old
+     full-width centered line under the clocks. */
   .sky-line {
     text-align: left; font-style: italic; color: var(--ink-soft);
-    font-size: 0.74rem; line-height: 1.4; margin: 0 0 6px; max-width: 220px; text-wrap: balance;
+    font-size: 0.74rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -1672,8 +1674,9 @@ const RAW = String.raw`<!doctype html>
   // upper-left overlay and into the main flow, where the "next question"
   // countdown used to sit), so it only shows on the main app view, not the
   // picker/registration/invite screens. Returns null when there's nothing
-  // to show yet (no weather loaded, or viewerKey not known). Tapping the
-  // badge expands a detail card with the place name and full condition;
+  // to show yet (no weather loaded, or viewerKey not known). The blurb and
+  // tile sit side by side in a row; tapping the tile expands a full-width
+  // detail card below the row with the place name and full condition;
   // tapping again collapses it.
   function weatherWidgetBlock() {
     var w = currentSkyWeather();
@@ -1705,17 +1708,15 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
       ]
     );
-    // The why-is-the-background-doing-this blurb — above the tile, always
+    // The why-is-the-background-doing-this blurb — next to the tile, always
     // shown once weather's loaded, not just when expanded.
-    wrap.appendChild(
-      h("p", {
-        class: "sky-line",
-        text:
-          "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. This is " +
-          shownName + "'s sky right now.",
-      })
-    );
-    wrap.appendChild(tile);
+    var blurb = h("p", {
+      class: "sky-line",
+      text:
+        "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. This is " +
+        shownName + "'s sky right now.",
+    });
+    wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),

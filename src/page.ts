@@ -71,15 +71,14 @@ const RAW = String.raw`<!doctype html>
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
-  /* SANDBOX EXPERIMENT: a small floating widget pinned to the upper-left
-     corner, showing the partner's current weather as a colored tile (like
-     a native Home Screen weather widget) rather than a plain pill button,
-     with the why-is-the-background-doing-this blurb right underneath it.
-     Tap the tile to expand a detail card with the place name, full
-     condition, and a last-6-hours trend. Lives outside #app (like
-     #weather-sky) so it persists across every screen — picker,
-     registration, invite — not just the main app view. */
-  #weather-widget { position: fixed; top: 14px; left: 14px; z-index: 5; }
+  /* SANDBOX EXPERIMENT: the weather badge — the partner's current weather
+     as a colored tile (like a native Home Screen weather widget) rather
+     than a plain pill button, with the why-is-the-background-doing-this
+     blurb right above it. Tap the tile to expand a detail card with the
+     place name, full condition, and a last-6-hours trend. Sits inline in
+     the main app flow (built in renderApp(), where the "next question"
+     countdown used to be) rather than as a fixed overlay. */
+  #weather-widget { display: flex; flex-direction: column; align-items: flex-start; }
   .weather-widget-tile {
     display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
     width: 92px; height: 92px; border-radius: 20px; padding: 10px 12px;
@@ -102,11 +101,11 @@ const RAW = String.raw`<!doctype html>
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
   .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
-  /* Lives right under the weather widget (upper-left), so left-aligned and
-     narrow rather than the old full-width centered line under the clocks. */
+  /* Sits right above the weather tile, so left-aligned and narrow rather
+     than the old full-width centered line under the clocks. */
   .sky-line {
     text-align: left; font-style: italic; color: var(--ink-soft);
-    font-size: 0.74rem; line-height: 1.4; margin: 6px 0 0; max-width: 220px; text-wrap: balance;
+    font-size: 0.74rem; line-height: 1.4; margin: 0 0 6px; max-width: 220px; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -282,7 +281,6 @@ const RAW = String.raw`<!doctype html>
 </head>
 <body>
 <div id="weather-sky"></div>
-<div id="weather-widget" style="display:none"></div>
 <div id="app"></div>
 <script>
 (function () {
@@ -1487,7 +1485,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(form);
     if (!soloRegistration) {
       var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-      sw.addEventListener("click", function () { viewerKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); renderWeatherWidget(); });
+      sw.addEventListener("click", function () { viewerKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
     var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
@@ -1601,7 +1599,10 @@ const RAW = String.raw`<!doctype html>
 
     app.appendChild(header());
     app.appendChild(statusRow());
-    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
+    // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
+    // "next question" countdown used to be), right under the status row.
+    var weatherBlock = weatherWidgetBlock();
+    if (weatherBlock) app.appendChild(weatherBlock);
     app.appendChild(tabBar());
     if (activeTab === "puzzle") {
       var flash = puzzleFlashBanner();
@@ -1612,6 +1613,8 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(streakCard());
       app.appendChild(journalSection());
     }
+    // The countdown moved down here, under both the Today and Puzzle blocks.
+    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());
@@ -1646,7 +1649,6 @@ const RAW = String.raw`<!doctype html>
     weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     applyWeatherSky(); // instant, from whatever weather data is already loaded
-    renderWeatherWidget();
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
   }
@@ -1665,26 +1667,21 @@ const RAW = String.raw`<!doctype html>
     if (!key) return null;
     return weatherByPerson[otherKeyOf(key)] || null;
   }
-  // SANDBOX EXPERIMENT: the floating upper-left weather badge (#weather-widget,
-  // declared in the static page markup so it persists across every screen).
-  // Rebuilt directly via the DOM rather than through renderApp(), since it
-  // has to show up on the picker/registration/invite screens too, not just
-  // the main app view. Tapping the badge expands a detail card with the
-  // place name and full condition; tapping again collapses it.
-  function renderWeatherWidget() {
-    var el = document.getElementById("weather-widget");
-    if (!el) return;
+  // SANDBOX EXPERIMENT: the weather badge (#weather-widget) — built inline
+  // as part of renderApp() now (per feedback: moved out of its old fixed
+  // upper-left overlay and into the main flow, where the "next question"
+  // countdown used to sit), so it only shows on the main app view, not the
+  // picker/registration/invite screens. Returns null when there's nothing
+  // to show yet (no weather loaded, or viewerKey not known). Tapping the
+  // badge expands a detail card with the place name and full condition;
+  // tapping again collapses it.
+  function weatherWidgetBlock() {
     var w = currentSkyWeather();
-    if (!w || !viewerKey) {
-      el.style.display = "none";
-      el.innerHTML = "";
-      return;
-    }
-    el.style.display = "";
-    el.innerHTML = "";
+    if (!w || !viewerKey) return null;
     var icon = (w.theme && w.theme.icon) || "";
     var shownName = personName(otherKeyOf(effectiveViewKey()));
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
+    var wrap = h("div", { id: "weather-widget" });
     // Styled like a small native weather widget (colored gradient tile,
     // icon + big temp), not a plain pill button — tap it to expand the
     // detail card below, which sits with its own gap rather than crowding
@@ -1699,7 +1696,7 @@ const RAW = String.raw`<!doctype html>
         onclick: function (e) {
           e.stopPropagation();
           weatherExpanded = !weatherExpanded;
-          renderWeatherWidget();
+          renderApp();
         },
       },
       [
@@ -1708,11 +1705,9 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
       ]
     );
-    // The why-is-the-background-doing-this blurb — above the tile (per
-    // feedback: reordered so the whimsical line reads first and the widget
-    // follows it), always shown once weather's loaded, not just when
-    // expanded.
-    el.appendChild(
+    // The why-is-the-background-doing-this blurb — above the tile, always
+    // shown once weather's loaded, not just when expanded.
+    wrap.appendChild(
       h("p", {
         class: "sky-line",
         text:
@@ -1720,7 +1715,7 @@ const RAW = String.raw`<!doctype html>
           shownName + "'s sky right now.",
       })
     );
-    el.appendChild(tile);
+    wrap.appendChild(tile);
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
@@ -1742,8 +1737,9 @@ const RAW = String.raw`<!doctype html>
         detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Last 6 hours (" + shownName + "'s local time)" }));
         detailKids.push(h("div", { class: "trend-bars" }, bars));
       }
-      el.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));
+      wrap.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));
     }
+    return wrap;
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
@@ -2116,7 +2112,6 @@ const RAW = String.raw`<!doctype html>
       weatherExpanded = false;
       try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
       renderApp();
-      renderWeatherWidget();
     });
     row.appendChild(link);
     var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") });
@@ -2246,7 +2241,6 @@ const RAW = String.raw`<!doctype html>
       return; // leave whatever theme was already showing rather than clear it on a blip
     }
     applyWeatherSky();
-    renderWeatherWidget();
     renderApp();
   }
   document.addEventListener("visibilitychange", function () {

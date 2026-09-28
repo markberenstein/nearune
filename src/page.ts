@@ -1366,6 +1366,7 @@ const RAW = String.raw`<!doctype html>
     return card;
   }
 
+  var lastConfirmUrl = "";
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     if (!name || !email) { regError = t("Name and email required."); renderApp(); return; }
@@ -1382,6 +1383,7 @@ const RAW = String.raw`<!doctype html>
             : t("Couldn't register — try again.");
           renderApp(); return;
         }
+        lastConfirmUrl = res.data._confirmUrl || "";
         state = res.data;
         showRegisterForm = false;
         if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
@@ -1401,9 +1403,15 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "puzzle-guess-note", text: t("Don't see it? Check your spam folder.") })
       ]);
       if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+      var rowBtns = [];
       var again = h("button", { class: "switch-link", text: t("Resend confirmation") });
       again.addEventListener("click", function () { showRegisterForm = true; renderApp(); });
-      wait.appendChild(h("div", { class: "switch-row" }, [again]));
+      rowBtns.push(again);
+      // No email provider configured (sandbox) or the email just failed to
+      // send — either way this link finishes the same confirmation an email
+      // would have, without waiting on one.
+      if (lastConfirmUrl) rowBtns.push(copyLinkButton(lastConfirmUrl, t("Copy confirmation link")));
+      wait.appendChild(h("div", { class: "switch-row" }, rowBtns));
       return wait;
     }
     var subtitle = soloRegistration
@@ -1459,10 +1467,11 @@ const RAW = String.raw`<!doctype html>
       .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
 
-  function copyLinkButton(url) {
-    var btn = h("button", { class: "switch-link", text: t("Copy invite link") });
+  function copyLinkButton(url, label) {
+    var labelText = label || t("Copy invite link");
+    var btn = h("button", { class: "switch-link", text: labelText });
     btn.addEventListener("click", function () {
-      var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = t("Copy invite link"); }, 1500); };
+      var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });

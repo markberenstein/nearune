@@ -465,7 +465,13 @@ Bun.serve({
       );
       // Lets this person recover their room link later if they lose it.
       addToEmailIndex(emailHash, { roomId, who }).catch(() => {});
-      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error });
+      // Same pattern /api/invite already uses below: the link goes back only
+      // to the browser that just submitted this request, so exposing it
+      // here is no bigger a surface than the invite link already is — and
+      // it's what lets registration finish immediately if the email is
+      // slow, misdelivered, or (in a sandbox with no email provider
+      // configured) never sent at all.
+      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _confirmUrl: confirmUrl });
     }
 
     if (req.method === "GET" && restPath === "/api/confirm") {

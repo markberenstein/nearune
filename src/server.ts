@@ -160,6 +160,28 @@ Bun.serve({
       return json({ ok: true });
     }
 
+    // Temporary debug endpoint — dumps what kind of push subscription (old
+    // web-push vs. real APNs device token) is currently stored for a room,
+    // without touching anything or going through the once-a-day cron guard.
+    // Safe to remove once push notifications are confirmed working.
+    if (req.method === "GET" && url.pathname === "/api/debug/push-subs") {
+      const secret = Bun.env.CRON_SECRET;
+      const given = req.headers.get("x-cron-secret") || "";
+      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const roomId = url.searchParams.get("room") || "";
+      const state = await loadState(roomId);
+      const subs = state.pushSubs || {};
+      const out: any = {};
+      for (const who of Object.keys(subs)) {
+        const sub = (subs as any)[who];
+        out[who] = {
+          kind: sub.kind || "web",
+          idTail: (sub.token || sub.endpoint || "").slice(-24),
+        };
+      }
+      return json({ roomId, subs: out });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
       const secret = Bun.env.CRON_SECRET;
       const given = req.headers.get("x-cron-secret") || "";
@@ -180,6 +202,14 @@ Bun.serve({
               const answered = !!(a && a[who] && a[who]!.text);
               const sub = state.pushSubs[who];
               if (answered || !sub) continue;
+              // Temporary debug line — helps tell an old, no-longer-live web
+              // push subscription apart from a real APNs device token when
+              // troubleshooting why a "successful" send doesn't arrive.
+              // Safe to remove once push notifications are confirmed working.
+              console.log(
+                "[cron-push] room " + id + " who=" + who + " kind=" + (sub.kind || "web") +
+                " id=" + ((sub as any).token || (sub as any).endpoint || "").slice(-24)
+              );
               const res = await sendPush(sub, {
                 title: "Today's question is up",
                 body: "Your Nearune question for today is ready.",
@@ -256,7 +286,6 @@ Bun.serve({
       // background rather than blocking this request.
       if (anyPushConfigured && state.pushSubs) {
         const count = unansweredCount(state, date);
-        console.log("[answer] who=" + who + " date=" + date + " count=" + count + " subs=" + JSON.stringify(Object.keys(state.pushSubs)));
         if (count > 0) {
           const answererName = state.people?.[who]?.name || "Your partner";
           for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
@@ -278,38 +307,6 @@ Bun.serve({
                 }
               })
               .catch(() => {});
-          }
-        }
-        // Once both people have answered today, clear both native badges.
-        // Native has no client-side badge API (no navigator.setAppBadge in
-        // Capacitor's WebView), so a push is the only way to update it — but
-        // a silent (content-available) push is low-priority and iOS can
-        // throttle its delivery for an unpredictable amount of time, which
-        // isn't good enough for "the badge should clear now". A real alert
-        // push is delivered immediately, so this sends one to both people,
-        // collapsed under one tag so re-editing an answer afterward doesn't
-        // pile up repeat notifications. Web subscriptions already sync their
-        // own badge client-side, so this only targets APNs.
-        if (count === 0) {
-          for (const person of ["mark", "nikita"] as PersonKey[]) {
-            const sub = state.pushSubs[person];
-            console.log("[day-complete] " + person + " sub=" + (sub ? sub.kind || "web" : "none"));
-            if (!sub || sub.kind !== "apns") continue;
-            sendPush(sub, {
-              title: "You're all caught up",
-              body: "Both answers are in for today on Nearune.",
-              badge: 0,
-              tag: "day-complete",
-            })
-              .then((res) => {
-                console.log("[day-complete] " + person + " result=" + JSON.stringify(res));
-                if (res.gone) {
-                  saveState(roomId, (s) => {
-                    if (s.pushSubs) delete s.pushSubs[person];
-                  }).catch(() => {});
-                }
-              })
-              .catch((err) => console.log("[day-complete] " + person + " threw " + (err && err.message)));
           }
         }
       }
@@ -490,28 +487,6 @@ Bun.serve({
         s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
-      // Let the person who sent the invite know their partner is in —
-      // otherwise the only way they'd find out is having the app open when
-      // the 6s poll happens to catch it. Push only (not email): we never
-      // keep a raw email on file past sending the original invite, so
-      // there's nothing to email this back to.
-      const inviter: PersonKey = who === "mark" ? "nikita" : "mark";
-      const inviterSub = state.pushSubs && state.pushSubs[inviter];
-      if (inviterSub) {
-        const today = todayKeyPT();
-        sendPush(inviterSub, {
-          title: "Your Nearune partner joined!",
-          body: name + " just joined Nearune — today's question is ready for you both.",
-          badge: unansweredCount(state, today),
-          tag: "partner-joined",
-        }).then((res) => {
-          if (res.gone) {
-            saveState(roomId, (s) => {
-              if (s.pushSubs) delete s.pushSubs[inviter];
-            }).catch(() => {});
-          }
-        }).catch(() => {});
-      }
       return json({ who, ...forClient(state) });
     }
 

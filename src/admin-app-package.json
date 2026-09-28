@@ -1,8 +1,0 @@
-{
-  "name": "nearune-admin",
-  "private": true,
-  "version": "1.0.0",
-  "scripts": {
-    "start": "bun run src/server.ts"
-  }
-}

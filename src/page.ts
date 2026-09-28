@@ -1715,7 +1715,7 @@ const RAW = String.raw`<!doctype html>
     el.appendChild(
       h("p", {
         class: "sky-line",
-        text: (icon ? icon + " " : "") +
+        text:
           "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. This is " +
           shownName + "'s sky right now.",
       })

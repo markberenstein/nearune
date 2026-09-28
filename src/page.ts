@@ -1703,7 +1703,7 @@ const RAW = String.raw`<!doctype html>
       },
       [
         h("span", { class: "weather-widget-tile-icon", text: icon }),
-        h("span", { class: "weather-widget-tile-temp", text: w.tempF + "°" }),
+        h("span", { class: "weather-widget-tile-temp", text: w.temp + "°" + w.unit }),
         h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
       ]
     );
@@ -1715,18 +1715,18 @@ const RAW = String.raw`<!doctype html>
         h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" }),
       ];
       if (w.recentHours && w.recentHours.length > 1) {
-        var temps = w.recentHours.map(function (p) { return p.tempF; });
+        var temps = w.recentHours.map(function (p) { return p.temp; });
         var lo = Math.min.apply(null, temps);
         var hi = Math.max.apply(null, temps);
         var span = Math.max(1, hi - lo);
         var bars = w.recentHours.map(function (p) {
-          var pct = Math.round(((p.tempF - lo) / span) * 100);
-          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.tempF + "°" }, [
+          var pct = Math.round(((p.temp - lo) / span) * 100);
+          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.temp + "°" + w.unit }, [
             h("div", { class: "trend-bar-fill", style: "height:" + Math.max(pct, 8) + "%" }),
             h("div", { class: "trend-bar-hour", text: p.hour.replace(/\s?[AP]M/i, "") }),
           ]);
         });
-        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Last 6 hours" }));
+        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Last 6 hours (" + shownName + "'s local time)" }));
         detailKids.push(h("div", { class: "trend-bars" }, bars));
       }
       el.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));

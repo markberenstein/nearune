@@ -95,6 +95,10 @@ const RAW = String.raw`<!doctype html>
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .status-chip input { border: none; background: transparent; color: var(--ink); font: inherit; flex: 1; min-width: 0; outline: none; }
   .status-chip input::placeholder { color: var(--ink-soft); }
+  /* SANDBOX EXPERIMENT: the partner's chip is tappable to preview their
+     home screen's background — a subtle affordance, not a full button. */
+  .status-chip-preview:hover { border-color: var(--accent); }
+  .status-chip-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 24px; box-shadow: 0 2px 10px var(--shadow); }
   .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
@@ -472,9 +476,13 @@ const RAW = String.raw`<!doctype html>
   var MY_ROOM_LS_KEY = "nearuneMyRoom";
 
   var state = { version: 1, answers: {}, status: {}, comments: {} };
-  // SANDBOX EXPERIMENT: current weather at the other person's location, as
-  // last fetched from /api/weather — null until the first fetch resolves.
-  var otherWeather = null;
+  // SANDBOX EXPERIMENT: current weather at each person's location, as last
+  // fetched from /api/weather — null entries until the first fetch
+  // resolves. previewAsKey, when set, means "show the background/weather
+  // that PERSON's home screen would show" (tapping their status chip sets
+  // this) rather than your own — see effectiveViewKey()/currentSkyWeather().
+  var weatherByPerson = { mark: null, nikita: null };
+  var previewAsKey = null;
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -1434,7 +1442,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(form);
     if (!soloRegistration) {
       var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-      sw.addEventListener("click", function () { viewerKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
+      sw.addEventListener("click", function () { viewerKey = null; previewAsKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
     var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
@@ -1590,27 +1598,48 @@ const RAW = String.raw`<!doctype html>
   }
   function chooseViewer(key) {
     viewerKey = key;
+    previewAsKey = null;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     renderApp();
     loadWeather(); // wasn't known yet during initialLoad's call, now it is
   }
 
+  // SANDBOX EXPERIMENT: whose home screen is effectively being shown right
+  // now — normally that's just you, but tapping your partner's status chip
+  // sets previewAsKey and this becomes them instead.
+  function effectiveViewKey() { return previewAsKey || viewerKey; }
+  // The weather that SHOULD be tinting the background right now: whoever's
+  // screen is effectively being shown, this is the weather at THEIR
+  // partner's location — same rule the real app always applies, just
+  // possibly applied to the previewed person instead of you.
+  function currentSkyWeather() {
+    var key = effectiveViewKey();
+    if (!key) return null;
+    return weatherByPerson[otherKeyOf(key)] || null;
+  }
   // SANDBOX EXPERIMENT: a small "72°F, Clear" line under whichever clock
-  // block belongs to the person who ISN'T viewing right now — you already
-  // know your own weather; this is about theirs. Before viewerKey is known
-  // (the picker screen) or before the first weather fetch resolves, this is
-  // just empty text, so the clock blocks look identical to before.
+  // block belongs to whoever's weather is currently driving the
+  // background. Before viewerKey is known (the picker screen) or before
+  // the first weather fetch resolves, this is just empty text, so the
+  // clock blocks look identical to before.
   function clockWeatherBlock(key) {
-    if (!otherWeather || !viewerKey || key !== otherKeyOf(viewerKey)) return null;
-    return h("div", { class: "clock-weather", text: otherWeather.tempF + "°F, " + otherWeather.theme.label });
+    var w = currentSkyWeather();
+    if (!w || !viewerKey || key !== otherKeyOf(effectiveViewKey())) return null;
+    return h("div", { class: "clock-weather", text: w.tempF + "°F, " + w.theme.label });
   }
   // SANDBOX EXPERIMENT: the small why-is-the-background-doing-this line.
   // Only shows once weather has actually loaded for someone whose partner
-  // is known, so it never appears as an empty or half-true sentence.
+  // is known, so it never appears as an empty or half-true sentence. In
+  // preview mode it says whose home screen you're looking at, since the
+  // sky shown is no longer necessarily your own partner's.
   function skyLine() {
-    if (!otherWeather || !viewerKey) return null;
-    var name = personName(otherKeyOf(viewerKey));
-    return h("p", { class: "sky-line", text: "Sometimes you wonder what it's like to be where they are. This is the sky above " + name + " right now." });
+    var w = currentSkyWeather();
+    if (!w || !viewerKey) return null;
+    var shownName = personName(otherKeyOf(effectiveViewKey()));
+    if (previewAsKey) {
+      return h("p", { class: "sky-line", text: "This is " + personName(previewAsKey) + "'s world right now — the sky above " + shownName + "." });
+    }
+    return h("p", { class: "sky-line", text: "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." });
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
@@ -1629,14 +1658,32 @@ const RAW = String.raw`<!doctype html>
     ["mark", "nikita"].forEach(function (key) {
       var person = PEOPLE[key];
       var current = (state.status[key] && state.status[key].text) || "";
-      var chip = h("div", { class: "status-chip" }, [h("span", { class: "status-dot", style: "background:" + person.color })]);
+      var isSelf = viewerKey === key;
+      var chipClass = "status-chip" + (!isSelf ? " status-chip-preview" : "") + (previewAsKey === key ? " status-chip-active" : "");
+      var chip = h("div", { class: chipClass }, [h("span", { class: "status-dot", style: "background:" + person.color })]);
       var input = document.createElement("input");
       input.type = "text"; input.maxLength = 60; input.placeholder = tTemplate("{name}'s world right now…", { name: personName(key) });
       input.value = current;
-      input.disabled = viewerKey !== key;
-      input.addEventListener("change", function () {
-        api("/api/status", { who: key, text: input.value }).catch(function () { online = false; renderApp(); });
-      });
+      input.disabled = !isSelf;
+      if (isSelf) {
+        input.addEventListener("change", function () {
+          api("/api/status", { who: key, text: input.value }).catch(function () { online = false; renderApp(); });
+        });
+      } else {
+        // SANDBOX EXPERIMENT: tapping your partner's chip previews what
+        // their home screen looks like right now — the background switches
+        // to show weather at YOUR location, since from their side you're
+        // "the other person". Tap again (or the other chip) to return.
+        // The input itself is disabled, so clicks on it wouldn't otherwise
+        // reach this handler — pointer-events routes them to the chip.
+        input.style.pointerEvents = "none";
+        chip.style.cursor = "pointer";
+        chip.addEventListener("click", function () {
+          previewAsKey = previewAsKey === key ? null : key;
+          applyWeatherSky();
+          renderApp();
+        });
+      }
       chip.appendChild(input);
       row.appendChild(chip);
     });
@@ -1964,6 +2011,7 @@ const RAW = String.raw`<!doctype html>
     var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
     link.addEventListener("click", function () {
       viewerKey = null;
+      previewAsKey = null;
       try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
       renderApp();
     });
@@ -2075,19 +2123,21 @@ const RAW = String.raw`<!doctype html>
     warmPush();
   }
 
-  // SANDBOX EXPERIMENT: fetches the other person's current weather and
-  // tints the page background to match. Weather changes slowly, so this is
-  // only called once at load and every WEATHER_POLL_MS after — nowhere
-  // near as often as the 6-second state poll. Silently does nothing if
-  // viewerKey isn't known yet (the "who's here?" picker screen) or the
-  // fetch fails; the app looks and works identically either way.
+  // SANDBOX EXPERIMENT: fetches BOTH people's current weather in one call
+  // (cheap — the server caches per location) so switching between "your"
+  // view and a preview of your partner's is instant, no extra round trip.
+  // Weather changes slowly, so this is only called once at load and every
+  // WEATHER_POLL_MS after — nowhere near as often as the 6-second state
+  // poll. Silently does nothing if viewerKey isn't known yet (the "who's
+  // here?" picker screen) or the fetch fails; the app looks and works
+  // identically either way.
   var WEATHER_POLL_MS = 20 * 60 * 1000;
   async function loadWeather() {
     if (!viewerKey) return;
     try {
-      var res = await fetch(RP + "/api/weather?who=" + viewerKey);
+      var res = await fetch(RP + "/api/weather");
       var data = await res.json();
-      otherWeather = (data && data.weather) || null;
+      weatherByPerson = (data && data.weather) || { mark: null, nikita: null };
     } catch (e) {
       return; // leave whatever theme was already showing rather than clear it on a blip
     }
@@ -2097,9 +2147,10 @@ const RAW = String.raw`<!doctype html>
   function applyWeatherSky() {
     var el = document.getElementById("weather-sky");
     if (!el) return;
-    if (!otherWeather || !otherWeather.theme) { el.style.background = ""; return; }
-    var sky = otherWeather.theme.sky;
-    var glow = otherWeather.theme.glow;
+    var w = currentSkyWeather();
+    if (!w || !w.theme) { el.style.background = ""; return; }
+    var sky = w.theme.sky;
+    var glow = w.theme.glow;
     el.style.background =
       "radial-gradient(ellipse 120% 55% at 50% -10%, " + glow + "33, transparent 60%), " +
       "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 55%)";

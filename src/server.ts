@@ -374,14 +374,18 @@ Bun.serve({
     // SANDBOX EXPERIMENT: current weather at the OTHER person's registered
     // location — used to tint the app's background. `who` is the person
     // asking, so this looks up their partner.
+    // Both people's weather in one call — the client picks which one to
+    // display (its own partner's, by default, or the previewed person's
+    // partner's, in the click-to-preview experiment), which needs no extra
+    // round trip this way since currentWeather() is cached per location
+    // server-side regardless.
     if (req.method === "GET" && restPath === "/api/weather") {
-      const who = url.searchParams.get("who") || "";
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const other: PersonKey = who === "mark" ? "nikita" : "mark";
       const state = await loadState(roomId);
-      const location = state.people?.[other]?.location || "";
-      const weather = await currentWeather(location);
-      return json({ weather });
+      const [markWeather, nikitaWeather] = await Promise.all([
+        currentWeather(state.people?.mark?.location || ""),
+        currentWeather(state.people?.nikita?.location || ""),
+      ]);
+      return json({ weather: { mark: markWeather, nikita: nikitaWeather } });
     }
 
     if (req.method === "POST" && restPath === "/api/status") {

@@ -1746,13 +1746,14 @@ const RAW = String.raw`<!doctype html>
       ]
     );
     // The why-is-the-background-doing-this blurb — next to the tile, always
-    // shown once weather's loaded, not just when expanded.
-    var blurb = h("p", {
-      class: "sky-line",
-      text:
-        "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. The sky over " +
-        shownName + "'s head right now.",
-    });
+    // shown once weather's loaded, not just when expanded. The "this is
+    // whose sky" part is bolded so it stands out from the whimsical lead-in.
+    var blurb = h("p", { class: "sky-line" }, [
+      document.createTextNode(
+        "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. "
+      ),
+      h("strong", { text: "The sky over " + shownName + "'s head right now." }),
+    ]);
     wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     if (weatherExpanded) {
       var detailKids = [

@@ -58,6 +58,16 @@ async function fetchTopStory(query: string): Promise<LocalStory> {
   }
 }
 
+// Bias terms for the "fun local story" search — a wider net than just
+// feel-good news: local happenings, art and comedy scenes, and anything
+// genuinely odd or offbeat, not just heartwarming human-interest pieces.
+const FUN_TERMS =
+  "(fun OR quirky OR zany OR offbeat OR bizarre OR weird OR wacky OR " +
+  "feel-good OR heartwarming OR delightful OR charming OR " +
+  "festival OR event OR happening OR pop-up OR exhibit OR mural OR " +
+  "art OR artist OR gallery OR comedy OR comedian OR stand-up OR " +
+  "street performer OR contest OR record-breaking OR viral)";
+
 // Top local story for a free-text location, biased toward lighter/fun
 // stories first — falls back to the plain top local headline if a
 // fun/quirky-flavored search comes up empty (e.g. a slow news day).
@@ -67,7 +77,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   if (!q) return null;
   const cached = newsCache.get(q);
   if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
-  let value = await fetchTopStory(q + " (fun OR quirky OR feel-good OR heartwarming OR delightful)");
+  let value = await fetchTopStory(q + " " + FUN_TERMS);
   if (!value) value = await fetchTopStory(q);
   // Temporary diagnostic — same idea as weatherkit.ts's, to confirm from
   // the Railway logs whether this is actually pulling real stories.

@@ -89,7 +89,10 @@ export function themeFor(code: number, isDay: boolean): WeatherTheme {
 }
 
 const weatherCache = new Map<string, { at: number; value: WeatherNow | null }>();
-const WEATHER_TTL = 15 * 60 * 1000;
+// Kept a bit shorter than the client's poll interval (page.ts's
+// WEATHER_POLL_MS) so a client refresh reliably gets fresh-enough data
+// rather than serving the same cached value back every time.
+const WEATHER_TTL = 4 * 60 * 1000;
 
 // Current weather at a free-text location string, or null if it couldn't be
 // resolved (empty/unrecognized location, or the weather service is

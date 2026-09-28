@@ -71,23 +71,28 @@ const RAW = String.raw`<!doctype html>
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
-  .clock-weather-wrap { display: flex; flex-direction: column; align-items: center; }
-  /* SANDBOX EXPERIMENT: the weather caption is a small tappable badge —
-     tap to expand a detail card with the place name and full condition. */
-  .clock-weather {
-    font-size: 0.72rem; color: var(--ink-soft); margin-top: 2px;
-    display: inline-flex; align-items: center; gap: 3px;
-    background: none; border: none; font: inherit; cursor: pointer;
-    padding: 2px 8px; border-radius: 999px;
+  /* SANDBOX EXPERIMENT: a small floating badge pinned to the upper-left
+     corner, showing the partner's current weather — tap it to expand a
+     detail card underneath with the place name and full condition. Lives
+     outside #app (like #weather-sky) so it persists across every screen
+     — picker, registration, invite — not just the main app view. */
+  #weather-widget { position: fixed; top: 14px; left: 14px; z-index: 5; }
+  .weather-widget-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 6px 12px; font: inherit; font-size: 0.8rem; font-weight: 700; color: var(--ink);
+    cursor: pointer; box-shadow: 0 2px 8px var(--shadow);
   }
-  .clock-weather:hover { background: var(--surface-2); color: var(--ink); }
-  .clock-weather-open { background: var(--surface-2); color: var(--ink); }
-  .clock-weather-icon { font-size: 0.95rem; line-height: 1; }
-  .clock-weather-detail {
-    margin-top: 6px; padding: 8px 12px; background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 10px; font-size: 0.74rem; color: var(--ink-soft); text-align: center; max-width: 180px;
+  .weather-widget-badge:hover { border-color: var(--accent); }
+  .weather-widget-open { border-color: var(--accent); }
+  .clock-weather-icon { font-size: 1rem; line-height: 1; }
+  .weather-widget-detail {
+    margin-top: 8px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; font-size: 0.78rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
+    max-width: 200px;
   }
-  .clock-weather-detail-place { font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+  .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
+  .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
   .sky-line {
     text-align: center; font-style: italic; color: var(--ink-soft);
     font-size: 0.8rem; line-height: 1.5; margin: 12px 6px 0; text-wrap: balance;
@@ -266,6 +271,7 @@ const RAW = String.raw`<!doctype html>
 </head>
 <body>
 <div id="weather-sky"></div>
+<div id="weather-widget" style="display:none"></div>
 <div id="app"></div>
 <script>
 (function () {
@@ -504,14 +510,12 @@ const RAW = String.raw`<!doctype html>
   var state = { version: 1, answers: {}, status: {}, comments: {} };
   // SANDBOX EXPERIMENT: current weather at each person's location, as last
   // fetched from /api/weather — null entries until the first fetch
-  // resolves. previewAsKey, when set, means "show the background/weather
-  // that PERSON's home screen would show" (tapping their status chip sets
-  // this) rather than your own — see effectiveViewKey()/currentSkyWeather().
+  // resolves. See currentSkyWeather() — it's always the OTHER person's
+  // weather, from whichever of the two you're currently viewing as.
   var weatherByPerson = { mark: null, nikita: null };
-  var previewAsKey = null;
-  // SANDBOX EXPERIMENT: whether the weather badge's detail card is open —
-  // tap the badge to toggle. Resets whenever the effective view changes
-  // (switching who you're looking at) so a stale detail card never lingers.
+  // SANDBOX EXPERIMENT: whether the weather widget's detail card is open —
+  // tap the badge to toggle. Resets whenever who you're viewing as changes
+  // so a stale detail card never lingers.
   var weatherExpanded = false;
   var viewerKey = null;
   var soloRegistration = false;
@@ -1472,7 +1476,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(form);
     if (!soloRegistration) {
       var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-      sw.addEventListener("click", function () { viewerKey = null; previewAsKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
+      sw.addEventListener("click", function () { viewerKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); renderWeatherWidget(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
     var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
@@ -1628,18 +1632,19 @@ const RAW = String.raw`<!doctype html>
   }
   function chooseViewer(key) {
     viewerKey = key;
-    previewAsKey = null;
     weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     applyWeatherSky(); // instant, from whatever weather data is already loaded
+    renderWeatherWidget();
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
   }
 
   // SANDBOX EXPERIMENT: whose home screen is effectively being shown right
-  // now — normally that's just you, but tapping your partner's status chip
-  // sets previewAsKey and this becomes them instead.
-  function effectiveViewKey() { return previewAsKey || viewerKey; }
+  // now — always just whoever you're currently viewing as (see chooseViewer,
+  // which handles both the initial "who's here?" pick and tapping your
+  // partner's status chip to switch into their view).
+  function effectiveViewKey() { return viewerKey; }
   // The weather that SHOULD be tinting the background right now: whoever's
   // screen is effectively being shown, this is the weather at THEIR
   // partner's location — same rule the real app always applies, just
@@ -1649,64 +1654,65 @@ const RAW = String.raw`<!doctype html>
     if (!key) return null;
     return weatherByPerson[otherKeyOf(key)] || null;
   }
-  // SANDBOX EXPERIMENT: a small tappable "☀️ 72°F, Clear" badge under
-  // whichever clock block belongs to whoever's weather is currently
-  // driving the background. Before viewerKey is known (the picker screen)
-  // or before the first weather fetch resolves, this is just empty, so
-  // the clock blocks look identical to before. Tapping it expands a
-  // detail card with the place name and full condition — see
-  // weatherExpanded.
-  function clockWeatherBlock(key) {
+  // SANDBOX EXPERIMENT: the floating upper-left weather badge (#weather-widget,
+  // declared in the static page markup so it persists across every screen).
+  // Rebuilt directly via the DOM rather than through renderApp(), since it
+  // has to show up on the picker/registration/invite screens too, not just
+  // the main app view. Tapping the badge expands a detail card with the
+  // place name and full condition; tapping again collapses it.
+  function renderWeatherWidget() {
+    var el = document.getElementById("weather-widget");
+    if (!el) return;
     var w = currentSkyWeather();
-    if (!w || !viewerKey || key !== otherKeyOf(effectiveViewKey())) return null;
+    if (!w || !viewerKey) {
+      el.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    el.style.display = "";
+    el.innerHTML = "";
     var icon = (w.theme && w.theme.icon) || "";
+    var shownName = personName(otherKeyOf(effectiveViewKey()));
     var badge = h(
       "button",
       {
         type: "button",
-        class: "clock-weather" + (weatherExpanded ? " clock-weather-open" : ""),
+        class: "weather-widget-badge" + (weatherExpanded ? " weather-widget-open" : ""),
         "aria-expanded": weatherExpanded ? "true" : "false",
         onclick: function (e) {
           e.stopPropagation();
           weatherExpanded = !weatherExpanded;
-          renderApp();
+          renderWeatherWidget();
         },
       },
-      [h("span", { class: "clock-weather-icon", text: icon }), document.createTextNode(w.tempF + "°F, " + w.theme.label)]
+      [h("span", { class: "clock-weather-icon", text: icon }), document.createTextNode(w.tempF + "°F")]
     );
-    var kids = [badge];
+    el.appendChild(badge);
     if (weatherExpanded) {
-      kids.push(
-        h("div", { class: "clock-weather-detail" }, [
-          h("div", { class: "clock-weather-detail-place", text: w.location || "" }),
+      el.appendChild(
+        h("div", { class: "weather-widget-detail" }, [
+          h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
           h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
+          h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" }),
         ])
       );
     }
-    return h("div", { class: "clock-weather-wrap" }, kids);
   }
   // SANDBOX EXPERIMENT: the small why-is-the-background-doing-this line.
   // Only shows once weather has actually loaded for someone whose partner
-  // is known, so it never appears as an empty or half-true sentence. In
-  // preview mode it says whose home screen you're looking at, since the
-  // sky shown is no longer necessarily your own partner's.
+  // is known, so it never appears as an empty or half-true sentence.
   function skyLine() {
     var w = currentSkyWeather();
     if (!w || !viewerKey) return null;
     var shownName = personName(otherKeyOf(effectiveViewKey()));
     var icon = (w.theme && w.theme.icon) || "";
     var prefix = icon ? icon + " " : "";
-    if (previewAsKey) {
-      return h("p", { class: "sky-line", text: prefix + "This is " + personName(previewAsKey) + "'s world right now — the sky above " + shownName + "." });
-    }
     return h("p", { class: "sky-line", text: prefix + "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." });
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
-    var markWeather = clockWeatherBlock("mark");
-    var nikitaWeather = clockWeatherBlock("nikita");
-    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })].concat(markWeather ? [markWeather] : []));
-    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })].concat(nikitaWeather ? [nikitaWeather] : []));
+    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
+    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
     var line = skyLine();
@@ -2072,10 +2078,10 @@ const RAW = String.raw`<!doctype html>
     var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
     link.addEventListener("click", function () {
       viewerKey = null;
-      previewAsKey = null;
       weatherExpanded = false;
       try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
       renderApp();
+      renderWeatherWidget();
     });
     row.appendChild(link);
     var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") });
@@ -2186,14 +2192,15 @@ const RAW = String.raw`<!doctype html>
   }
 
   // SANDBOX EXPERIMENT: fetches BOTH people's current weather in one call
-  // (cheap — the server caches per location) so switching between "your"
-  // view and a preview of your partner's is instant, no extra round trip.
-  // Weather changes slowly, so this is only called once at load and every
-  // WEATHER_POLL_MS after — nowhere near as often as the 6-second state
-  // poll. Silently does nothing if viewerKey isn't known yet (the "who's
-  // here?" picker screen) or the fetch fails; the app looks and works
-  // identically either way.
-  var WEATHER_POLL_MS = 20 * 60 * 1000;
+  // (cheap — the server caches per location) so switching views is instant,
+  // no extra round trip. Polled fairly often (WEATHER_POLL_MS) and also
+  // refreshed whenever the tab/app comes back into view (see the
+  // visibilitychange listener below), so the background stays close to
+  // real-time without hammering the weather API while it's in the
+  // background. Silently does nothing if viewerKey isn't known yet (the
+  // "who's here?" picker screen) or the fetch fails; the app looks and
+  // works identically either way.
+  var WEATHER_POLL_MS = 5 * 60 * 1000;
   async function loadWeather() {
     if (!viewerKey) return;
     try {
@@ -2204,8 +2211,12 @@ const RAW = String.raw`<!doctype html>
       return; // leave whatever theme was already showing rather than clear it on a blip
     }
     applyWeatherSky();
+    renderWeatherWidget();
     renderApp();
   }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") loadWeather();
+  });
   function applyWeatherSky() {
     var el = document.getElementById("weather-sky");
     if (!el) return;

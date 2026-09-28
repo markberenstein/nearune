@@ -1606,6 +1606,8 @@ const RAW = String.raw`<!doctype html>
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     app.appendChild(tabBar());
+    // The countdown sits here, above the Today/Puzzle content.
+    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     if (activeTab === "puzzle") {
       var flash = puzzleFlashBanner();
       if (flash) app.appendChild(flash);
@@ -1615,8 +1617,6 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(streakCard());
       app.appendChild(journalSection());
     }
-    // The countdown moved down here, under both the Today and Puzzle blocks.
-    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());

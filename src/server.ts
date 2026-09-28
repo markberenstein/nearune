@@ -20,6 +20,7 @@ import {
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
+import { currentWeather } from "./weather";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
@@ -368,6 +369,19 @@ Bun.serve({
       const location = url.searchParams.get("location") || "";
       const info = await resolveLocationInfo(location);
       return json(info);
+    }
+
+    // SANDBOX EXPERIMENT: current weather at the OTHER person's registered
+    // location — used to tint the app's background. `who` is the person
+    // asking, so this looks up their partner.
+    if (req.method === "GET" && restPath === "/api/weather") {
+      const who = url.searchParams.get("who") || "";
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const other: PersonKey = who === "mark" ? "nikita" : "mark";
+      const state = await loadState(roomId);
+      const location = state.people?.[other]?.location || "";
+      const weather = await currentWeather(location);
+      return json({ weather });
     }
 
     if (req.method === "POST" && restPath === "/api/status") {

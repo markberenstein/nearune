@@ -71,6 +71,20 @@ const RAW = String.raw`<!doctype html>
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
+  .clock-weather { font-size: 0.72rem; color: var(--ink-soft); margin-top: 2px; }
+  .sky-line {
+    text-align: center; font-style: italic; color: var(--ink-soft);
+    font-size: 0.8rem; line-height: 1.5; margin: 12px 6px 0; text-wrap: balance;
+  }
+
+  /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
+     the other person's current weather. Sits behind #app (negative
+     z-index) and fades in/out via its own transition, so it never fights
+     the card surfaces on top for readability — those stay on --surface. */
+  #weather-sky {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    transition: background 1.4s ease;
+  }
 
   .status-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .status-chip {
@@ -221,6 +235,7 @@ const RAW = String.raw`<!doctype html>
 <meta name="apple-mobile-web-app-title" content="Nearune">
 </head>
 <body>
+<div id="weather-sky"></div>
 <div id="app"></div>
 <script>
 (function () {
@@ -457,6 +472,9 @@ const RAW = String.raw`<!doctype html>
   var MY_ROOM_LS_KEY = "nearuneMyRoom";
 
   var state = { version: 1, answers: {}, status: {}, comments: {} };
+  // SANDBOX EXPERIMENT: current weather at the other person's location, as
+  // last fetched from /api/weather — null until the first fetch resolves.
+  var otherWeather = null;
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -1565,15 +1583,36 @@ const RAW = String.raw`<!doctype html>
     viewerKey = key;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     renderApp();
+    loadWeather(); // wasn't known yet during initialLoad's call, now it is
   }
 
+  // SANDBOX EXPERIMENT: a small "72°F, Clear" line under whichever clock
+  // block belongs to the person who ISN'T viewing right now — you already
+  // know your own weather; this is about theirs. Before viewerKey is known
+  // (the picker screen) or before the first weather fetch resolves, this is
+  // just empty text, so the clock blocks look identical to before.
+  function clockWeatherBlock(key) {
+    if (!otherWeather || !viewerKey || key !== otherKeyOf(viewerKey)) return null;
+    return h("div", { class: "clock-weather", text: otherWeather.tempF + "°F, " + otherWeather.theme.label });
+  }
+  // SANDBOX EXPERIMENT: the small why-is-the-background-doing-this line.
+  // Only shows once weather has actually loaded for someone whose partner
+  // is known, so it never appears as an empty or half-true sentence.
+  function skyLine() {
+    if (!otherWeather || !viewerKey) return null;
+    var name = personName(otherKeyOf(viewerKey));
+    return h("p", { class: "sky-line", text: "Sometimes you wonder what it's like to be where they are. This is the sky above " + name + " right now." });
+  }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
-    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
-    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
+    var markWeather = clockWeatherBlock("mark");
+    var nikitaWeather = clockWeatherBlock("nikita");
+    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })].concat(markWeather ? [markWeather] : []));
+    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })].concat(nikitaWeather ? [nikitaWeather] : []));
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    return h("div", {}, [wordmark, clocks]);
+    var line = skyLine();
+    return h("div", {}, line ? [wordmark, clocks, line] : [wordmark, clocks]);
   }
 
   function statusRow() {
@@ -2017,6 +2056,7 @@ const RAW = String.raw`<!doctype html>
     } catch (e) { online = false; }
     renderApp();
     syncAppBadge();
+    loadWeather();
     // Pre-fetch the VAPID key and pre-register the service worker now,
     // neither of which needs a user gesture, so a later tap on "Enable
     // reminders" has the shortest possible path to the permission-gated
@@ -2024,6 +2064,36 @@ const RAW = String.raw`<!doctype html>
     // returning already-enabled device's service worker registered after a
     // browser restart or PWA reinstall-free update.
     warmPush();
+  }
+
+  // SANDBOX EXPERIMENT: fetches the other person's current weather and
+  // tints the page background to match. Weather changes slowly, so this is
+  // only called once at load and every WEATHER_POLL_MS after — nowhere
+  // near as often as the 6-second state poll. Silently does nothing if
+  // viewerKey isn't known yet (the "who's here?" picker screen) or the
+  // fetch fails; the app looks and works identically either way.
+  var WEATHER_POLL_MS = 20 * 60 * 1000;
+  async function loadWeather() {
+    if (!viewerKey) return;
+    try {
+      var res = await fetch(RP + "/api/weather?who=" + viewerKey);
+      var data = await res.json();
+      otherWeather = (data && data.weather) || null;
+    } catch (e) {
+      return; // leave whatever theme was already showing rather than clear it on a blip
+    }
+    applyWeatherSky();
+    renderApp();
+  }
+  function applyWeatherSky() {
+    var el = document.getElementById("weather-sky");
+    if (!el) return;
+    if (!otherWeather || !otherWeather.theme) { el.style.background = ""; return; }
+    var sky = otherWeather.theme.sky;
+    var glow = otherWeather.theme.glow;
+    el.style.background =
+      "radial-gradient(ellipse 120% 55% at 50% -10%, " + glow + "33, transparent 60%), " +
+      "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 55%)";
   }
 
   async function poll() {
@@ -2044,6 +2114,7 @@ const RAW = String.raw`<!doctype html>
   initialLoad();
   setInterval(tickClocks, 30000);
   setInterval(poll, POLL_MS);
+  setInterval(loadWeather, WEATHER_POLL_MS);
 })();
 </script>
 </body>

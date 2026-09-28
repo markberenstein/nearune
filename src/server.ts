@@ -18,7 +18,7 @@ import {
   removeFromEmailIndex,
   listRoomIds,
 } from "./storage";
-import { resolveTranslation } from "./translate";
+import { resolveTranslation, translateEmailStrings } from "./translate";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
@@ -388,14 +388,30 @@ Bun.serve({
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
       });
       const confirmUrl = url.origin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
+      // Sent in whichever language this person just picked on the
+      // registration form (translateEmailStrings falls back to English,
+      // string-by-string, if that language is unset/unrecognized or a
+      // translation call fails) — "Hi" and the name are kept separate so
+      // the name itself is never run through a translator.
+      const [subjT, hiT, setupT, confirmLinkT, step2T, footerT] = await translateEmailStrings(
+        [
+          "Confirm your Nearune account",
+          "Hi",
+          "You're almost set up:",
+          "Confirm your email",
+          "Go to the Nearune link to complete your partner's information",
+          "Don't see this arriving right away next time? Check your spam folder.",
+        ],
+        language
+      );
       const r = await sendEmail(
         email,
-        "Confirm your Nearune account",
-        "<p>Hi " + name + ",</p>" +
-          "<p>You're almost set up:</p>" +
-          "<ol><li><a href=\"" + confirmUrl + "\">Confirm your email</a></li>" +
-          "<li>Go to the Nearune link to complete your partner's information</li></ol>" +
-          "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
+        subjT,
+        "<p>" + hiT + " " + name + ",</p>" +
+          "<p>" + setupT + "</p>" +
+          "<ol><li><a href=\"" + confirmUrl + "\">" + confirmLinkT + "</a></li>" +
+          "<li>" + step2T + "</li></ol>" +
+          "<p style=\"color:#888;font-size:0.9em\">" + footerT + "</p>"
       );
       // Lets this person recover their room link later if they lose it.
       addToEmailIndex(emailHash, { roomId, who }).catch(() => {});

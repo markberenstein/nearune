@@ -1708,10 +1708,10 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
       ]
     );
-    el.appendChild(tile);
-    // The why-is-the-background-doing-this blurb — back under the widget
-    // itself (per feedback: it belongs right here, not off under the
-    // clocks), always shown once weather's loaded, not just when expanded.
+    // The why-is-the-background-doing-this blurb — above the tile (per
+    // feedback: reordered so the whimsical line reads first and the widget
+    // follows it), always shown once weather's loaded, not just when
+    // expanded.
     el.appendChild(
       h("p", {
         class: "sky-line",
@@ -1720,6 +1720,7 @@ const RAW = String.raw`<!doctype html>
           shownName + "'s sky right now.",
       })
     );
+    el.appendChild(tile);
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),

@@ -151,6 +151,13 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
         fetch(url),
         weatherKitConfigured() ? weatherKitCurrentWeather(point.lat, point.lon) : Promise.resolve(null),
       ]);
+      // Temporary diagnostic — lets us confirm from the Railway logs
+      // whether WeatherKit is actually succeeding or silently falling
+      // back, since the two look identical in the UI.
+      console.log(
+        "[weather] " + q + " -> " +
+        (weatherKit ? "WeatherKit ok (" + weatherKit.conditionCode + ")" : weatherKitConfigured() ? "WeatherKit configured but failed, using Open-Meteo" : "WeatherKit not configured, using Open-Meteo")
+      );
       if (res.ok) {
         const data: any = await res.json();
         const cur = data && data.current;

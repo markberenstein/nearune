@@ -71,21 +71,26 @@ const RAW = String.raw`<!doctype html>
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
-  /* SANDBOX EXPERIMENT: a small floating badge pinned to the upper-left
-     corner, showing the partner's current weather — tap it to expand a
-     detail card underneath with the place name and full condition. Lives
-     outside #app (like #weather-sky) so it persists across every screen
-     — picker, registration, invite — not just the main app view. */
+  /* SANDBOX EXPERIMENT: a small floating widget pinned to the upper-left
+     corner, showing the partner's current weather as a colored tile (like
+     a native Home Screen weather widget) rather than a plain pill button.
+     Tap it to expand a detail card underneath with the place name, full
+     condition, and a last-6-hours trend. Lives outside #app (like
+     #weather-sky) so it persists across every screen — picker,
+     registration, invite — not just the main app view. Deliberately NOT
+     paired with the sky-line blurb (that's back under the clocks, see
+     skyLine()) — the two read better apart than crammed together. */
   #weather-widget { position: fixed; top: 14px; left: 14px; z-index: 5; }
-  .weather-widget-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-    padding: 6px 12px; font: inherit; font-size: 0.8rem; font-weight: 700; color: var(--ink);
-    cursor: pointer; box-shadow: 0 2px 8px var(--shadow);
+  .weather-widget-tile {
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+    width: 92px; height: 92px; border-radius: 20px; padding: 10px 12px;
+    border: none; cursor: pointer; box-shadow: 0 4px 14px var(--shadow);
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   }
-  .weather-widget-badge:hover { border-color: var(--accent); }
-  .weather-widget-open { border-color: var(--accent); }
-  .clock-weather-icon { font-size: 1rem; line-height: 1; }
+  .weather-widget-open { box-shadow: 0 4px 14px var(--shadow), 0 0 0 2px var(--accent); }
+  .weather-widget-tile-icon { font-size: 1.3rem; line-height: 1; }
+  .weather-widget-tile-temp { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+  .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.9; }
   .weather-widget-detail {
     margin-top: 8px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
     border-radius: 12px; font-size: 0.78rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
@@ -93,11 +98,14 @@ const RAW = String.raw`<!doctype html>
   }
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
-  /* Lives under the weather widget's badge now, so it's left-aligned and
-     narrow rather than the old full-width centered line under the clocks. */
+  .weather-widget-trend-label { margin-top: 10px; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+  .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 44px; margin-top: 6px; }
+  .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
+  .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
   .sky-line {
-    text-align: left; font-style: italic; color: var(--ink-soft);
-    font-size: 0.74rem; line-height: 1.4; margin: 6px 0 0; max-width: 190px; text-wrap: balance;
+    text-align: center; font-style: italic; color: var(--ink-soft);
+    font-size: 0.8rem; line-height: 1.5; margin: 12px 6px 0; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -1675,11 +1683,17 @@ const RAW = String.raw`<!doctype html>
     el.innerHTML = "";
     var icon = (w.theme && w.theme.icon) || "";
     var shownName = personName(otherKeyOf(effectiveViewKey()));
-    var badge = h(
+    var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
+    // Styled like a small native weather widget (colored gradient tile,
+    // icon + big temp), not a plain pill button — tap it to expand the
+    // detail card below, which sits with its own gap rather than crowding
+    // the tile.
+    var tile = h(
       "button",
       {
         type: "button",
-        class: "weather-widget-badge" + (weatherExpanded ? " weather-widget-open" : ""),
+        class: "weather-widget-tile" + (weatherExpanded ? " weather-widget-open" : ""),
+        style: "background: linear-gradient(160deg, " + sky[0] + ", " + sky[1] + ")",
         "aria-expanded": weatherExpanded ? "true" : "false",
         onclick: function (e) {
           e.stopPropagation();
@@ -1687,24 +1701,47 @@ const RAW = String.raw`<!doctype html>
           renderWeatherWidget();
         },
       },
-      [h("span", { class: "clock-weather-icon", text: icon }), document.createTextNode(w.tempF + "°F")]
+      [
+        h("span", { class: "weather-widget-tile-icon", text: icon }),
+        h("span", { class: "weather-widget-tile-temp", text: w.tempF + "°" }),
+        h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
+      ]
     );
-    el.appendChild(badge);
-    // The why-is-the-background-doing-this blurb now lives under the
-    // widget itself (used to be its own line under the clocks) — always
-    // shown once weather has loaded, not just when the badge is expanded.
-    el.appendChild(
-      h("p", { class: "sky-line", text: (icon ? icon + " " : "") + "The sky doesn't know the distance between you — this is the one above " + shownName + " right now." })
-    );
+    el.appendChild(tile);
     if (weatherExpanded) {
-      el.appendChild(
-        h("div", { class: "weather-widget-detail" }, [
-          h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
-          h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
-          h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" }),
-        ])
-      );
+      var detailKids = [
+        h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
+        h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
+        h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" }),
+      ];
+      if (w.recentHours && w.recentHours.length > 1) {
+        var temps = w.recentHours.map(function (p) { return p.tempF; });
+        var lo = Math.min.apply(null, temps);
+        var hi = Math.max.apply(null, temps);
+        var span = Math.max(1, hi - lo);
+        var bars = w.recentHours.map(function (p) {
+          var pct = Math.round(((p.tempF - lo) / span) * 100);
+          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.tempF + "°" }, [
+            h("div", { class: "trend-bar-fill", style: "height:" + Math.max(pct, 8) + "%" }),
+            h("div", { class: "trend-bar-hour", text: p.hour.replace(/\s?[AP]M/i, "") }),
+          ]);
+        });
+        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Last 6 hours" }));
+        detailKids.push(h("div", { class: "trend-bars" }, bars));
+      }
+      el.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));
     }
+  }
+  // SANDBOX EXPERIMENT: the why-is-the-background-doing-this line. Lives
+  // under the clocks, separate from the weather widget (upper-left corner)
+  // — the two used to be crammed together, now they're not.
+  function skyLine() {
+    var w = currentSkyWeather();
+    if (!w || !viewerKey) return null;
+    var shownName = personName(otherKeyOf(effectiveViewKey()));
+    var icon = (w.theme && w.theme.icon) || "";
+    var prefix = icon ? icon + " " : "";
+    return h("p", { class: "sky-line", text: prefix + "The sky doesn't know the distance between you — this is the one above " + shownName + " right now." });
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
@@ -1712,7 +1749,8 @@ const RAW = String.raw`<!doctype html>
     var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    return h("div", {}, [wordmark, clocks]);
+    var line = skyLine();
+    return h("div", {}, line ? [wordmark, clocks, line] : [wordmark, clocks]);
   }
 
   function statusRow() {

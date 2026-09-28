@@ -32,12 +32,18 @@ async function geocode(location: string): Promise<GeoPoint> {
 
 export type WeatherTheme = { key: string; label: string; sky: [string, string]; glow: string; icon: string };
 
+export type HourlyPoint = { hour: string; tempF: number };
+
 export type WeatherNow = {
   location: string;
   tempF: number;
   code: number;
   isDay: boolean;
   theme: WeatherTheme;
+  // Last ~6 hours of temperature, oldest first, ending at the current hour
+  // — for the expanded detail card's trend view. Empty if the hourly call
+  // didn't come back cleanly (current conditions still work either way).
+  recentHours: HourlyPoint[];
 };
 
 // WMO weather codes (what Open-Meteo's `weather_code` returns), grouped into
@@ -108,19 +114,36 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
     if (point) {
       const url =
         "https://api.open-meteo.com/v1/forecast?latitude=" + point.lat + "&longitude=" + point.lon +
-        "&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=auto";
+        "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m&past_hours=6&forecast_hours=1" +
+        "&temperature_unit=fahrenheit&timezone=auto";
       const res = await fetch(url);
       if (res.ok) {
         const data: any = await res.json();
         const cur = data && data.current;
         if (cur && typeof cur.weather_code === "number") {
           const isDay = cur.is_day !== 0;
+          const recentHours: HourlyPoint[] = [];
+          const hourly = data && data.hourly;
+          if (hourly && Array.isArray(hourly.time) && Array.isArray(hourly.temperature_2m)) {
+            // past_hours=6 + forecast_hours=1 gives ~7 points ending just
+            // after now — drop any at/after the current reading so this is
+            // strictly "the last 6 hours leading up to now".
+            for (let i = 0; i < hourly.time.length; i++) {
+              if (hourly.time[i] >= cur.time) continue;
+              const t = new Date(hourly.time[i]);
+              recentHours.push({
+                hour: t.toLocaleTimeString([], { hour: "numeric" }),
+                tempF: Math.round(hourly.temperature_2m[i]),
+              });
+            }
+          }
           value = {
             location: point.name || q,
             tempF: Math.round(cur.temperature_2m),
             code: cur.weather_code,
             isDay,
             theme: themeFor(cur.weather_code, isDay),
+            recentHours: recentHours.slice(-6),
           };
         }
       }

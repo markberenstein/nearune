@@ -36,17 +36,24 @@ async function fetchTopStory(query: string): Promise<LocalStory> {
   try {
     const url = "https://news.google.com/rss/search?q=" + encodeURIComponent(query) + "&hl=en-US&gl=US&ceid=US:en";
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.log("[localnews] fetch " + JSON.stringify(query) + " -> HTTP " + res.status + " " + res.statusText);
+      return null;
+    }
     const xml = await res.text();
     const item = firstItem(xml);
-    if (!item || !item.title) return null;
+    if (!item || !item.title) {
+      console.log("[localnews] fetch " + JSON.stringify(query) + " -> no <item>/<title> found in RSS (" + xml.length + " bytes)");
+      return null;
+    }
     // Google News titles are usually "Headline - Source" — split on the
     // LAST " - " so a hyphen inside the headline itself doesn't break it.
     const idx = item.title.lastIndexOf(" - ");
     const headline = idx > 0 ? item.title.slice(0, idx) : item.title;
     const source = idx > 0 ? item.title.slice(idx + 3) : "";
     return { headline, source, url: item.link };
-  } catch {
+  } catch (err: any) {
+    console.log("[localnews] fetch " + JSON.stringify(query) + " -> threw: " + (err && err.message ? err.message : String(err)));
     return null;
   }
 }
@@ -62,6 +69,9 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
   let value = await fetchTopStory(q + " (fun OR quirky OR feel-good OR heartwarming OR delightful)");
   if (!value) value = await fetchTopStory(q);
+  // Temporary diagnostic — same idea as weatherkit.ts's, to confirm from
+  // the Railway logs whether this is actually pulling real stories.
+  console.log("[localnews] " + q + " -> " + (value ? "ok: " + JSON.stringify(value.headline) : "no story found"));
   newsCache.set(q, { at: Date.now(), value });
   return value;
 }

@@ -30,7 +30,7 @@ async function geocode(location: string): Promise<GeoPoint> {
   return value;
 }
 
-export type WeatherTheme = { key: string; label: string; sky: [string, string]; glow: string };
+export type WeatherTheme = { key: string; label: string; sky: [string, string]; glow: string; icon: string };
 
 export type WeatherNow = {
   location: string;
@@ -42,34 +42,34 @@ export type WeatherNow = {
 
 // WMO weather codes (what Open-Meteo's `weather_code` returns), grouped into
 // a handful of buckets — each with a day and night two-stop "sky" gradient
-// plus a glow color. Colors are chosen to sit near the app's existing warm
-// palette (see page.ts's --bg/--accent) rather than clashing with it — the
-// background should read as "the sky changed", not "a different app skin
-// loaded".
+// plus a glow color and an icon. Colors lean more saturated than the app's
+// own palette on purpose (see page.ts's --bg/--accent) — earlier versions
+// faded the second stop into --bg so the wash barely read as weather at
+// all; these stay visibly tinted end to end so it's unmistakable.
 const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
   clear: {
-    day: { key: "clear-day", label: "Clear", sky: ["#FDEBC8", "#FBF3EC"], glow: "#F2B75E" },
-    night: { key: "clear-night", label: "Clear", sky: ["#232A44", "#14171F"], glow: "#5B6AA8" },
+    day: { key: "clear-day", label: "Clear", sky: ["#FFD98A", "#FFEFC4"], glow: "#F2A93E", icon: "☀️" },
+    night: { key: "clear-night", label: "Clear", sky: ["#2A3466", "#141A33"], glow: "#6C7FC9", icon: "🌙" },
   },
   cloudy: {
-    day: { key: "cloudy-day", label: "Cloudy", sky: ["#E6DED2", "#FBF3EC"], glow: "#B9AC98" },
-    night: { key: "cloudy-night", label: "Cloudy", sky: ["#20242F", "#14171F"], glow: "#3A4054" },
+    day: { key: "cloudy-day", label: "Cloudy", sky: ["#D7CDBC", "#ECE3D2"], glow: "#A89878", icon: "⛅" },
+    night: { key: "cloudy-night", label: "Cloudy", sky: ["#262C3D", "#151822"], glow: "#4A5170", icon: "☁️" },
   },
   fog: {
-    day: { key: "fog-day", label: "Foggy", sky: ["#E4E1DA", "#FBF3EC"], glow: "#C8C3B8" },
-    night: { key: "fog-night", label: "Foggy", sky: ["#252A33", "#14171F"], glow: "#454C58" },
+    day: { key: "fog-day", label: "Foggy", sky: ["#DAD5C9", "#EBE6DA"], glow: "#B7AF9C", icon: "🌫️" },
+    night: { key: "fog-night", label: "Foggy", sky: ["#2B303A", "#171A21"], glow: "#565D6B", icon: "🌫️" },
   },
   rain: {
-    day: { key: "rain-day", label: "Rainy", sky: ["#C9D3DC", "#FBF3EC"], glow: "#7C93A8" },
-    night: { key: "rain-night", label: "Rainy", sky: ["#1A2530", "#14171F"], glow: "#3E5670" },
+    day: { key: "rain-day", label: "Rainy", sky: ["#9FB4C7", "#D5E0E9"], glow: "#5C7B98", icon: "🌧️" },
+    night: { key: "rain-night", label: "Rainy", sky: ["#17222E", "#0F161F"], glow: "#33506E", icon: "🌧️" },
   },
   snow: {
-    day: { key: "snow-day", label: "Snowy", sky: ["#EAF1F7", "#FBF3EC"], glow: "#BFD3E3" },
-    night: { key: "snow-night", label: "Snowy", sky: ["#232B38", "#14171F"], glow: "#4A5A70" },
+    day: { key: "snow-day", label: "Snowy", sky: ["#D7E8F5", "#EFF6FB"], glow: "#9EC2DE", icon: "❄️" },
+    night: { key: "snow-night", label: "Snowy", sky: ["#232E42", "#131A28"], glow: "#3E5A80", icon: "❄️" },
   },
   storm: {
-    day: { key: "storm-day", label: "Stormy", sky: ["#B7B0C4", "#FBF3EC"], glow: "#6E5C8C" },
-    night: { key: "storm-night", label: "Stormy", sky: ["#181524", "#14171F"], glow: "#463A66" },
+    day: { key: "storm-day", label: "Stormy", sky: ["#8E82AC", "#C4BADA"], glow: "#5B4880", icon: "⛈️" },
+    night: { key: "storm-night", label: "Stormy", sky: ["#15111F", "#0D0A14"], glow: "#3A2C5C", icon: "⛈️" },
   },
 };
 

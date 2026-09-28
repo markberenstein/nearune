@@ -71,7 +71,23 @@ const RAW = String.raw`<!doctype html>
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
-  .clock-weather { font-size: 0.72rem; color: var(--ink-soft); margin-top: 2px; }
+  .clock-weather-wrap { display: flex; flex-direction: column; align-items: center; }
+  /* SANDBOX EXPERIMENT: the weather caption is a small tappable badge —
+     tap to expand a detail card with the place name and full condition. */
+  .clock-weather {
+    font-size: 0.72rem; color: var(--ink-soft); margin-top: 2px;
+    display: inline-flex; align-items: center; gap: 3px;
+    background: none; border: none; font: inherit; cursor: pointer;
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .clock-weather:hover { background: var(--surface-2); color: var(--ink); }
+  .clock-weather-open { background: var(--surface-2); color: var(--ink); }
+  .clock-weather-icon { font-size: 0.95rem; line-height: 1; }
+  .clock-weather-detail {
+    margin-top: 6px; padding: 8px 12px; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 10px; font-size: 0.74rem; color: var(--ink-soft); text-align: center; max-width: 180px;
+  }
+  .clock-weather-detail-place { font-weight: 700; color: var(--ink); margin-bottom: 2px; }
   .sky-line {
     text-align: center; font-style: italic; color: var(--ink-soft);
     font-size: 0.8rem; line-height: 1.5; margin: 12px 6px 0; text-wrap: balance;
@@ -79,10 +95,20 @@ const RAW = String.raw`<!doctype html>
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
      the other person's current weather. Sits behind #app (negative
-     z-index) and fades in/out via its own transition, so it never fights
-     the card surfaces on top for readability — those stay on --surface. */
+     z-index) and fades in/out via its own transition. Runs the full page
+     height (not just a fading sliver at top) so it reads clearly as "the
+     sky changed" rather than a faint smudge — see applyWeatherSky(). */
   #weather-sky {
     position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    transition: background 1.4s ease;
+  }
+  /* When weather is showing, wash the same tint faintly into the card
+     surfaces too so it isn't only visible in the page margins. */
+  body.weather-active .card,
+  body.weather-active .clocks,
+  body.weather-active .status-chip,
+  body.weather-active .streak-card {
+    background: color-mix(in srgb, var(--surface) 86%, var(--weather-tint, transparent) 14%);
     transition: background 1.4s ease;
   }
 
@@ -483,6 +509,10 @@ const RAW = String.raw`<!doctype html>
   // this) rather than your own — see effectiveViewKey()/currentSkyWeather().
   var weatherByPerson = { mark: null, nikita: null };
   var previewAsKey = null;
+  // SANDBOX EXPERIMENT: whether the weather badge's detail card is open —
+  // tap the badge to toggle. Resets whenever the effective view changes
+  // (switching who you're looking at) so a stale detail card never lingers.
+  var weatherExpanded = false;
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -1442,7 +1472,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(form);
     if (!soloRegistration) {
       var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-      sw.addEventListener("click", function () { viewerKey = null; previewAsKey = null; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
+      sw.addEventListener("click", function () { viewerKey = null; previewAsKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
     var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
@@ -1599,6 +1629,7 @@ const RAW = String.raw`<!doctype html>
   function chooseViewer(key) {
     viewerKey = key;
     previewAsKey = null;
+    weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     renderApp();
     loadWeather(); // wasn't known yet during initialLoad's call, now it is
@@ -1617,15 +1648,41 @@ const RAW = String.raw`<!doctype html>
     if (!key) return null;
     return weatherByPerson[otherKeyOf(key)] || null;
   }
-  // SANDBOX EXPERIMENT: a small "72°F, Clear" line under whichever clock
-  // block belongs to whoever's weather is currently driving the
-  // background. Before viewerKey is known (the picker screen) or before
-  // the first weather fetch resolves, this is just empty text, so the
-  // clock blocks look identical to before.
+  // SANDBOX EXPERIMENT: a small tappable "☀️ 72°F, Clear" badge under
+  // whichever clock block belongs to whoever's weather is currently
+  // driving the background. Before viewerKey is known (the picker screen)
+  // or before the first weather fetch resolves, this is just empty, so
+  // the clock blocks look identical to before. Tapping it expands a
+  // detail card with the place name and full condition — see
+  // weatherExpanded.
   function clockWeatherBlock(key) {
     var w = currentSkyWeather();
     if (!w || !viewerKey || key !== otherKeyOf(effectiveViewKey())) return null;
-    return h("div", { class: "clock-weather", text: w.tempF + "°F, " + w.theme.label });
+    var icon = (w.theme && w.theme.icon) || "";
+    var badge = h(
+      "button",
+      {
+        type: "button",
+        class: "clock-weather" + (weatherExpanded ? " clock-weather-open" : ""),
+        "aria-expanded": weatherExpanded ? "true" : "false",
+        onclick: function (e) {
+          e.stopPropagation();
+          weatherExpanded = !weatherExpanded;
+          renderApp();
+        },
+      },
+      [h("span", { class: "clock-weather-icon", text: icon }), document.createTextNode(w.tempF + "°F, " + w.theme.label)]
+    );
+    var kids = [badge];
+    if (weatherExpanded) {
+      kids.push(
+        h("div", { class: "clock-weather-detail" }, [
+          h("div", { class: "clock-weather-detail-place", text: w.location || "" }),
+          h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
+        ])
+      );
+    }
+    return h("div", { class: "clock-weather-wrap" }, kids);
   }
   // SANDBOX EXPERIMENT: the small why-is-the-background-doing-this line.
   // Only shows once weather has actually loaded for someone whose partner
@@ -1636,10 +1693,12 @@ const RAW = String.raw`<!doctype html>
     var w = currentSkyWeather();
     if (!w || !viewerKey) return null;
     var shownName = personName(otherKeyOf(effectiveViewKey()));
+    var icon = (w.theme && w.theme.icon) || "";
+    var prefix = icon ? icon + " " : "";
     if (previewAsKey) {
-      return h("p", { class: "sky-line", text: "This is " + personName(previewAsKey) + "'s world right now — the sky above " + shownName + "." });
+      return h("p", { class: "sky-line", text: prefix + "This is " + personName(previewAsKey) + "'s world right now — the sky above " + shownName + "." });
     }
-    return h("p", { class: "sky-line", text: "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." });
+    return h("p", { class: "sky-line", text: prefix + "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." });
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
@@ -1680,6 +1739,7 @@ const RAW = String.raw`<!doctype html>
         chip.style.cursor = "pointer";
         chip.addEventListener("click", function () {
           previewAsKey = previewAsKey === key ? null : key;
+          weatherExpanded = false;
           applyWeatherSky();
           renderApp();
         });
@@ -2012,6 +2072,7 @@ const RAW = String.raw`<!doctype html>
     link.addEventListener("click", function () {
       viewerKey = null;
       previewAsKey = null;
+      weatherExpanded = false;
       try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
       renderApp();
     });
@@ -2148,12 +2209,22 @@ const RAW = String.raw`<!doctype html>
     var el = document.getElementById("weather-sky");
     if (!el) return;
     var w = currentSkyWeather();
-    if (!w || !w.theme) { el.style.background = ""; return; }
+    if (!w || !w.theme) {
+      el.style.background = "";
+      document.body.classList.remove("weather-active");
+      document.body.style.removeProperty("--weather-tint");
+      return;
+    }
     var sky = w.theme.sky;
     var glow = w.theme.glow;
+    // Full page height (not just a fading sliver near the top) and a
+    // stronger glow, so it reads clearly as "the sky changed" — see the
+    // comment on #weather-sky for why this used to be too subtle.
     el.style.background =
-      "radial-gradient(ellipse 120% 55% at 50% -10%, " + glow + "33, transparent 60%), " +
-      "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 55%)";
+      "radial-gradient(ellipse 140% 70% at 50% -10%, " + glow + "59, transparent 65%), " +
+      "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
+    document.body.classList.add("weather-active");
+    document.body.style.setProperty("--weather-tint", glow);
   }
 
   async function poll() {

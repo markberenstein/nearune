@@ -84,6 +84,51 @@ export async function translateViaMyMemory(text: string, target: string, source:
   return translated;
 }
 
+// Mirrors the LANGUAGES list embedded in the client (page.ts) — keep the two
+// in sync if that list ever changes. Registration/invite forms submit the
+// display name (e.g. "Hindi"), not the code, so this is how the server side
+// turns that back into a code resolveTranslation can use.
+const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
+  english: "en", hindi: "hi", spanish: "es", french: "fr", german: "de",
+  portuguese: "pt", italian: "it", "mandarin chinese": "zh", japanese: "ja",
+  korean: "ko", arabic: "ar", "farsi (persian)": "fa", russian: "ru",
+  bengali: "bn", punjabi: "pa", gujarati: "gu", marathi: "mr", tamil: "ta",
+  telugu: "te", urdu: "ur", dutch: "nl", polish: "pl", turkish: "tr",
+  vietnamese: "vi", thai: "th", indonesian: "id", "tagalog (filipino)": "tl",
+  greek: "el", hebrew: "he", swedish: "sv", norwegian: "no",
+  ukrainian: "uk", romanian: "ro", czech: "cs", swahili: "sw",
+  gibberish: "gib",
+};
+export function langCodeForName(name: string): string | null {
+  const s = (name || "").trim().toLowerCase();
+  return LANGUAGE_NAME_TO_CODE[s] || null;
+}
+
+// Translates a batch of short, plain-text email strings into the language a
+// person picked at registration (its display name, e.g. "Hindi" — not a
+// code). Returns the English originals untouched, string-for-string, when
+// the language is missing, unrecognized, or already English, and falls back
+// to the English original for any individual string that fails to
+// translate — an email should never go out half-translated-into-an-error.
+// Keep each string short and self-contained (no embedded HTML tags): this
+// runs each one through the same translator used for daily-question
+// answers, which only handles plain text.
+export async function translateEmailStrings(strings: string[], languageName: string): Promise<string[]> {
+  const code = langCodeForName(languageName);
+  if (!code || code === "en") return strings;
+  const out: string[] = [];
+  for (const s of strings) {
+    if (!s) { out.push(s); continue; }
+    try {
+      const { translated } = await resolveTranslation(s, code, "en");
+      out.push(translated || s);
+    } catch {
+      out.push(s);
+    }
+  }
+  return out;
+}
+
 // Script-based source guess, used only when Google gave us nothing to go on.
 // Avoids naively assuming the author always writes in their *registered*
 // language — someone registered for Hindi may still type in English.

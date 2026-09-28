@@ -73,13 +73,12 @@ const RAW = String.raw`<!doctype html>
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
   /* SANDBOX EXPERIMENT: a small floating widget pinned to the upper-left
      corner, showing the partner's current weather as a colored tile (like
-     a native Home Screen weather widget) rather than a plain pill button.
-     Tap it to expand a detail card underneath with the place name, full
+     a native Home Screen weather widget) rather than a plain pill button,
+     with the why-is-the-background-doing-this blurb right underneath it.
+     Tap the tile to expand a detail card with the place name, full
      condition, and a last-6-hours trend. Lives outside #app (like
      #weather-sky) so it persists across every screen — picker,
-     registration, invite — not just the main app view. Deliberately NOT
-     paired with the sky-line blurb (that's back under the clocks, see
-     skyLine()) — the two read better apart than crammed together. */
+     registration, invite — not just the main app view. */
   #weather-widget { position: fixed; top: 14px; left: 14px; z-index: 5; }
   .weather-widget-tile {
     display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
@@ -103,9 +102,11 @@ const RAW = String.raw`<!doctype html>
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
   .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
+  /* Lives right under the weather widget (upper-left), so left-aligned and
+     narrow rather than the old full-width centered line under the clocks. */
   .sky-line {
-    text-align: center; font-style: italic; color: var(--ink-soft);
-    font-size: 0.8rem; line-height: 1.5; margin: 12px 6px 0; text-wrap: balance;
+    text-align: left; font-style: italic; color: var(--ink-soft);
+    font-size: 0.74rem; line-height: 1.4; margin: 6px 0 0; max-width: 220px; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -1708,6 +1709,17 @@ const RAW = String.raw`<!doctype html>
       ]
     );
     el.appendChild(tile);
+    // The why-is-the-background-doing-this blurb — back under the widget
+    // itself (per feedback: it belongs right here, not off under the
+    // clocks), always shown once weather's loaded, not just when expanded.
+    el.appendChild(
+      h("p", {
+        class: "sky-line",
+        text: (icon ? icon + " " : "") +
+          "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. This is " +
+          shownName + "'s sky right now.",
+      })
+    );
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
@@ -1732,25 +1744,13 @@ const RAW = String.raw`<!doctype html>
       el.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));
     }
   }
-  // SANDBOX EXPERIMENT: the why-is-the-background-doing-this line. Lives
-  // under the clocks, separate from the weather widget (upper-left corner)
-  // — the two used to be crammed together, now they're not.
-  function skyLine() {
-    var w = currentSkyWeather();
-    if (!w || !viewerKey) return null;
-    var shownName = personName(otherKeyOf(effectiveViewKey()));
-    var icon = (w.theme && w.theme.icon) || "";
-    var prefix = icon ? icon + " " : "";
-    return h("p", { class: "sky-line", text: prefix + "The sky doesn't know the distance between you — this is the one above " + shownName + " right now." });
-  }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
     var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
     var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    var line = skyLine();
-    return h("div", {}, line ? [wordmark, clocks, line] : [wordmark, clocks]);
+    return h("div", {}, [wordmark, clocks]);
   }
 
   function statusRow() {

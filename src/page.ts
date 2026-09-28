@@ -1617,6 +1617,11 @@ const RAW = String.raw`<!doctype html>
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     app.appendChild(tabBar());
+    // The fun local-news line, then the countdown — both now sit here,
+    // above the Today/Puzzle content.
+    var newsBlock = newsLineBlock();
+    if (newsBlock) app.appendChild(newsBlock);
+    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     if (activeTab === "puzzle") {
       var flash = puzzleFlashBanner();
       if (flash) app.appendChild(flash);
@@ -1626,11 +1631,6 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(streakCard());
       app.appendChild(journalSection());
     }
-    // The fun local-news line sits here, between the Today/Puzzle content
-    // and the countdown.
-    var newsBlock = newsLineBlock();
-    if (newsBlock) app.appendChild(newsBlock);
-    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());

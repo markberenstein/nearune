@@ -50,8 +50,15 @@ export type HourlyPoint = { hour: string; temp: number };
 
 export type WeatherNow = {
   location: string;
+  // `temp`/`unit` is the primary reading — Fahrenheit for US (and the other
+  // Fahrenheit-holdout) locations, Celsius everywhere else. `tempF`/`tempC`
+  // carry the SAME reading in both units, so a caller can show the other
+  // one as a secondary/under value regardless of which is primary — see
+  // page.ts's weatherWidgetBlock().
   temp: number;
   unit: "F" | "C";
+  tempF: number;
+  tempC: number;
   code: number;
   isDay: boolean;
   theme: WeatherTheme;
@@ -138,11 +145,13 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
     const point = await geocode(q);
     if (point) {
       const unit = unitForCountry(point.countryCode);
-      const openMeteoUnit = unit === "F" ? "fahrenheit" : "celsius";
+      // Always fetched in Celsius (Open-Meteo's default) regardless of the
+      // primary display unit, so both tempF/tempC below — and the trend
+      // bars — can be derived from one raw reading rather than guessing.
       const url =
         "https://api.open-meteo.com/v1/forecast?latitude=" + point.lat + "&longitude=" + point.lon +
         "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m&past_hours=6&forecast_hours=1" +
-        "&temperature_unit=" + openMeteoUnit + "&timezone=auto";
+        "&timezone=auto";
       // Fetched in parallel: Open-Meteo (needed either way, for the
       // last-6-hours trend, and as the fallback current reading) and
       // WeatherKit (only actually called when configured — see
@@ -176,7 +185,9 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
               const t = new Date(hourly.time[i]);
               recentHours.push({
                 hour: t.toLocaleTimeString([], { hour: "numeric" }),
-                temp: Math.round(hourly.temperature_2m[i]),
+                // hourly.temperature_2m is always Celsius now — convert to
+                // the primary display unit for the trend bars.
+                temp: celsiusTo(unit, hourly.temperature_2m[i]),
               });
             }
           }
@@ -184,12 +195,17 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
           // condition classification) when it came back; otherwise fall
           // back to Open-Meteo's, which is always fetched above anyway.
           const isDay = weatherKit ? weatherKit.isDay : cur.is_day !== 0;
-          const temp = weatherKit ? celsiusTo(unit, weatherKit.tempC) : Math.round(cur.temperature_2m);
+          // Raw Celsius reading, whichever provider supplied it — cur.temperature_2m
+          // is always Celsius now (see the fetch URL above).
+          const rawC = weatherKit ? weatherKit.tempC : cur.temperature_2m;
+          const temp = celsiusTo(unit, rawC);
           const theme = weatherKit ? themeForBucket(weatherKitBucket(weatherKit.conditionCode), isDay) : themeFor(cur.weather_code, isDay);
           value = {
             location: point.name || q,
             temp,
             unit,
+            tempF: celsiusTo("F", rawC),
+            tempC: celsiusTo("C", rawC),
             code: cur.weather_code,
             isDay,
             theme,

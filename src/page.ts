@@ -89,7 +89,9 @@ const RAW = String.raw`<!doctype html>
   }
   .weather-widget-open { box-shadow: 0 4px 14px var(--shadow), 0 0 0 2px var(--accent); }
   .weather-widget-tile-icon { font-size: 1.3rem; line-height: 1; }
-  .weather-widget-tile-temp { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+  .weather-widget-tile-temp-wrap { display: flex; flex-direction: column; gap: 1px; }
+  .weather-widget-tile-temp { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+  .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 0.85; }
   .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.9; }
   .weather-widget-detail {
     padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
@@ -1722,6 +1724,18 @@ const RAW = String.raw`<!doctype html>
     var shownName = personName(otherKeyOf(effectiveViewKey()));
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
+    // Secondary unit under the big temp: primary is already Fahrenheit for
+    // a US location and Celsius elsewhere (w.unit, set server-side). Show
+    // the OTHER unit underneath whenever either partner is US-based — if
+    // this location itself is US, that's trivially true; if it's not, we
+    // still show the Fahrenheit conversion underneath for the US-based
+    // partner's benefit.
+    var eitherPartnerIsUS =
+      (weatherByPerson.mark && weatherByPerson.mark.unit === "F") ||
+      (weatherByPerson.nikita && weatherByPerson.nikita.unit === "F");
+    var secondaryTemp = w.unit === "F" ? w.tempC : w.tempF;
+    var secondaryUnit = w.unit === "F" ? "C" : "F";
+    var showSecondary = eitherPartnerIsUS && typeof secondaryTemp === "number";
     // Styled like a small native weather widget (colored gradient tile,
     // icon + big temp), not a plain pill button — tap it to expand the
     // detail card below, which sits with its own gap rather than crowding
@@ -1741,7 +1755,16 @@ const RAW = String.raw`<!doctype html>
       },
       [
         h("span", { class: "weather-widget-tile-icon", text: icon }),
-        h("span", { class: "weather-widget-tile-temp", text: w.temp + "°" + w.unit }),
+        h(
+          "span",
+          { class: "weather-widget-tile-temp-wrap" },
+          [
+            h("span", { class: "weather-widget-tile-temp", text: w.temp + "°" + w.unit }),
+            showSecondary
+              ? h("span", { class: "weather-widget-tile-temp-secondary", text: secondaryTemp + "°" + secondaryUnit })
+              : null,
+          ].filter(Boolean)
+        ),
         h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
       ]
     );

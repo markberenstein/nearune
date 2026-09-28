@@ -1694,7 +1694,7 @@ const RAW = String.raw`<!doctype html>
     // widget itself (used to be its own line under the clocks) — always
     // shown once weather has loaded, not just when the badge is expanded.
     el.appendChild(
-      h("p", { class: "sky-line", text: (icon ? icon + " " : "") + "Sometimes you wonder what it's like to be where they are. This is the sky above " + shownName + " right now." })
+      h("p", { class: "sky-line", text: (icon ? icon + " " : "") + "The sky doesn't know the distance between you — this is the one above " + shownName + " right now." })
     );
     if (weatherExpanded) {
       el.appendChild(

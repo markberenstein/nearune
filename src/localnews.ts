@@ -58,27 +58,40 @@ async function fetchTopStory(query: string): Promise<LocalStory> {
   }
 }
 
-// Bias terms for the "fun local story" search — a wider net than just
-// feel-good news: local happenings, art and comedy scenes, and anything
-// genuinely odd or offbeat, not just heartwarming human-interest pieces.
+// Bias terms for the "fun local story" search — local happenings, art and
+// comedy scenes, genuinely lighthearted stuff. Deliberately drops ambiguous
+// words like "bizarre", "weird", "event" or "viral" that match just as
+// easily onto a dark headline ("bizarre crash", "shooting at event") as a
+// fun one — see EXCLUDE_TERMS below for the other half of that fix.
 const FUN_TERMS =
-  "(fun OR quirky OR zany OR offbeat OR bizarre OR weird OR wacky OR " +
-  "feel-good OR heartwarming OR delightful OR charming OR " +
-  "festival OR event OR happening OR pop-up OR exhibit OR mural OR " +
-  "art OR artist OR gallery OR comedy OR comedian OR stand-up OR " +
-  "street performer OR contest OR record-breaking OR viral)";
+  "(fun OR quirky OR zany OR offbeat OR wacky OR whimsical OR " +
+  "feel-good OR heartwarming OR delightful OR charming OR uplifting OR " +
+  "festival OR \"pop-up\" OR exhibit OR mural OR parade OR carnival OR " +
+  "art OR artist OR gallery OR comedy OR comedian OR \"stand-up\" OR " +
+  "\"street performer\" OR busker OR mascot OR \"local hero\")";
+
+// Excluded so a story merely mentioning "event" or "festival" in passing
+// (a shooting AT an event, a crash NEAR a festival) can't sneak through —
+// Google News search supports "-" exclusion the same way its web search does.
+const EXCLUDE_TERMS =
+  "-crime -shooting -shot -killed -dead -death -died -murder -stabbing " +
+  "-robbery -arrest -arrested -crash -accident -fire -explosion -war " +
+  "-attack -assault -abuse -scandal -lawsuit -controversy -protest " +
+  "-flood -disaster -storm -outage -layoffs -bankruptcy -indicted -trial";
 
 // Top local story for a free-text location, biased toward lighter/fun
-// stories first — falls back to the plain top local headline if a
-// fun/quirky-flavored search comes up empty (e.g. a slow news day).
-// Returns null if the location is blank or nothing came back either way.
+// stories and away from anything dark. Tries a strict version first (fun
+// terms + dark-topic exclusions), loosens slightly if that comes up empty,
+// and returns null — rather than falling back to an unfiltered "top local
+// headline" — if nothing lighthearted turns up at all, since showing a
+// grim headline here would defeat the point.
 export async function topLocalStory(location: string): Promise<LocalStory> {
   const q = (location || "").trim();
   if (!q) return null;
   const cached = newsCache.get(q);
   if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
-  let value = await fetchTopStory(q + " " + FUN_TERMS);
-  if (!value) value = await fetchTopStory(q);
+  let value = await fetchTopStory(q + " " + FUN_TERMS + " " + EXCLUDE_TERMS);
+  if (!value) value = await fetchTopStory(q + " " + FUN_TERMS);
   // Temporary diagnostic — same idea as weatherkit.ts's, to confirm from
   // the Railway logs whether this is actually pulling real stories.
   console.log("[localnews] " + q + " -> " + (value ? "ok: " + JSON.stringify(value.headline) : "no story found"));

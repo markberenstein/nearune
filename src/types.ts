@@ -27,6 +27,10 @@ export type PushSubscriptionRecord = WebPushSubscriptionRecord | ApnsSubscriptio
 
 export type State = {
   version: number;
+  // ISO timestamp set once, when the room is first created — only present on
+  // rooms created after this field was added; older rooms show as unknown in
+  // the admin view rather than guessing a date.
+  createdAt?: string;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
   status: Partial<Record<PersonKey, { text: string; at: string }>>;
   comments: Record<string, Comment[]>;

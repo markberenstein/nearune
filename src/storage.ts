@@ -130,6 +130,7 @@ export async function createRoom(): Promise<string> {
     id = randomRoomId();
   }
   const fresh = defaultState();
+  fresh.createdAt = new Date().toISOString();
   await writeRaw(id, JSON.stringify(fresh));
   caches.set(id, fresh);
   return id;

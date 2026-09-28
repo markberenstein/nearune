@@ -295,6 +295,8 @@ Bun.serve({
         // the day-complete block below already sends both people a real
         // badge-clearing push in that case.
         const ownSub = state.pushSubs[who];
+        // TEMPORARY diagnostic — remove once badge sync is confirmed working.
+        console.log("[own-badge] who=" + who + " count=" + count + " ownSub=" + (ownSub ? (ownSub.kind || "web") : "none"));
         if (count > 0 && ownSub && ownSub.kind === "apns") {
           sendPush(ownSub, {
             title: "Answer saved",
@@ -303,13 +305,15 @@ Bun.serve({
             tag: "own-answered",
           })
             .then((res) => {
+              // TEMPORARY diagnostic — remove once badge sync is confirmed working.
+              console.log("[own-badge] result=" + JSON.stringify(res));
               if (res.gone) {
                 saveState(roomId, (s) => {
                   if (s.pushSubs) delete s.pushSubs[who];
                 }).catch(() => {});
               }
             })
-            .catch(() => {});
+            .catch((err) => console.log("[own-badge] threw " + (err && err.message)));
         }
         // Once both people have answered today, clear both native badges.
         // Native has no client-side badge API (no navigator.setAppBadge in

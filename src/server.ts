@@ -262,6 +262,13 @@ Bun.serve({
       // background rather than blocking this request.
       if (anyPushConfigured && state.pushSubs) {
         const count = unansweredCount(state, date);
+        // TEMPORARY diagnostic — re-added to catch a report of the badge
+        // sometimes not clearing to 0 for whoever submits the completing
+        // answer. Remove once confirmed working across a few real days.
+        console.log(
+          "[answer] who=" + who + " date=" + date + " count=" + count +
+          " subs=" + JSON.stringify(Object.keys(state.pushSubs).map((k) => k + ":" + ((state.pushSubs as any)[k].kind || "web")))
+        );
         if (count > 0) {
           const answererName = state.people?.[who]?.name || "Your partner";
           for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
@@ -301,6 +308,8 @@ Bun.serve({
         // the day-complete block below already sends both people a real
         // badge-clearing push in that case.
         const ownSub = state.pushSubs[who];
+        // TEMPORARY diagnostic — see note above.
+        console.log("[own-badge] who=" + who + " count=" + count + " ownSub=" + (ownSub ? (ownSub.kind || "web") : "none"));
         if (count > 0 && ownSub && ownSub.kind === "apns") {
           sendPush(ownSub, {
             title: "Answer saved",
@@ -309,13 +318,15 @@ Bun.serve({
             tag: "own-answered",
           })
             .then((res) => {
+              // TEMPORARY diagnostic — see note above.
+              console.log("[own-badge] who=" + who + " result=" + JSON.stringify(res));
               if (res.gone) {
                 saveState(roomId, (s) => {
                   if (s.pushSubs) delete s.pushSubs[who];
                 }).catch(() => {});
               }
             })
-            .catch(() => {});
+            .catch((err) => console.log("[own-badge] who=" + who + " threw " + (err && err.message)));
         }
         // Once both people have answered today, clear both native badges.
         // Native has no client-side badge API (no navigator.setAppBadge in
@@ -330,6 +341,8 @@ Bun.serve({
         if (count === 0) {
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
+            // TEMPORARY diagnostic — see note above.
+            console.log("[day-complete] " + person + " sub=" + (sub ? (sub.kind || "web") : "none"));
             if (!sub || sub.kind !== "apns") continue;
             sendPush(sub, {
               title: "You're all caught up",
@@ -338,13 +351,15 @@ Bun.serve({
               tag: "day-complete",
             })
               .then((res) => {
+                // TEMPORARY diagnostic — see note above.
+                console.log("[day-complete] " + person + " result=" + JSON.stringify(res));
                 if (res.gone) {
                   saveState(roomId, (s) => {
                     if (s.pushSubs) delete s.pushSubs[person];
                   }).catch(() => {});
                 }
               })
-              .catch(() => {});
+              .catch((err) => console.log("[day-complete] " + person + " threw " + (err && err.message)));
           }
         }
       }

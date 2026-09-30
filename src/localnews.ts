@@ -6,11 +6,50 @@
 // newsLineBlock(). Results are cached for a while since a "fun local
 // story" doesn't need to be near-real-time, and this keeps from hammering
 // Google's endpoint on every client poll.
+//
+// A single broad "fun" query tends to return the SAME top headline for
+// days at a time (Google News' top match for an evergreen query is sticky),
+// which is what made the news line feel repetitive. To fix that, each day
+// picks one narrow theme (see THEMES below) from a rotating list, keyed to
+// the app's own day boundary (todayKeyPT — 6:30am IST, same as everywhere
+// else in the app), so the query itself — not just the cache — changes
+// daily and both people see a genuinely different kind of story each day.
+
+import { todayKeyPT } from "./util";
 
 export type LocalStory = { headline: string; source: string; url: string } | null;
 
 const newsCache = new Map<string, { at: number; value: LocalStory }>();
 const NEWS_TTL = 2 * 60 * 60 * 1000; // 2 hours — news doesn't need to be fresh-by-the-minute
+
+// Narrow, non-overlapping themes — each day's query uses only ONE of these,
+// so the story pool genuinely differs day to day instead of the same broad
+// "fun" search returning the same sticky top result. Order doesn't matter;
+// the day picks an index by hashing todayKeyPT() below.
+const THEMES: { name: string; terms: string }[] = [
+  { name: "festival", terms: "(festival OR carnival OR \"pop-up\" OR parade OR fair)" },
+  { name: "art", terms: "(art OR artist OR gallery OR mural OR exhibit OR installation)" },
+  { name: "comedy", terms: "(comedy OR comedian OR \"stand-up\" OR \"open mic\" OR improv)" },
+  { name: "heartwarming", terms: "(heartwarming OR \"feel-good\" OR uplifting OR delightful OR touching)" },
+  { name: "quirky", terms: "(quirky OR zany OR offbeat OR wacky OR whimsical OR bizarre-but-fun)" },
+  { name: "local hero", terms: "(\"local hero\" OR volunteer OR kindness OR generosity OR \"good samaritan\")" },
+  { name: "street performance", terms: "(\"street performer\" OR busker OR mascot OR \"flash mob\")" },
+  { name: "food & treats", terms: "(bakery OR \"food truck\" OR \"ice cream\" OR cafe OR \"pop-up shop\")" },
+  { name: "pets & animals", terms: "(\"shelter dog\" OR \"animal rescue\" OR \"therapy dog\" OR reunited OR adoption)" },
+  { name: "milestone", terms: "(\"world record\" OR \"record-breaking\" OR milestone OR anniversary OR reunion)" },
+  { name: "music", terms: "(concert OR busker OR \"open mic\" OR choir OR \"live music\")" },
+  { name: "community", terms: "(\"community garden\" OR neighborhood OR \"block party\" OR fundraiser OR charity)" },
+];
+
+// Deterministic day-to-day rotation through THEMES, keyed to the app's own
+// day boundary so it changes once per "Nearune day" (not at UTC midnight)
+// and both people get the same theme on the same day.
+function todaysTheme(): { name: string; terms: string } {
+  const key = todayKeyPT(); // "YYYY-MM-DD"
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return THEMES[hash % THEMES.length];
+}
 
 function decodeEntities(s: string): string {
   return s
@@ -58,18 +97,6 @@ async function fetchTopStory(query: string): Promise<LocalStory> {
   }
 }
 
-// Bias terms for the "fun local story" search — local happenings, art and
-// comedy scenes, genuinely lighthearted stuff. Deliberately drops ambiguous
-// words like "bizarre", "weird", "event" or "viral" that match just as
-// easily onto a dark headline ("bizarre crash", "shooting at event") as a
-// fun one — see EXCLUDE_TERMS below for the other half of that fix.
-const FUN_TERMS =
-  "(fun OR quirky OR zany OR offbeat OR wacky OR whimsical OR " +
-  "feel-good OR heartwarming OR delightful OR charming OR uplifting OR " +
-  "festival OR \"pop-up\" OR exhibit OR mural OR parade OR carnival OR " +
-  "art OR artist OR gallery OR comedy OR comedian OR \"stand-up\" OR " +
-  "\"street performer\" OR busker OR mascot OR \"local hero\")";
-
 // Excluded so a story merely mentioning "event" or "festival" in passing
 // (a shooting AT an event, a crash NEAR a festival) can't sneak through —
 // Google News search supports "-" exclusion the same way its web search does.
@@ -80,21 +107,32 @@ const EXCLUDE_TERMS =
   "-flood -disaster -storm -outage -layoffs -bankruptcy -indicted -trial";
 
 // Top local story for a free-text location, biased toward lighter/fun
-// stories and away from anything dark. Tries a strict version first (fun
-// terms + dark-topic exclusions), loosens slightly if that comes up empty,
-// and returns null — rather than falling back to an unfiltered "top local
-// headline" — if nothing lighthearted turns up at all, since showing a
-// grim headline here would defeat the point.
+// stories and away from anything dark — using today's single rotating
+// theme (see THEMES/todaysTheme above) rather than one broad "fun" query,
+// so the story pool changes daily instead of Google News handing back the
+// same sticky top match every time. Tries with dark-topic exclusions
+// first, loosens slightly if that comes up empty, and returns null —
+// rather than falling back to an unfiltered "top local headline" — if
+// nothing on-theme turns up at all, since showing a grim or unrelated
+// headline here would defeat the point.
 export async function topLocalStory(location: string): Promise<LocalStory> {
   const q = (location || "").trim();
   if (!q) return null;
-  const cached = newsCache.get(q);
+  const theme = todaysTheme();
+  // Cache key includes the date + theme so a cache entry can never survive
+  // across the app's day boundary and serve yesterday's story.
+  const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
+  const cached = newsCache.get(cacheKey);
   if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
-  let value = await fetchTopStory(q + " " + FUN_TERMS + " " + EXCLUDE_TERMS);
-  if (!value) value = await fetchTopStory(q + " " + FUN_TERMS);
+  let value = await fetchTopStory(q + " " + theme.terms + " " + EXCLUDE_TERMS);
+  if (!value) value = await fetchTopStory(q + " " + theme.terms);
   // Temporary diagnostic — same idea as weatherkit.ts's, to confirm from
-  // the Railway logs whether this is actually pulling real stories.
-  console.log("[localnews] " + q + " -> " + (value ? "ok: " + JSON.stringify(value.headline) : "no story found"));
-  newsCache.set(q, { at: Date.now(), value });
+  // the Railway logs whether this is actually pulling real stories, and
+  // which theme is active for the day.
+  console.log(
+    "[localnews] " + q + " (theme=" + theme.name + ") -> " +
+    (value ? "ok: " + JSON.stringify(value.headline) : "no story found")
+  );
+  newsCache.set(cacheKey, { at: Date.now(), value });
   return value;
 }

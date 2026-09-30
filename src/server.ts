@@ -220,6 +220,17 @@ Bun.serve({
 
     if (req.method === "GET" && restPath === "/api/state") {
       const state = await loadState(roomId);
+      // TEMPORARY diagnostic — Mark asked to confirm the current puzzle
+      // answer server-side since it's hidden from the client until solved.
+      // Remove after checking Railway logs once.
+      if (!roomId) {
+        console.log(
+          "[puzzle-debug] question=" + JSON.stringify(state.puzzleQuestion) +
+          " answer=" + JSON.stringify(state.puzzleAnswer) +
+          " solved=" + state.puzzleSolved +
+          " setBy=" + state.puzzleSetBy
+        );
+      }
       return json(forClient(state));
     }
 

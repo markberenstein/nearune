@@ -102,6 +102,50 @@ export function weatherKitBucket(conditionCode: string): string {
   return CONDITION_BUCKET[conditionCode] || "cloudy";
 }
 
+// Apple's own display text for each conditionCode (close to what the real
+// Weather app shows), used instead of our generic bucket label whenever
+// WeatherKit actually supplied the reading — see weather.ts's
+// currentWeather(). Falls back to a crude space-inserted version of the
+// code itself for anything Apple adds later that isn't listed here yet.
+const CONDITION_LABEL: Record<string, string> = {
+  Clear: "Clear",
+  MostlyClear: "Mostly Clear",
+  PartlyCloudy: "Partly Cloudy",
+  MostlyCloudy: "Mostly Cloudy",
+  Cloudy: "Cloudy",
+  Windy: "Windy",
+  Breezy: "Breezy",
+  Foggy: "Foggy",
+  Haze: "Haze",
+  Smoky: "Smoky",
+  Frigid: "Frigid",
+  Hot: "Hot",
+  Drizzle: "Drizzle",
+  Rain: "Rain",
+  HeavyRain: "Heavy Rain",
+  IsolatedThunderstorms: "Isolated T-Storms",
+  ScatteredThunderstorms: "Scattered T-Storms",
+  StrongStorms: "Strong Storms",
+  Thunderstorms: "Thunderstorms",
+  Hurricane: "Hurricane",
+  TropicalStorm: "Tropical Storm",
+  Squalls: "Squalls",
+  Snow: "Snow",
+  HeavySnow: "Heavy Snow",
+  Blizzard: "Blizzard",
+  Flurries: "Flurries",
+  SnowShowers: "Snow Showers",
+  Sleet: "Sleet",
+  FreezingRain: "Freezing Rain",
+  FreezingDrizzle: "Freezing Drizzle",
+  WintryMix: "Wintry Mix",
+  Hail: "Hail",
+};
+
+export function weatherKitLabel(conditionCode: string): string {
+  return CONDITION_LABEL[conditionCode] || conditionCode.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
 // Fetches current conditions from WeatherKit for a geocoded point, or null
 // if credentials aren't configured or the call fails for any reason —
 // callers (weather.ts) fall back to Open-Meteo in that case, so this never

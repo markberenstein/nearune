@@ -8,7 +8,7 @@
 // background theme. Results are cached briefly in memory since weather
 // changes slowly and this can be polled by every device every so often.
 
-import { weatherKitConfigured, weatherKitCurrentWeather, weatherKitBucket } from "./weatherkit";
+import { weatherKitConfigured, weatherKitCurrentWeather, weatherKitBucket, weatherKitLabel } from "./weatherkit";
 
 type GeoPoint = { lat: number; lon: number; name: string; countryCode: string } | null;
 
@@ -69,36 +69,60 @@ export type WeatherNow = {
   recentHours: HourlyPoint[];
 };
 
+// Monoline, filled icons in the spirit of Apple's own SF Symbols weather
+// glyphs (sun / moon / cloud, with rain-drops, snow-dots or a bolt added
+// for the rest) — rendered via innerHTML (see page.ts's h()'s "html" attr)
+// rather than emoji, which read as a generic/cartoonish weather app rather
+// than anything resembling Apple Weather. "currentColor" picks up the
+// tile's own white text color (see .weather-widget-tile-icon svg in
+// page.ts), so these need no per-theme color of their own.
+const ICON_SUN =
+  '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1v3M12 20v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></g></svg>';
+const ICON_MOON =
+  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.2 14.9A8.5 8.5 0 1 1 9.1 3.8a7 7 0 0 0 11.1 11.1z"/></svg>';
+const ICON_CLOUD =
+  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 18a5 5 0 0 1 .3-10 6 6 0 0 1 11.1 2.1A4.3 4.3 0 0 1 18 18H7.5z"/></svg>';
+const ICON_FOG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 10.5a4 4 0 0 1 7.4-2 4.5 4.5 0 0 1 4.4 3.3"/><path d="M4 15h16M4 19h16"/></svg>';
+const ICON_RAIN =
+  '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M7.2 14.5a4.6 4.6 0 0 1 .3-9.2 5.6 5.6 0 0 1 10.3 1.9A4 4 0 0 1 17.6 15H7.2z"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8.5 18l-1 3M12.5 18l-1 3M16.5 18l-1 3"/></g></svg>';
+const ICON_SNOW =
+  '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M7.2 14.5a4.6 4.6 0 0 1 .3-9.2 5.6 5.6 0 0 1 10.3 1.9A4 4 0 0 1 17.6 15H7.2z"/><g fill="currentColor"><circle cx="8.5" cy="19" r="1.2"/><circle cx="12.5" cy="20.5" r="1.2"/><circle cx="16.5" cy="19" r="1.2"/></g></svg>';
+const ICON_STORM =
+  '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M7.2 13a4.6 4.6 0 0 1 .3-9.2 5.6 5.6 0 0 1 10.3 1.9A4 4 0 0 1 17.6 13.5H7.2z"/><path fill="currentColor" d="M13.2 13l-4 6.5h3.1l-1 4.5 5.2-7.3h-3.1z"/></svg>';
+
 // WMO weather codes (what Open-Meteo's `weather_code` returns), grouped into
 // a handful of buckets — each with a day and night two-stop "sky" gradient
-// plus a glow color and an icon. Colors lean more saturated than the app's
-// own palette on purpose (see page.ts's --bg/--accent) — earlier versions
-// faded the second stop into --bg so the wash barely read as weather at
-// all; these stay visibly tinted end to end so it's unmistakable.
+// plus a glow color and an icon. Colors are modeled on Apple's own Weather
+// app rather than a generic sunny-yellow/cartoon palette: clear skies are
+// blue (not yellow/orange — that read as a different app entirely), and
+// every bucket leans into the same cool, slightly desaturated range Apple
+// uses so the backgrounds feel like one coherent app rather than a rainbow
+// of condition colors.
 const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
   clear: {
-    day: { key: "clear-day", label: "Clear", sky: ["#FFD98A", "#FFEFC4"], glow: "#F2A93E", icon: "☀️" },
-    night: { key: "clear-night", label: "Clear", sky: ["#2A3466", "#141A33"], glow: "#6C7FC9", icon: "🌙" },
+    day: { key: "clear-day", label: "Clear", sky: ["#2E7BC4", "#8FCBF2"], glow: "#FFD27A", icon: ICON_SUN },
+    night: { key: "clear-night", label: "Clear", sky: ["#060B1E", "#141B3D"], glow: "#4C62A8", icon: ICON_MOON },
   },
   cloudy: {
-    day: { key: "cloudy-day", label: "Cloudy", sky: ["#D7CDBC", "#ECE3D2"], glow: "#A89878", icon: "⛅" },
-    night: { key: "cloudy-night", label: "Cloudy", sky: ["#262C3D", "#151822"], glow: "#4A5170", icon: "☁️" },
+    day: { key: "cloudy-day", label: "Cloudy", sky: ["#6E7F91", "#B6C4D1"], glow: "#8C97A3", icon: ICON_CLOUD },
+    night: { key: "cloudy-night", label: "Cloudy", sky: ["#171D27", "#2B333F"], glow: "#49525F", icon: ICON_CLOUD },
   },
   fog: {
-    day: { key: "fog-day", label: "Foggy", sky: ["#DAD5C9", "#EBE6DA"], glow: "#B7AF9C", icon: "🌫️" },
-    night: { key: "fog-night", label: "Foggy", sky: ["#2B303A", "#171A21"], glow: "#565D6B", icon: "🌫️" },
+    day: { key: "fog-day", label: "Fog", sky: ["#98A2AA", "#CBD2D6"], glow: "#AEB7BD", icon: ICON_FOG },
+    night: { key: "fog-night", label: "Fog", sky: ["#1C2227", "#333B41"], glow: "#4B545B", icon: ICON_FOG },
   },
   rain: {
-    day: { key: "rain-day", label: "Rainy", sky: ["#9FB4C7", "#D5E0E9"], glow: "#5C7B98", icon: "🌧️" },
-    night: { key: "rain-night", label: "Rainy", sky: ["#17222E", "#0F161F"], glow: "#33506E", icon: "🌧️" },
+    day: { key: "rain-day", label: "Rain", sky: ["#43566B", "#7B93A9"], glow: "#3A5068", icon: ICON_RAIN },
+    night: { key: "rain-night", label: "Rain", sky: ["#0A121C", "#1B2733"], glow: "#2C4056", icon: ICON_RAIN },
   },
   snow: {
-    day: { key: "snow-day", label: "Snowy", sky: ["#D7E8F5", "#EFF6FB"], glow: "#9EC2DE", icon: "❄️" },
-    night: { key: "snow-night", label: "Snowy", sky: ["#232E42", "#131A28"], glow: "#3E5A80", icon: "❄️" },
+    day: { key: "snow-day", label: "Snow", sky: ["#AFD0E6", "#E6F1FA"], glow: "#9AC0DD", icon: ICON_SNOW },
+    night: { key: "snow-night", label: "Snow", sky: ["#17222F", "#2B3D51"], glow: "#3C5570", icon: ICON_SNOW },
   },
   storm: {
-    day: { key: "storm-day", label: "Stormy", sky: ["#8E82AC", "#C4BADA"], glow: "#5B4880", icon: "⛈️" },
-    night: { key: "storm-night", label: "Stormy", sky: ["#15111F", "#0D0A14"], glow: "#3A2C5C", icon: "⛈️" },
+    day: { key: "storm-day", label: "Thunderstorms", sky: ["#39344C", "#685C83"], glow: "#4A3C6A", icon: ICON_STORM },
+    night: { key: "storm-night", label: "Thunderstorms", sky: ["#0A0812", "#1A1427"], glow: "#2D2246", icon: ICON_STORM },
   },
 };
 
@@ -199,7 +223,13 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
           // is always Celsius now (see the fetch URL above).
           const rawC = weatherKit ? weatherKit.tempC : cur.temperature_2m;
           const temp = celsiusTo(unit, rawC);
-          const theme = weatherKit ? themeForBucket(weatherKitBucket(weatherKit.conditionCode), isDay) : themeFor(cur.weather_code, isDay);
+          // When WeatherKit supplied the reading, show Apple's own condition
+          // text ("Mostly Clear", "Scattered T-Storms", ...) instead of our
+          // coarser bucket label — cloned rather than mutating the shared
+          // THEMES object, which every other call also reads from.
+          const theme = weatherKit
+            ? Object.assign({}, themeForBucket(weatherKitBucket(weatherKit.conditionCode), isDay), { label: weatherKitLabel(weatherKit.conditionCode) })
+            : themeFor(cur.weather_code, isDay);
           value = {
             location: point.name || q,
             temp,

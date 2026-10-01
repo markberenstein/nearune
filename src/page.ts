@@ -88,9 +88,13 @@ const RAW = String.raw`<!doctype html>
     color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   }
   .weather-widget-open { box-shadow: 0 4px 14px var(--shadow), 0 0 0 2px var(--accent); }
-  .weather-widget-tile-icon { font-size: 1.3rem; line-height: 1; }
+  .weather-widget-tile-icon { line-height: 1; }
+  .weather-widget-tile-icon svg { width: 22px; height: 22px; display: block; }
   .weather-widget-tile-temp-wrap { display: flex; flex-direction: column; gap: 1px; }
-  .weather-widget-tile-temp { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+  /* Apple's own Weather app renders the current temp in an ultra-light
+     weight, not bold — bold read as a generic weather-widget look rather
+     than anything resembling the real app. */
+  .weather-widget-tile-temp { font-size: 1.55rem; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
   .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 0.85; }
   .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.9; }
   .weather-widget-detail {
@@ -1957,7 +1961,7 @@ const RAW = String.raw`<!doctype html>
         },
       },
       [
-        h("span", { class: "weather-widget-tile-icon", text: icon }),
+        h("span", { class: "weather-widget-tile-icon", html: icon }),
         h(
           "span",
           { class: "weather-widget-tile-temp-wrap" },

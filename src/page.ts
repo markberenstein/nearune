@@ -187,11 +187,27 @@ const RAW = String.raw`<!doctype html>
   .voice-card-status-text { font-size: 0.8rem; color: var(--ink-soft); margin: 0; }
   .voice-card-actions { display: flex; gap: 8px; }
   .voice-card-howto { margin: 2px 0 0; }
-  .voice-card-howto summary { font-size: 0.82rem; font-weight: 600; color: var(--accent); cursor: pointer; list-style: none; }
+  .voice-card-howto summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 0.82rem; font-weight: 600; color: var(--ink);
+    cursor: pointer; list-style: none;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 12px;
+  }
   .voice-card-howto summary::-webkit-details-marker { display: none; }
-  .voice-card-howto summary::before { content: "▸ "; }
-  .voice-card-howto[open] summary::before { content: "▾ "; }
-  .voice-card-howto .voice-card-prompt { margin-top: 6px; }
+  .voice-card-howto summary::marker { content: ""; }
+  /* A CSS-drawn chevron (two rotated borders) rather than a text glyph —
+     a Unicode arrow character here previously got mangled into its escape
+     name ("u25B8") somewhere in the Windows/git round trip, so this avoids
+     non-ASCII source entirely and still reads as a standard expander bar. */
+  .voice-card-howto-chevron {
+    width: 7px; height: 7px; flex-shrink: 0;
+    border-right: 2px solid var(--ink-soft); border-bottom: 2px solid var(--ink-soft);
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+  }
+  .voice-card-howto[open] summary .voice-card-howto-chevron { transform: rotate(45deg); margin-top: -3px; }
+  .voice-card-howto .voice-card-prompt { margin: 8px 2px 0; }
 
   .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
@@ -2118,7 +2134,10 @@ const RAW = String.raw`<!doctype html>
       // button itself, since it opens a file picker, not a recorder — the
       // steps only make sense read before tapping it.
       var howto = h("details", { class: "voice-card-howto" });
-      howto.appendChild(h("summary", { text: t("How do I record this?") }));
+      var howtoSummary = h("summary", {});
+      howtoSummary.appendChild(document.createTextNode(t("How do I record this?")));
+      howtoSummary.appendChild(h("span", { class: "voice-card-howto-chevron" }));
+      howto.appendChild(howtoSummary);
       howto.appendChild(h("p", {
         class: "voice-card-prompt",
         text: t("First, open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files, and choose “On My iPhone” (not iCloud Drive) as the location so it saves instantly. Then come back here and tap the button below to choose that recording from Files."),

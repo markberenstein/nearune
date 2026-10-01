@@ -186,6 +186,12 @@ const RAW = String.raw`<!doctype html>
   .voice-card-prompt { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); margin: 2px 0 0; }
   .voice-card-status-text { font-size: 0.8rem; color: var(--ink-soft); margin: 0; }
   .voice-card-actions { display: flex; gap: 8px; }
+  .voice-card-howto { margin: 2px 0 0; }
+  .voice-card-howto summary { font-size: 0.82rem; font-weight: 600; color: var(--accent); cursor: pointer; list-style: none; }
+  .voice-card-howto summary::-webkit-details-marker { display: none; }
+  .voice-card-howto summary::before { content: "▸ "; }
+  .voice-card-howto[open] summary::before { content: "▾ "; }
+  .voice-card-howto .voice-card-prompt { margin-top: 6px; }
 
   .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
@@ -2056,13 +2062,14 @@ const RAW = String.raw`<!doctype html>
     var key = viewerKey;
     var person = state.people && state.people[key];
     var hasVoice = !!(person && person.hasVoice);
+    var partnerName = personName(otherKeyOf(key));
     var wrap = h("div", { class: "voice-card" });
-    wrap.appendChild(h("div", { class: "voice-card-title", text: hasVoice ? t("Your voice is set up") : t("Hear each other, not just picture it") }));
+    wrap.appendChild(h("div", { class: "voice-card-title", text: tTemplate("Let {name} hear your voice", { name: partnerName }) }));
     wrap.appendChild(h("p", {
       class: "voice-card-desc",
       text: hasVoice
-        ? tTemplate("{name} already hears your voice in their head — now, whenever they tap 🔊, they can actually hear it.", { name: personName(otherKeyOf(key)) })
-        : tTemplate("You already hear {name}'s voice in your head when you think of them. Record about 30 seconds so they can actually hear yours too, instead of a generic one.", { name: personName(otherKeyOf(key)) }),
+        ? tTemplate("{name} already hears your voice in their head — now, whenever they tap 🔊, they can actually hear it.", { name: partnerName })
+        : tTemplate("You already hear {name}'s voice in your head when you think of them. Record about 30 seconds so they can actually hear yours too, instead of a generic one.", { name: partnerName }),
     }));
     if (voiceRecordState.error) {
       wrap.appendChild(h("p", { class: "voice-card-error", text: voiceRecordState.error }));
@@ -2103,14 +2110,20 @@ const RAW = String.raw`<!doctype html>
       });
       pickBtn.disabled = voiceRecordState.uploading;
       pickBtn.addEventListener("click", function () { fileInput.click(); });
-      // Instructions come BEFORE the button on purpose — this button opens
-      // a file picker, not a recorder, so reading "record in Voice Memos
-      // first" only makes sense if you see it before you've already tapped
-      // the button expecting it to start recording.
-      wrap.appendChild(h("p", {
+      // Collapsed by default, right under the first paragraph — the
+      // instructions are a few steps long (Voice Memos → Save to Files →
+      // come back here), which read as clutter to anyone who's done this
+      // before or is just skimming; tapping the summary reveals them for
+      // anyone who actually needs the walkthrough. Still appears above the
+      // button itself, since it opens a file picker, not a recorder — the
+      // steps only make sense read before tapping it.
+      var howto = h("details", { class: "voice-card-howto" });
+      howto.appendChild(h("summary", { text: t("How do I record this?") }));
+      howto.appendChild(h("p", {
         class: "voice-card-prompt",
         text: t("First, open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files, and choose “On My iPhone” (not iCloud Drive) as the location so it saves instantly. Then come back here and tap the button below to choose that recording from Files."),
       }));
+      wrap.appendChild(howto);
       btnRow.appendChild(pickBtn);
       btnRow.appendChild(fileInput);
       wrap.appendChild(btnRow);

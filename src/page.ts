@@ -1956,9 +1956,12 @@ const RAW = String.raw`<!doctype html>
     }
   }
 
-  function uploadVoiceSample(key) {
-    var mimeType = (voiceRecordState.mediaRecorder && voiceRecordState.mediaRecorder.mimeType) || "audio/webm";
-    var blob = new Blob(voiceRecordState.chunks, { type: mimeType });
+  function uploadVoiceSample(key, blobOverride) {
+    var blob = blobOverride;
+    if (!blob) {
+      var mimeType = (voiceRecordState.mediaRecorder && voiceRecordState.mediaRecorder.mimeType) || "audio/webm";
+      blob = new Blob(voiceRecordState.chunks, { type: mimeType });
+    }
     voiceRecordState.chunks = [];
     voiceRecordState.mediaRecorder = null;
     if (!blob.size) {
@@ -2010,17 +2013,55 @@ const RAW = String.raw`<!doctype html>
     var person = state.people && state.people[key];
     var hasVoice = !!(person && person.hasVoice);
     var wrap = h("div", { class: "voice-card" });
-    wrap.appendChild(h("div", { class: "voice-card-title", text: hasVoice ? t("Your voice is set up") : t("Add your real voice") }));
+    wrap.appendChild(h("div", { class: "voice-card-title", text: hasVoice ? t("Your voice is set up") : t("Hear each other, not just picture it") }));
     wrap.appendChild(h("p", {
       class: "voice-card-desc",
       text: hasVoice
-        ? tTemplate("{name} can hear your real voice when they tap 🔊.", { name: personName(otherKeyOf(key)) })
-        : tTemplate("Record about 30 seconds so {name} can hear your real voice instead of a generic one.", { name: personName(otherKeyOf(key)) }),
+        ? tTemplate("{name} already hears your voice in their head — now, whenever they tap 🔊, they can actually hear it.", { name: personName(otherKeyOf(key)) })
+        : tTemplate("You already hear {name}'s voice in your head when you think of them. Record about 30 seconds so they can actually hear yours too, instead of a generic one.", { name: personName(otherKeyOf(key)) }),
     }));
     if (voiceRecordState.error) {
       wrap.appendChild(h("p", { class: "voice-card-error", text: voiceRecordState.error }));
     }
     var btnRow = h("div", { class: "voice-card-actions" });
+    // Capacitor's iOS WKWebView (the native app) has no MediaRecorder at
+    // all — that's not a permissions issue, just a missing API — so rather
+    // than dead-ending there, fall back to a plain file picker. iOS's native
+    // file-picker sheet offers "Record Audio" (and Voice Memos/Files) on its
+    // own, entirely outside the web page, so this works from inside the
+    // native app without needing a native rebuild or a Capacitor plugin.
+    var canRecordLive = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== "undefined");
+    if (!canRecordLive) {
+      var fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "audio/*";
+      fileInput.style.display = "none";
+      fileInput.addEventListener("change", function () {
+        var file = fileInput.files && fileInput.files[0];
+        fileInput.value = "";
+        if (!file) return;
+        voiceRecordState.error = "";
+        uploadVoiceSample(key, file);
+      });
+      var pickBtn = h("button", {
+        class: "mini-btn primary",
+        type: "button",
+        text: hasVoice ? t("Re-record") : t("Record my voice"),
+      });
+      pickBtn.disabled = voiceRecordState.uploading;
+      pickBtn.addEventListener("click", function () { fileInput.click(); });
+      btnRow.appendChild(pickBtn);
+      btnRow.appendChild(fileInput);
+      wrap.appendChild(btnRow);
+      wrap.appendChild(h("p", {
+        class: "voice-card-prompt",
+        text: t("Tap the button, choose “Record Audio,” and read this out loud: “Hi, it's me — I hope this message finds you smiling today.” Then tap Done and Choose/Use.") ,
+      }));
+      if (voiceRecordState.uploading) {
+        wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Uploading your voice sample…") }));
+      }
+      return wrap;
+    }
     var recordBtn = h("button", {
       class: "mini-btn primary",
       type: "button",
@@ -2032,11 +2073,6 @@ const RAW = String.raw`<!doctype html>
     recordBtn.addEventListener("click", function () {
       if (voiceRecordState.recording) {
         stopVoiceRecording(function () { uploadVoiceSample(key); });
-        renderApp();
-        return;
-      }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
-        voiceRecordState.error = t("Voice recording isn't supported in this browser.");
         renderApp();
         return;
       }

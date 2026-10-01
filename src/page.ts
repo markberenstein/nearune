@@ -767,10 +767,23 @@ const RAW = String.raw`<!doctype html>
   // language, so a translated line still comes out sounding like your
   // partner, not a generic voice). Falls back to the plain browser
   // text-to-speech above whenever there's no clone, or the clone call fails.
-  function speakAs(text, lang, authorKey) {
+  // unlockedAudio: an <audio> element whose play() was called synchronously
+  // inside a tap handler (see speakButton below), before the clone fetch
+  // has even started. iOS WKWebView only allows audio playback that's a
+  // direct consequence of a user gesture — the real clone audio can't be
+  // ready yet (it's a ~1-2s round trip to synthesize), so by the time
+  // fetch() resolves and we'd normally call .play(), iOS no longer
+  // considers it gesture-initiated and silently rejects it, which used to
+  // make every clone playback fall back to the generic browser voice. Reusing
+  // this SAME element (set its .src and play() again once the blob is
+  // ready) carries the original gesture's permission forward, so the
+  // delayed playback still succeeds.
+  function speakAs(text, lang, authorKey, unlockedAudio) {
     if (!text) return;
     if (authorKey && personHasVoice(authorKey)) {
-      try { if (activeCloneAudio) activeCloneAudio.pause(); } catch (e) {}
+      try { if (activeCloneAudio && activeCloneAudio !== unlockedAudio) activeCloneAudio.pause(); } catch (e) {}
+      var audio = unlockedAudio || new Audio();
+      activeCloneAudio = audio;
       fetch(RP + "/api/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -779,9 +792,8 @@ const RAW = String.raw`<!doctype html>
         .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
         .then(function (blob) {
           var url = URL.createObjectURL(blob);
-          var audio = new Audio(url);
-          activeCloneAudio = audio;
           audio.addEventListener("ended", function () { URL.revokeObjectURL(url); });
+          audio.src = url;
           audio.play().catch(function () { URL.revokeObjectURL(url); speak(text, lang); });
         })
         .catch(function () { speak(text, lang); });
@@ -797,7 +809,23 @@ const RAW = String.raw`<!doctype html>
       type: "button",
       "aria-label": label,
       title: label,
-      onclick: function (e) { e.preventDefault(); e.stopPropagation(); speakAs(text, lang, authorKey); },
+      onclick: function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var unlockedAudio = null;
+        if (hasClone) {
+          // Fire a play() attempt synchronously, right in the tap handler,
+          // on an element with no audio loaded yet — this is purely to
+          // register the gesture with iOS; there's nothing to actually
+          // hear yet, and the attempt is expected to do nothing or reject.
+          unlockedAudio = new Audio();
+          try {
+            var p = unlockedAudio.play();
+            if (p && p.catch) p.catch(function () {});
+          } catch (err) {}
+        }
+        speakAs(text, lang, authorKey, unlockedAudio);
+      },
     }, [document.createTextNode("🔊")]);
   }
 

@@ -2026,10 +2026,14 @@ const RAW = String.raw`<!doctype html>
     var btnRow = h("div", { class: "voice-card-actions" });
     // Capacitor's iOS WKWebView (the native app) has no MediaRecorder at
     // all — that's not a permissions issue, just a missing API — so rather
-    // than dead-ending there, fall back to a plain file picker. iOS's native
-    // file-picker sheet offers "Record Audio" (and Voice Memos/Files) on its
-    // own, entirely outside the web page, so this works from inside the
-    // native app without needing a native rebuild or a Capacitor plugin.
+    // than dead-ending there, fall back to a plain file picker. Unlike
+    // mobile Safari, WKWebView's file-picker sheet does NOT offer a
+    // "Record Audio" option (only Photo Library / Take Video / Choose
+    // File — confirmed from an actual device), so there's no in-sheet way
+    // to record. The two-step workaround below (record in Apple's own
+    // Voice Memos app, save that recording to Files, then pick it up here
+    // via "Choose File") uses only stock iOS apps — no native rebuild or
+    // Capacitor plugin needed.
     var canRecordLive = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== "undefined");
     if (!canRecordLive) {
       var fileInput = document.createElement("input");
@@ -2046,7 +2050,7 @@ const RAW = String.raw`<!doctype html>
       var pickBtn = h("button", {
         class: "mini-btn primary",
         type: "button",
-        text: hasVoice ? t("Re-record") : t("Record my voice"),
+        text: hasVoice ? t("Re-record") : t("Add a voice recording"),
       });
       pickBtn.disabled = voiceRecordState.uploading;
       pickBtn.addEventListener("click", function () { fileInput.click(); });
@@ -2055,7 +2059,7 @@ const RAW = String.raw`<!doctype html>
       wrap.appendChild(btnRow);
       wrap.appendChild(h("p", {
         class: "voice-card-prompt",
-        text: t("Tap the button, choose “Record Audio,” and read this out loud: “Hi, it's me — I hope this message finds you smiling today.” Then tap Done and Choose/Use.") ,
+        text: t("The app can't record audio directly, so: open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files. Then come back here, tap the button, and choose that recording from Files."),
       }));
       if (voiceRecordState.uploading) {
         wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Uploading your voice sample…") }));

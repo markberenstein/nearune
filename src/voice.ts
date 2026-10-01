@@ -74,7 +74,21 @@ export async function synthesizeSpeech(text: string, voiceId: string): Promise<U
       // app's supported languages, not just whatever language the sample
       // was recorded in (useful here since this also voices the OTHER
       // person's translated text back in the listener's own language).
-      body: JSON.stringify({ text, model_id: "eleven_multilingual_v2" }),
+      //
+      // voice_settings: without this, ElevenLabs falls back to defaults
+      // (stability 0.5 / similarity_boost 0.5), which leave more room for
+      // the model to "wander" away from the actual sample — including
+      // picking up a faint accent that isn't really there, since stability
+      // is literally the lever ElevenLabs' own docs point to for that
+      // ("if the voice starts to wander or produce artifacts, raise
+      // stability"). Nudged up from default rather than maxed out, since
+      // pushing stability too close to 1.0 tends to flatten delivery into
+      // a monotone instead.
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.7, similarity_boost: 0.85 },
+      }),
     });
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();

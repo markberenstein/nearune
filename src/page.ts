@@ -235,6 +235,7 @@ const RAW = String.raw`<!doctype html>
   .puzzle-guess-btn { background: var(--accent-ink); color: #fff; border: none; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 700; font-size: 0.83rem; cursor: pointer; flex: none; }
   .puzzle-guess-btn:disabled { opacity: 0.55; }
   .puzzle-guess-note { font-size: 0.83rem; color: var(--ink-soft); margin: 0; text-align: center; }
+  .puzzle-question { font-size: 0.955rem; font-weight: 700; color: var(--ink); margin: 0; text-align: center; }
   .puzzle-batch-list { display: flex; flex-direction: column; gap: 12px; }
   .puzzle-batch-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .puzzle-batch-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -1182,7 +1183,7 @@ const RAW = String.raw`<!doctype html>
       return wrap;
     }
     if (state.puzzleQuestion && state.puzzleSetBy) {
-      wrap.appendChild(h("p", { class: "puzzle-guess-note", text: state.puzzleQuestion }));
+      wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
       wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy)));
     }
     var input = document.createElement("input");

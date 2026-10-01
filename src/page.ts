@@ -2060,7 +2060,7 @@ const RAW = String.raw`<!doctype html>
       // the button expecting it to start recording.
       wrap.appendChild(h("p", {
         class: "voice-card-prompt",
-        text: t("First, open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files. Then come back here and tap the button below to choose that recording from Files."),
+        text: t("First, open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files, and choose “On My iPhone” (not iCloud Drive) as the location so it saves instantly. Then come back here and tap the button below to choose that recording from Files."),
       }));
       btnRow.appendChild(pickBtn);
       btnRow.appendChild(fileInput);

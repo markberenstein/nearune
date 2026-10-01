@@ -2038,7 +2038,12 @@ const RAW = String.raw`<!doctype html>
     if (!canRecordLive) {
       var fileInput = document.createElement("input");
       fileInput.type = "file";
-      fileInput.accept = "audio/*";
+      // No accept filter — WKWebView's file-picker sheet has a known bug
+      // where "audio/*" greys out files it fails to classify exactly right
+      // (seen on an actual device with a genuine Voice Memos recording),
+      // so every file type is left selectable here and the actual
+      // validation happens server-side (see /api/voice-sample), which
+      // already checks the MIME type on the uploaded data.
       fileInput.style.display = "none";
       fileInput.addEventListener("change", function () {
         var file = fileInput.files && fileInput.files[0];

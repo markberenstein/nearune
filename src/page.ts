@@ -1108,15 +1108,34 @@ const RAW = String.raw`<!doctype html>
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ who: viewerKey, items: items })
         });
-      }).then(function (res) { return res.json(); })
-        .then(function (next) {
-          state = next; online = true;
-          var count = (next.puzzleQueue ? next.puzzleQueue.length : 0) + (next.puzzleCurrentId ? 1 : 0);
+      }).then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+        .then(function (result) {
+          online = true;
+          if (!result.ok || result.body.error) {
+            // The upload itself worked — the server just refused to swap in
+            // a new puzzle while the current one is still unsolved. Surface
+            // that clearly instead of silently corrupting local state with
+            // the error body (what used to happen here).
+            submitBtn.disabled = false;
+            submitBtn.textContent = t("Load pictures");
+            var msg = result.body && result.body.error === "in_progress"
+              ? t("There's already a puzzle in progress — solve it (or ask your partner to) before loading a new one.")
+              : t("Couldn't load those pictures — try again.");
+            setActiveTab("puzzle", msg);
+            return;
+          }
+          state = result.body;
+          var count = (state.puzzleQueue ? state.puzzleQueue.length : 0) + (state.puzzleCurrentId ? 1 : 0);
           puzzleBatchItems = [];
           var loadedTemplate = count === 1 ? "Loaded {count} photo — first one's up now." : "Loaded {count} photos — first one's up now.";
           setActiveTab("puzzle", tTemplate(loadedTemplate, { count: count }));
         })
-        .catch(function () { online = false; renderApp(); });
+        .catch(function () {
+          online = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = t("Load pictures");
+          renderApp();
+        });
     });
 
     renderList();

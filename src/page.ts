@@ -591,6 +591,13 @@ const RAW = String.raw`<!doctype html>
   // set in PAGE_HTML's <head> — no client-side favicon logic needed here.
 
   var online = true;
+  // While a slow write is in flight (today, only the voice-sample clone —
+  // it calls out to ElevenLabs and can take several seconds), the 6s poll()
+  // below can land in between: it reads state from before the write, but
+  // its response arrives after the write already updated "state" locally,
+  // silently reverting it. Any poll that resolves before this timestamp is
+  // ignored instead of applied, so our own fresher write always wins.
+  var suppressPollUntil = 0;
   var journalOpen = false;
   var draftText = "";
   var editingEntry = null;
@@ -1972,6 +1979,12 @@ const RAW = String.raw`<!doctype html>
     voiceRecordState.uploading = true;
     voiceRecordState.error = "";
     renderApp();
+    // Cloning the voice is a slow call out to ElevenLabs (a few seconds) —
+    // long enough that the 6s background poll() can round-trip in the
+    // middle of it and overwrite the result with pre-upload state right
+    // after we apply it. Suppress poll() for the duration plus a buffer for
+    // any poll that was already in flight when we finish.
+    suppressPollUntil = Date.now() + 20000;
     var reader = new FileReader();
     reader.onload = function () {
       fetch(RP + "/api/voice-sample", {
@@ -1986,16 +1999,19 @@ const RAW = String.raw`<!doctype html>
             voiceRecordState.error = result.body && result.body.error === "too_short"
               ? t("That was too short — try recording at least 15-20 seconds.")
               : t("Couldn't save that voice sample — try recording again somewhere quieter.");
+            suppressPollUntil = 0;
             renderApp();
             return;
           }
           state = result.body;
           online = true;
+          suppressPollUntil = Date.now() + 3000;
           renderApp();
         })
         .catch(function () {
           voiceRecordState.uploading = false;
           voiceRecordState.error = t("Upload failed — check your connection and try again.");
+          suppressPollUntil = 0;
           renderApp();
         });
     };
@@ -2672,8 +2688,9 @@ const RAW = String.raw`<!doctype html>
     try {
       var res = await fetch(RP + "/api/state");
       var next = await res.json();
-      state = next;
       online = true;
+      if (Date.now() < suppressPollUntil) return;
+      state = next;
       var active = document.activeElement;
       var busy = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT");
       if (!busy) renderApp();

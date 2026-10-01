@@ -174,6 +174,10 @@ const RAW = String.raw`<!doctype html>
   .answer-name { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
   .answer-text { font-size: 0.98rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
   .translate-inline { display: block; margin-top: 6px; font-size: 0.88rem; font-style: italic; color: var(--ink-soft); border-left: 2px solid var(--line); padding-left: 8px; }
+  .translate-inline-row { display: flex; align-items: baseline; gap: 6px; }
+  .speak-btn { background: none; border: none; color: inherit; opacity: 0.6; cursor: pointer; padding: 0; line-height: 1; font-size: 0.92rem; flex: none; }
+  .speak-btn:hover { opacity: 1; }
+  .speak-btn:disabled { opacity: 0.3; cursor: default; }
 
   .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
@@ -708,6 +712,46 @@ const RAW = String.raw`<!doctype html>
       });
   }
 
+  // Vocalizer — speaks text aloud via the browser's built-in text-to-speech
+  // (no API key, no server round-trip: every modern mobile/desktop browser
+  // ships voices for these languages). Mapped to full BCP-47 locale tags
+  // (not just the bare 2-letter code) since that's what gets a browser to
+  // actually pick a matching voice rather than silently falling back to a
+  // default one. "Gibberish" and "Klingon" have no real-world voice behind
+  // them (same reason they have no real translation API — see translate.ts)
+  // so they're simply absent here, and canSpeak()/speakButton() skip
+  // rendering a button for them rather than mis-speaking in English.
+  var SPEECH_LANG_MAP = {
+    en: "en-US", hi: "hi-IN", es: "es-ES", fr: "fr-FR", de: "de-DE", pt: "pt-PT",
+    it: "it-IT", zh: "zh-CN", ja: "ja-JP", ko: "ko-KR", ar: "ar-SA", fa: "fa-IR",
+    ru: "ru-RU", bn: "bn-IN", pa: "pa-IN", gu: "gu-IN", mr: "mr-IN", ta: "ta-IN",
+    te: "te-IN", ur: "ur-PK", nl: "nl-NL", pl: "pl-PL", tr: "tr-TR", vi: "vi-VN",
+    th: "th-TH", id: "id-ID", tl: "fil-PH", el: "el-GR", he: "he-IL", sv: "sv-SE",
+    no: "nb-NO", uk: "uk-UA", ro: "ro-RO", cs: "cs-CZ", sw: "sw-KE",
+  };
+  function canSpeak(lang) {
+    return !!lang && !!SPEECH_LANG_MAP[lang] && typeof window !== "undefined" && !!window.speechSynthesis;
+  }
+  function speak(text, lang) {
+    if (!canSpeak(lang) || !text) return;
+    try {
+      window.speechSynthesis.cancel(); // stop anything already playing first
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = SPEECH_LANG_MAP[lang];
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  function speakButton(text, lang, label) {
+    if (!canSpeak(lang) || !text) return null;
+    return h("button", {
+      class: "speak-btn",
+      type: "button",
+      "aria-label": label,
+      title: label,
+      onclick: function (e) { e.preventDefault(); e.stopPropagation(); speak(text, lang); },
+    }, [document.createTextNode("🔊")]);
+  }
+
   function translateBlock(text, target, alt) {
     if (!text || !target || target === alt) return h("div", { class: "translate-inline", hidden: "true" });
     var key = target + "|" + (alt || "") + "::" + text;
@@ -719,7 +763,17 @@ const RAW = String.raw`<!doctype html>
     } else if (!val) {
       wrap.setAttribute("hidden", "true");
     } else {
-      wrap.appendChild(document.createTextNode(val));
+      var row = h("div", { class: "translate-inline-row" });
+      // Hear it spoken in the original writer's language first — the point
+      // isn't just comprehension, it's actually hearing your partner's
+      // language — then an optional button to hear the translation spoken
+      // back in the reader's own language.
+      var origBtn = speakButton(text, alt, t("Hear in original language"));
+      if (origBtn) row.appendChild(origBtn);
+      row.appendChild(h("span", { text: val }));
+      var ownBtn = speakButton(val, target, t("Hear in your language"));
+      if (ownBtn) row.appendChild(ownBtn);
+      wrap.appendChild(row);
     }
     return wrap;
   }

@@ -208,6 +208,11 @@ const RAW = String.raw`<!doctype html>
   }
   .voice-card-howto[open] summary .voice-card-howto-chevron { transform: rotate(45deg); margin-top: -3px; }
   .voice-card-howto .voice-card-prompt { margin: 8px 2px 0; }
+  .voice-card-howto-app { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; font-size: 0.82rem; color: var(--ink-soft); }
+  .voice-card-howto-icon { width: 30px; height: 30px; border-radius: 7px; flex-shrink: 0; }
+  .voice-card-howto-steps { margin: 8px 0 0; padding-left: 20px; font-size: 0.82rem; color: var(--ink-soft); line-height: 1.5; }
+  .voice-card-howto-steps li { margin: 0 0 6px; }
+  .voice-card-howto-steps li:last-child { margin-bottom: 0; }
 
   .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
@@ -705,6 +710,11 @@ const RAW = String.raw`<!doctype html>
     return el;
   }
 
+  // Apple's own Voice Memos app icon, inlined as a small data URI —
+  // base64 (plain ASCII) rather than referencing it by name alone, since
+  // the instructions below need people to recognize the icon on their
+  // home screen, not just read its name.
+  var VOICE_MEMOS_ICON_DATA_URL = "data:image/png;base64,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";
   var PLANE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l17-7-6 17-3-7-8-3z"/></svg>';
 
   var LOGO_MARK_SVG = '<svg viewBox="0 0 24 24"><defs><linearGradient id="wmSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4FA8E0"/><stop offset="45%" stop-color="#8C6FA8"/><stop offset="100%" stop-color="#C6912E"/></linearGradient><clipPath id="wmHeartClip"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></clipPath></defs><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="url(#wmSky)"/><g clip-path="url(#wmHeartClip)"><circle cx="7" cy="6.4" r="0.34" fill="#FAF6EE" opacity="0.85"/><circle cx="9.4" cy="5.2" r="0.24" fill="#FAF6EE" opacity="0.7"/><circle cx="15.6" cy="5.8" r="0.3" fill="#FAF6EE" opacity="0.6"/><circle cx="5.2" cy="9.5" r="0.22" fill="#FAF6EE" opacity="0.55"/><circle cx="12.2" cy="4.6" r="0.2" fill="#FAF6EE" opacity="0.65"/><circle cx="18" cy="9.2" r="0.26" fill="#FAF6EE" opacity="0.5"/><circle cx="8.6" cy="12.4" r="0.18" fill="#FAF6EE" opacity="0.45"/><circle cx="16.4" cy="12.8" r="0.2" fill="#FAF6EE" opacity="0.4"/><circle cx="6.2" cy="4.2" r="0.16" fill="#FAF6EE" opacity="0.5"/><circle cx="13.8" cy="7.6" r="0.16" fill="#FAF6EE" opacity="0.4"/></g><path d="M4 16 Q 11 12.2 15.8 9.6" fill="none" stroke="#FAF6EE" stroke-width="0.4" stroke-dasharray="0.35 1.2" stroke-linecap="round" opacity="0.85"/><g transform="translate(11.2,7.3) rotate(12) scale(0.32)"><path d="M3 12l17-7-6 17-3-7-8-3z" fill="#FAF6EE"/></g></svg>';
@@ -1995,7 +2005,13 @@ const RAW = String.raw`<!doctype html>
   // level like puzzleBatchItems/puzzleGuessDraft above, since it needs to
   // survive the re-renders that happen every second while a recording is
   // in progress.
-  var voiceRecordState = { recording: false, mediaRecorder: null, chunks: [], seconds: 0, timer: null, uploading: false, error: "" };
+  // howtoOpen persists here (not as a DOM attribute read back from the
+  // element) because renderApp() rebuilds the whole voice card from scratch
+  // on every call, including the ones triggered by the background poll()
+  // every 6s — without this, each rebuild recreated a fresh <details> with
+  // no "open" attribute, which is exactly why the instructions kept closing
+  // on their own mid-read.
+  var voiceRecordState = { recording: false, mediaRecorder: null, chunks: [], seconds: 0, timer: null, uploading: false, error: "", howtoOpen: false };
 
   function stopVoiceRecording(cb) {
     var mr = voiceRecordState.mediaRecorder;
@@ -2134,14 +2150,31 @@ const RAW = String.raw`<!doctype html>
       // button itself, since it opens a file picker, not a recorder — the
       // steps only make sense read before tapping it.
       var howto = h("details", { class: "voice-card-howto" });
+      if (voiceRecordState.howtoOpen) howto.setAttribute("open", "");
+      // See voiceRecordState.howtoOpen's comment above — this is what keeps
+      // it open across the background poll's re-renders instead of
+      // snapping shut every few seconds.
+      howto.addEventListener("toggle", function () { voiceRecordState.howtoOpen = howto.open; });
       var howtoSummary = h("summary", {});
       howtoSummary.appendChild(document.createTextNode(t("How do I record this?")));
       howtoSummary.appendChild(h("span", { class: "voice-card-howto-chevron" }));
       howto.appendChild(howtoSummary);
-      howto.appendChild(h("p", {
-        class: "voice-card-prompt",
-        text: t("First, open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files, and choose “On My iPhone” (not iCloud Drive) as the location so it saves instantly. Then come back here and tap the button below to choose that recording from Files."),
-      }));
+      var howtoApp = h("div", { class: "voice-card-howto-app" });
+      howtoApp.appendChild(h("img", { src: VOICE_MEMOS_ICON_DATA_URL, alt: "", class: "voice-card-howto-icon" }));
+      howtoApp.appendChild(document.createTextNode(
+        t("Voice Memos — this one. It's already on your iPhone (Apple put it there), not something you need to download.")
+      ));
+      howto.appendChild(howtoApp);
+      var howtoSteps = h("ol", { class: "voice-card-howto-steps" });
+      [
+        t("Open Voice Memos and tap the red record button."),
+        t("Read this out loud: “Hi, it's me — I hope this message finds you smiling today.”"),
+        t("Tap the record button again to stop, then tap Done."),
+        t("Tap the ••• menu, then Save to Files."),
+        t("Choose “On My iPhone” (not iCloud Drive) so it saves instantly, instead of showing a sync error."),
+        t("Come back here and tap the button below to choose that recording."),
+      ].forEach(function (step) { howtoSteps.appendChild(h("li", { text: step })); });
+      howto.appendChild(howtoSteps);
       wrap.appendChild(howto);
       btnRow.appendChild(pickBtn);
       btnRow.appendChild(fileInput);

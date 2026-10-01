@@ -4,7 +4,7 @@ const RAW = String.raw`<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes,viewport-fit=cover">
 <title>Nearune</title>
 <meta name="description" content="A private daily-question ritual for two people who live apart — one shared question a day, and a photo puzzle that slowly reveals itself as you keep your streak going.">
 <link rel="icon" type="image/png" href="/favicon.png?v=__ICON_V__">

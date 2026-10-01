@@ -29,6 +29,37 @@ export function translateToGibberish(text: string): string {
   return text.replace(/[A-Za-z]+/g, gibberishWord);
 }
 
+// "Klingon" (code "tlh") — same idea as Gibberish above: no real translation
+// API speaks tlhIngan Hol, so it's generated locally. Unlike Gibberish's
+// invented syllables, these are built from real Klingon phonology (its
+// actual consonant and vowel inventory, including the distinctive tlh/gh/Q/'
+// sounds) so it reads as recognizably Klingon-styled rather than random
+// noise, while staying deterministic per word like Gibberish does.
+const KLINGON_ONSETS = [
+  "b", "ch", "D", "gh", "H", "j", "l", "m", "n", "ng", "p", "q", "Q", "r",
+  "S", "t", "tlh", "v", "w", "y", "'",
+];
+const KLINGON_VOWELS = ["a", "e", "I", "o", "u"];
+const KLINGON_CODAS = ["", "", "gh", "H", "j", "l", "m", "n", "ng", "p", "q", "r", "S", "t", "w", "y", "'"];
+function klingonWord(word: string): string {
+  let h = hashStr(word.toLowerCase());
+  const syllableCount = Math.max(1, Math.min(4, Math.ceil(word.length / 3)));
+  let out = "";
+  for (let i = 0; i < syllableCount; i++) {
+    const onset = KLINGON_ONSETS[h % KLINGON_ONSETS.length];
+    h = Math.floor(h / 7) + i * 13;
+    const vowel = KLINGON_VOWELS[h % KLINGON_VOWELS.length];
+    h = Math.floor(h / 5) + i * 11;
+    const coda = KLINGON_CODAS[h % KLINGON_CODAS.length];
+    h = Math.floor(h / 3) + i * 17;
+    out += onset + vowel + coda;
+  }
+  return /^[A-Z]/.test(word) ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+}
+export function translateToKlingon(text: string): string {
+  return text.replace(/[A-Za-z]+/g, klingonWord);
+}
+
 export async function translateViaGoogle(text: string, target: string): Promise<{ t: string | null; d: string }> {
   const gUrl =
     "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" +
@@ -97,7 +128,7 @@ const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
   vietnamese: "vi", thai: "th", indonesian: "id", "tagalog (filipino)": "tl",
   greek: "el", hebrew: "he", swedish: "sv", norwegian: "no",
   ukrainian: "uk", romanian: "ro", czech: "cs", swahili: "sw",
-  gibberish: "gib",
+  gibberish: "gib", klingon: "tlh",
 };
 export function langCodeForName(name: string): string | null {
   const s = (name || "").trim().toLowerCase();
@@ -149,6 +180,9 @@ export function scriptGuessSource(text: string, target: string, alt: string): st
 export async function resolveTranslation(text: string, target: string, alt: string): Promise<{ translated: string; via: string; eff: string }> {
   if (target === "gib" || alt === "gib") {
     return { translated: translateToGibberish(text), via: "gibberish", eff: "gib" };
+  }
+  if (target === "tlh" || alt === "tlh") {
+    return { translated: translateToKlingon(text), via: "klingon", eff: "tlh" };
   }
   let translated: string | null = null;
   let eff = target;

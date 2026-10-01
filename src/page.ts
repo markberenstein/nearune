@@ -346,7 +346,7 @@ const RAW = String.raw`<!doctype html>
     ["Vietnamese", "vi"], ["Thai", "th"], ["Indonesian", "id"], ["Tagalog (Filipino)", "tl"],
     ["Greek", "el"], ["Hebrew", "he"], ["Swedish", "sv"], ["Norwegian", "no"],
     ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"],
-    ["Gibberish", "gib"]
+    ["Gibberish", "gib"], ["Klingon", "tlh"]
   ];
   var LANG_NAME_TO_CODE = (function () {
     var m = {};

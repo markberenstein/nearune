@@ -824,6 +824,14 @@ const RAW = String.raw`<!doctype html>
         .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
         .then(function (blob) {
           var url = URL.createObjectURL(blob);
+          // If a newer tap started a different clone playback while this
+          // fetch was still in flight, activeCloneAudio has already moved
+          // on to that other <audio> element — pausing it back when the
+          // newer one started doesn't stop THIS callback from still firing
+          // later and calling .play() on its own element regardless, which
+          // is what produced two overlapping voice tracks on a quick
+          // double-tap. Bail out here instead of playing a superseded request.
+          if (audio !== activeCloneAudio) { URL.revokeObjectURL(url); return; }
           audio.addEventListener("ended", function () { URL.revokeObjectURL(url); });
           audio.src = url;
           audio.play().catch(function () { URL.revokeObjectURL(url); speak(text, lang); });
@@ -924,8 +932,8 @@ const RAW = String.raw`<!doctype html>
     var val = translationCache[key];
     return val ? text + " (" + val + ")" : text;
   }
-  function uiTranslateBlock(text) {
-    return translateBlock(text, otherUiLang(), "en");
+  function uiTranslateBlock(text, authorKey) {
+    return translateBlock(text, otherUiLang(), "en", authorKey);
   }
   function tTemplate(template, vars) {
     // Translation services translate the WORDS inside {name}-style tokens
@@ -2292,7 +2300,11 @@ const RAW = String.raw`<!doctype html>
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
       h("p", { class: "question", text: q }),
-      uiTranslateBlock(q)
+      // Today's question read aloud in your partner's own cloned voice when
+      // they've recorded one — it's their question to ask you, not a
+      // generic narrator. Falls back to the plain browser voice same as
+      // everywhere else if they haven't recorded a sample.
+      uiTranslateBlock(q, viewerKey ? otherKeyOf(viewerKey) : null)
     ]);
 
     if (complete) {
@@ -2380,7 +2392,7 @@ const RAW = String.raw`<!doctype html>
           var entryDiv = h("div", { class: "journal-entry" }, [
             h("div", { class: "journal-date", text: t(formatDateLabel(key)) }),
             h("p", { class: "journal-q", text: questionForKey(key) }),
-            uiTranslateBlock(questionForKey(key))
+            uiTranslateBlock(questionForKey(key), viewerKey ? otherKeyOf(viewerKey) : null)
           ]);
           ["mark", "nikita"].forEach(function (pKey) {
             if (pKey === viewerKey && editingEntry === key) { entryDiv.appendChild(ownAnswerEditor(key)); return; }

@@ -13,7 +13,13 @@ export type Comment = { who: PersonKey; text: string; at: string };
 // emailHash: a one-way keyed hash of the email used to register (see
 // util.ts hashEmail) — kept so a room deletion can also clean up that
 // person's entry in the recovery index. The actual address is never stored.
-export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string };
+// voiceId: the cloned-voice id from whichever provider is behind
+// voice.ts's synthesizeSpeech() (ElevenLabs today) — server-only, like
+// puzzleAnswer. forClient() strips it before sending state to a browser and
+// replaces it with the boolean hasVoice, so the client (and anyone
+// inspecting network traffic) only ever learns "yes/no", never an id that
+// could be replayed directly against the provider.
+export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string; voiceId?: string; hasVoice?: boolean };
 
 // A browser's Web Push subscription (from the PushSubscription object) —
 // endpoint + keys needed to encrypt and deliver a push to that browser.

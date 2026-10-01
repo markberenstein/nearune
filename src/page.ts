@@ -179,6 +179,14 @@ const RAW = String.raw`<!doctype html>
   .speak-btn:hover { opacity: 1; }
   .speak-btn:disabled { opacity: 0.3; cursor: default; }
 
+  .voice-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .voice-card-title { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 0.92rem; }
+  .voice-card-desc { font-size: 0.82rem; color: var(--ink-soft); margin: 0; line-height: 1.4; }
+  .voice-card-error { font-size: 0.8rem; color: var(--bad, #B3261E); margin: 0; }
+  .voice-card-prompt { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); margin: 2px 0 0; }
+  .voice-card-status-text { font-size: 0.8rem; color: var(--ink-soft); margin: 0; }
+  .voice-card-actions { display: flex; gap: 8px; }
+
   .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
   .edit-form { display: flex; flex-direction: column; gap: 8px; }
@@ -741,18 +749,52 @@ const RAW = String.raw`<!doctype html>
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }
-  function speakButton(text, lang, label) {
-    if (!canSpeak(lang) || !text) return null;
+  function personHasVoice(key) {
+    var p = state.people && state.people[key];
+    return !!(p && p.hasVoice);
+  }
+  var activeCloneAudio = null;
+  // Plays "text" in authorKey's own cloned voice when they've recorded one
+  // (works for either the original text or its translation — ElevenLabs'
+  // multilingual model can speak the cloned voice in any supported
+  // language, so a translated line still comes out sounding like your
+  // partner, not a generic voice). Falls back to the plain browser
+  // text-to-speech above whenever there's no clone, or the clone call fails.
+  function speakAs(text, lang, authorKey) {
+    if (!text) return;
+    if (authorKey && personHasVoice(authorKey)) {
+      try { if (activeCloneAudio) activeCloneAudio.pause(); } catch (e) {}
+      fetch(RP + "/api/speak", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ who: authorKey, text: text }),
+      })
+        .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
+        .then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var audio = new Audio(url);
+          activeCloneAudio = audio;
+          audio.addEventListener("ended", function () { URL.revokeObjectURL(url); });
+          audio.play().catch(function () { URL.revokeObjectURL(url); speak(text, lang); });
+        })
+        .catch(function () { speak(text, lang); });
+      return;
+    }
+    speak(text, lang);
+  }
+  function speakButton(text, lang, label, authorKey) {
+    var hasClone = !!authorKey && personHasVoice(authorKey);
+    if (!text || (!canSpeak(lang) && !hasClone)) return null;
     return h("button", {
       class: "speak-btn",
       type: "button",
       "aria-label": label,
       title: label,
-      onclick: function (e) { e.preventDefault(); e.stopPropagation(); speak(text, lang); },
+      onclick: function (e) { e.preventDefault(); e.stopPropagation(); speakAs(text, lang, authorKey); },
     }, [document.createTextNode("🔊")]);
   }
 
-  function translateBlock(text, target, alt) {
+  function translateBlock(text, target, alt, authorKey) {
     if (!text || !target || target === alt) return h("div", { class: "translate-inline", hidden: "true" });
     var key = target + "|" + (alt || "") + "::" + text;
     scheduleTranslate(text, target, alt);
@@ -767,11 +809,12 @@ const RAW = String.raw`<!doctype html>
       // Hear it spoken in the original writer's language first — the point
       // isn't just comprehension, it's actually hearing your partner's
       // language — then an optional button to hear the translation spoken
-      // back in the reader's own language.
-      var origBtn = speakButton(text, alt, t("Hear in original language"));
+      // back in the reader's own language. Both go through authorKey's own
+      // cloned voice when they have one recorded.
+      var origBtn = speakButton(text, alt, t("Hear in original language"), authorKey);
       if (origBtn) row.appendChild(origBtn);
       row.appendChild(h("span", { text: val }));
-      var ownBtn = speakButton(val, target, t("Hear in your language"));
+      var ownBtn = speakButton(val, target, t("Hear in your language"), authorKey);
       if (ownBtn) row.appendChild(ownBtn);
       wrap.appendChild(row);
     }
@@ -1235,13 +1278,13 @@ const RAW = String.raw`<!doctype html>
         : tTemplate("Today's guess: “{guess}” — not quite. Try again tomorrow.", { guess: state.puzzleLastGuessText });
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
       if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
-        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy)));
+        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy));
       }
       return wrap;
     }
     if (state.puzzleQuestion && state.puzzleSetBy) {
       wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
-      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy)));
+      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
     }
     var input = document.createElement("input");
     input.type = "text"; input.maxLength = 120;
@@ -1291,7 +1334,7 @@ const RAW = String.raw`<!doctype html>
       if (state.puzzleSolved) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
-          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy)));
+          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
         }
         var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? t("Next picture →") : t("Finish batch") });
         nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
@@ -1351,7 +1394,7 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
-      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who)));
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
       wrap.appendChild(cDiv);
     });
     var form = h("div", { class: "comment-form" });
@@ -1691,6 +1734,8 @@ const RAW = String.raw`<!doctype html>
 
     app.appendChild(header());
     app.appendChild(statusRow());
+    var voiceBlock = voiceRecorderBlock();
+    if (voiceBlock) app.appendChild(voiceBlock);
     // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
     // "next question" countdown used to be), right under the status row.
     var weatherBlock = weatherWidgetBlock();
@@ -1889,6 +1934,158 @@ const RAW = String.raw`<!doctype html>
     return h("div", {}, [wordmark, clocks]);
   }
 
+  // Mic-recording state for the "record your voice" card below — module-
+  // level like puzzleBatchItems/puzzleGuessDraft above, since it needs to
+  // survive the re-renders that happen every second while a recording is
+  // in progress.
+  var voiceRecordState = { recording: false, mediaRecorder: null, chunks: [], seconds: 0, timer: null, uploading: false, error: "" };
+
+  function stopVoiceRecording(cb) {
+    var mr = voiceRecordState.mediaRecorder;
+    if (voiceRecordState.timer) { clearInterval(voiceRecordState.timer); voiceRecordState.timer = null; }
+    voiceRecordState.recording = false;
+    if (mr && mr.state !== "inactive") {
+      mr.addEventListener("stop", function once() {
+        mr.removeEventListener("stop", once);
+        if (mr.stream) mr.stream.getTracks().forEach(function (t) { t.stop(); });
+        cb && cb();
+      });
+      mr.stop();
+    } else {
+      cb && cb();
+    }
+  }
+
+  function uploadVoiceSample(key) {
+    var mimeType = (voiceRecordState.mediaRecorder && voiceRecordState.mediaRecorder.mimeType) || "audio/webm";
+    var blob = new Blob(voiceRecordState.chunks, { type: mimeType });
+    voiceRecordState.chunks = [];
+    voiceRecordState.mediaRecorder = null;
+    if (!blob.size) {
+      voiceRecordState.error = t("That recording came out empty — try again.");
+      renderApp();
+      return;
+    }
+    voiceRecordState.uploading = true;
+    voiceRecordState.error = "";
+    renderApp();
+    var reader = new FileReader();
+    reader.onload = function () {
+      fetch(RP + "/api/voice-sample", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ who: key, dataUrl: reader.result }),
+      })
+        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+        .then(function (result) {
+          voiceRecordState.uploading = false;
+          if (!result.ok || result.body.error) {
+            voiceRecordState.error = result.body && result.body.error === "too_short"
+              ? t("That was too short — try recording at least 15-20 seconds.")
+              : t("Couldn't save that voice sample — try recording again somewhere quieter.");
+            renderApp();
+            return;
+          }
+          state = result.body;
+          online = true;
+          renderApp();
+        })
+        .catch(function () {
+          voiceRecordState.uploading = false;
+          voiceRecordState.error = t("Upload failed — check your connection and try again.");
+          renderApp();
+        });
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  // The vocalizer (translateBlock's 🔊 buttons) will use whichever cloned
+  // voice is on file for each person the moment it exists — this card is
+  // just how one gets recorded. Lives right under the status row, visible
+  // to the signed-in viewer for their own voice only (never lets one person
+  // record a sample "as" the other).
+  function voiceRecorderBlock() {
+    if (!viewerKey) return null;
+    var key = viewerKey;
+    var person = state.people && state.people[key];
+    var hasVoice = !!(person && person.hasVoice);
+    var wrap = h("div", { class: "voice-card" });
+    wrap.appendChild(h("div", { class: "voice-card-title", text: hasVoice ? t("Your voice is set up") : t("Add your real voice") }));
+    wrap.appendChild(h("p", {
+      class: "voice-card-desc",
+      text: hasVoice
+        ? tTemplate("{name} can hear your real voice when they tap 🔊.", { name: personName(otherKeyOf(key)) })
+        : tTemplate("Record about 30 seconds so {name} can hear your real voice instead of a generic one.", { name: personName(otherKeyOf(key)) }),
+    }));
+    if (voiceRecordState.error) {
+      wrap.appendChild(h("p", { class: "voice-card-error", text: voiceRecordState.error }));
+    }
+    var btnRow = h("div", { class: "voice-card-actions" });
+    var recordBtn = h("button", {
+      class: "mini-btn primary",
+      type: "button",
+      text: voiceRecordState.recording
+        ? tTemplate("Stop ({seconds}s)", { seconds: voiceRecordState.seconds })
+        : (hasVoice ? t("Re-record") : t("Record my voice")),
+    });
+    recordBtn.disabled = voiceRecordState.uploading;
+    recordBtn.addEventListener("click", function () {
+      if (voiceRecordState.recording) {
+        stopVoiceRecording(function () { uploadVoiceSample(key); });
+        renderApp();
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+        voiceRecordState.error = t("Voice recording isn't supported in this browser.");
+        renderApp();
+        return;
+      }
+      voiceRecordState.error = "";
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var mr;
+        try {
+          mr = new MediaRecorder(stream);
+        } catch (e) {
+          voiceRecordState.error = t("Couldn't start recording.");
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          renderApp();
+          return;
+        }
+        voiceRecordState.chunks = [];
+        mr.addEventListener("dataavailable", function (e) { if (e.data && e.data.size) voiceRecordState.chunks.push(e.data); });
+        voiceRecordState.mediaRecorder = mr;
+        voiceRecordState.recording = true;
+        voiceRecordState.seconds = 0;
+        mr.start();
+        voiceRecordState.timer = setInterval(function () {
+          voiceRecordState.seconds++;
+          // Hard cap so nobody accidentally leaves this running for
+          // minutes — a clean clone only needs well under a minute anyway.
+          if (voiceRecordState.seconds >= 60) {
+            stopVoiceRecording(function () { uploadVoiceSample(key); });
+          }
+          renderApp();
+        }, 1000);
+        renderApp();
+      }).catch(function () {
+        voiceRecordState.error = t("Microphone access was denied.");
+        renderApp();
+      });
+    });
+    btnRow.appendChild(recordBtn);
+    wrap.appendChild(btnRow);
+    if (voiceRecordState.recording) {
+      wrap.appendChild(h("p", {
+        class: "voice-card-prompt",
+        text: t("Read this out loud: “Hi, it's me — I hope this message finds you smiling today.”"),
+      }));
+    }
+    if (voiceRecordState.uploading) {
+      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Uploading your voice sample…") }));
+    }
+    return wrap;
+  }
+
   function statusRow() {
     var row = h("div", { class: "status-row" });
     ["mark", "nikita"].forEach(function (key) {
@@ -1956,7 +2153,7 @@ const RAW = String.raw`<!doctype html>
           bubble.appendChild(ownAnswerEditor(today));
         } else {
           bubble.appendChild(h("p", { class: "answer-text", text: entry[key].text }));
-          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key)));
+          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key));
         }
         reveal.appendChild(bubble);
       });
@@ -1968,7 +2165,7 @@ const RAW = String.raw`<!doctype html>
       } else {
         var mineWrap = h("div", { class: "own-answer-visible" });
         mineWrap.appendChild(h("p", { class: "answer-text", text: mine }));
-        mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey)));
+        mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey), viewerKey));
         var editBtn2 = h("button", { class: "edit-btn", text: t("Edit your answer") });
         editBtn2.addEventListener("click", function () { startEdit(today); });
         mineWrap.appendChild(editBtn2);
@@ -2037,7 +2234,7 @@ const RAW = String.raw`<!doctype html>
               line.appendChild(ebtn);
             }
             entryDiv.appendChild(line);
-            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey)));
+            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey), pKey));
           });
           entryDiv.appendChild(commentsBlock(key));
           list.appendChild(entryDiv);

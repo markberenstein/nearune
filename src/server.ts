@@ -19,6 +19,7 @@ import {
   listRoomIds,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
+import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
@@ -687,6 +688,67 @@ Bun.serve({
         advanceQueue(s);
       });
       return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/voice-sample") {
+      // Cloning costs real money per call and a bad actor could otherwise
+      // hammer this — capped well above any legitimate re-recording need.
+      if (!rateLimit("voice-sample:" + roomId, 10, 24 * HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const dataUrl = body && body.dataUrl;
+      if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
+      const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]+);base64,(.+)$/);
+      if (!match) return json({ error: "invalid" }, { status: 400 });
+      const mimeType = match[1];
+      let bytes: Uint8Array;
+      try {
+        bytes = Buffer.from(match[2], "base64");
+      } catch {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      // A clean ~20-60s sample is plenty for Instant Voice Cloning — capping
+      // well above that (10MB) just guards against an oversized upload, not
+      // against a long recording that's actually fine.
+      if (bytes.length < 2000) return json({ error: "too_short" }, { status: 400 });
+      if (bytes.length > 10 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      const existing = await loadState(roomId);
+      const oldVoiceId = existing.people && existing.people[who] && existing.people[who]!.voiceId;
+      const label = "nearune-" + (roomId || "legacy") + "-" + who;
+      const result = await cloneVoice(bytes, mimeType, label);
+      if (!result.ok) return json({ error: result.error }, { status: 502 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
+        s.people[who]!.voiceId = result.voiceId;
+      });
+      // Old clone is no longer referenced by anything — clean it up at the
+      // provider rather than letting clones accumulate there forever.
+      if (oldVoiceId && oldVoiceId !== result.voiceId) deleteVoice(oldVoiceId).catch(() => {});
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/speak") {
+      // Each call is a real text-to-speech request against a paid API — cap
+      // it well above normal use (someone tapping 🔊 on every line of a long
+      // conversation) without making it a hard wall for ordinary use.
+      if (!rateLimit("speak:" + roomId, 120, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const text = typeof (body && body.text) === "string" ? body.text.slice(0, 2000).trim() : "";
+      if (!isPerson(who) || !text) return json({ error: "invalid" }, { status: 400 });
+      const current = await loadState(roomId);
+      const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
+      if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
+      const audio = await synthesizeSpeech(text, voiceId);
+      if (!audio) return json({ error: "synth_failed" }, { status: 502 });
+      return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-guess") {

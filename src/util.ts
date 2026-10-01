@@ -245,7 +245,9 @@ export function advanceQueue(s: State) {
 }
 
 // Strips the secret puzzle answer and live confirm/invite tokens (client
-// only sees a pending boolean, never the token itself).
+// only sees a pending boolean, never the token itself). Also strips each
+// person's cloned-voice provider id (see types.ts's PersonProfile.voiceId)
+// down to a plain hasVoice boolean, same idea.
 export function forClient(state: State): State {
   const { pendingConfirm, pendingInvite, ...base } = state as any;
   const pc: Record<string, boolean> = {};
@@ -256,6 +258,15 @@ export function forClient(state: State): State {
   // as-is rather than recomputing it, so both devices always agree.
   const puzzleUnlocked = puzzleUnlockedCount(state);
   const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, puzzleUnlocked } as State;
+  if (withFlags.people) {
+    const strippedPeople: any = {};
+    for (const k of Object.keys(withFlags.people)) {
+      const p: any = (withFlags.people as any)[k];
+      const { voiceId, ...rest } = p;
+      strippedPeople[k] = { ...rest, hasVoice: !!voiceId };
+    }
+    (withFlags as any).people = strippedPeople;
+  }
   if (withFlags.puzzleSolved) return withFlags;
   const { puzzleAnswer, ...rest } = withFlags;
   return rest as State;

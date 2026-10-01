@@ -1819,8 +1819,6 @@ const RAW = String.raw`<!doctype html>
 
     app.appendChild(header());
     app.appendChild(statusRow());
-    var voiceBlock = voiceRecorderBlock();
-    if (voiceBlock) app.appendChild(voiceBlock);
     // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
     // "next question" countdown used to be), right under the status row.
     var weatherBlock = weatherWidgetBlock();
@@ -1840,6 +1838,11 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(streakCard());
       app.appendChild(journalSection());
     }
+    // Moved below the Today/Puzzle content (and "Look back at past days" on
+    // the Today tab specifically) per feedback — used to sit right under
+    // the status row at the very top of the page.
+    var voiceBlock = voiceRecorderBlock();
+    if (voiceBlock) app.appendChild(voiceBlock);
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());

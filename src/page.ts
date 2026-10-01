@@ -1169,6 +1169,9 @@ const RAW = String.raw`<!doctype html>
     var wrap = h("div", { class: "puzzle-guess" });
     if (isSetter) {
       var otherName = personName(otherKeyOf(viewerKey));
+      if (state.puzzleQuestion) {
+        wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
+      }
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You set this one — waiting for {name} to guess.", { name: otherName }) }));
       return wrap;
     }

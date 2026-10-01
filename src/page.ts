@@ -2050,17 +2050,21 @@ const RAW = String.raw`<!doctype html>
       var pickBtn = h("button", {
         class: "mini-btn primary",
         type: "button",
-        text: hasVoice ? t("Re-record") : t("Add a voice recording"),
+        text: hasVoice ? t("Choose a new recording") : t("Choose my recording"),
       });
       pickBtn.disabled = voiceRecordState.uploading;
       pickBtn.addEventListener("click", function () { fileInput.click(); });
+      // Instructions come BEFORE the button on purpose — this button opens
+      // a file picker, not a recorder, so reading "record in Voice Memos
+      // first" only makes sense if you see it before you've already tapped
+      // the button expecting it to start recording.
+      wrap.appendChild(h("p", {
+        class: "voice-card-prompt",
+        text: t("First, open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files. Then come back here and tap the button below to choose that recording from Files."),
+      }));
       btnRow.appendChild(pickBtn);
       btnRow.appendChild(fileInput);
       wrap.appendChild(btnRow);
-      wrap.appendChild(h("p", {
-        class: "voice-card-prompt",
-        text: t("The app can't record audio directly, so: open Voice Memos and record yourself reading “Hi, it's me — I hope this message finds you smiling today.” Tap Done, then the ••• menu → Save to Files. Then come back here, tap the button, and choose that recording from Files."),
-      }));
       if (voiceRecordState.uploading) {
         wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Uploading your voice sample…") }));
       }

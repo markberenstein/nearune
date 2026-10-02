@@ -19,7 +19,16 @@ export type Comment = { who: PersonKey; text: string; at: string };
 // replaces it with the boolean hasVoice, so the client (and anyone
 // inspecting network traffic) only ever learns "yes/no", never an id that
 // could be replayed directly against the provider.
-export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string; voiceId?: string; hasVoice?: boolean };
+// travelLocation/travelUntil: an optional temporary override of WHERE this
+// person is shown as being — just for weather and the local-lore line (see
+// util.ts's effectiveLocation), nothing else. Their real `location`, `tz`
+// and everything tied to it (the daily rollover, their registered city on
+// the clock) stay exactly as registered; travel only changes what city
+// feeds their partner's "what's it like where they are" weather/lore.
+// travelUntil is an optional date key (YYYY-MM-DD, same format as
+// todayKeyPT) — once that day has passed, effectiveLocation reverts to
+// `location` on its own. No travelUntil means it stays set until cleared.
+export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string; voiceId?: string; hasVoice?: boolean; travelLocation?: string; travelUntil?: string };
 
 // A browser's Web Push subscription (from the PushSubscription object) —
 // endpoint + keys needed to encrypt and deliver a push to that browser.

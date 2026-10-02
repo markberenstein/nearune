@@ -269,6 +269,10 @@ const RAW = String.raw`<!doctype html>
   .puzzle-setup input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .puzzle-setup select.lang-select { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
   .puzzle-setup select.lang-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .puzzle-setup input[type="date"] { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
+  .puzzle-setup input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .travel-until-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .travel-until-label { font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; }
   .puzzle-setup-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .puzzle-choose-btn { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 9px 16px; font: inherit; font-size: 0.83rem; cursor: pointer; }
   .puzzle-guess { display: flex; flex-direction: column; gap: 8px; }
@@ -642,6 +646,17 @@ const RAW = String.raw`<!doctype html>
   // that split exists. Not persisted: always starts back at null (your
   // own view) on reload.
   var previewKey = null;
+
+  // Traveling: lets you temporarily tell your partner's weather/local-lore
+  // widgets to treat you as being somewhere other than home — see
+  // travelBlock(). travelFormOpen/travelDraft are this device's own
+  // in-progress edit; the actual traveling state lives on your profile in
+  // state.people (travelLocation/travelUntil), same as everything else
+  // server-synced.
+  var travelFormOpen = false;
+  var travelDraft = { location: "", until: "" };
+  var travelBusy = false;
+  var travelError = "";
 
   // Push notifications / app-icon badge. "unsupported" means this browser
   // can't do Web Push at all (e.g. Safari in a regular tab rather than an
@@ -1857,6 +1872,8 @@ const RAW = String.raw`<!doctype html>
     if (voiceBlock) app.appendChild(voiceBlock);
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
+    var travelRow = travelBlock();
+    if (travelRow) app.appendChild(travelRow);
     app.appendChild(switchRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
@@ -2643,6 +2660,96 @@ const RAW = String.raw`<!doctype html>
     pushState = "off";
     try { localStorage.removeItem(PUSH_LS_KEY); } catch (e) {}
     renderApp();
+  }
+
+  function formatShortDate(key) {
+    var d = new Date(keyToUtcMs(key) + 12 * 3600000);
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
+  }
+
+  function openTravelForm() {
+    var my = state.people && state.people[viewerKey];
+    travelDraft = { location: (my && my.travelLocation) || "", until: (my && my.travelUntil) || "" };
+    travelError = "";
+    travelFormOpen = true;
+    renderApp();
+  }
+  function cancelTravelForm() {
+    travelFormOpen = false;
+    renderApp();
+  }
+  async function saveTravelForm() {
+    var location = travelDraft.location.trim();
+    if (!location) { travelError = t("Enter a city, or use Back home to clear it."); renderApp(); return; }
+    travelBusy = true; travelError = ""; renderApp();
+    try {
+      await api("/api/travel", { who: viewerKey, location: location, until: travelDraft.until });
+      travelFormOpen = false;
+    } catch (e) { travelError = t("Something went wrong — try again."); }
+    travelBusy = false;
+    renderApp();
+  }
+  async function clearTravel() {
+    travelBusy = true; travelError = ""; renderApp();
+    try {
+      await api("/api/travel", { who: viewerKey, location: "", until: "" });
+      travelFormOpen = false;
+    } catch (e) { travelError = t("Something went wrong — try again."); }
+    travelBusy = false;
+    renderApp();
+  }
+  // Lets you temporarily tell your PARTNER's weather/local-lore widgets to
+  // show a travel city instead of your home location — see
+  // effectiveLocation in util.ts. Everything else (your own clock,
+  // timezone, daily rollover) stays on your real registered location.
+  function travelBlock() {
+    var my = state.people && state.people[viewerKey];
+    if (!my) return null;
+    var wrap = h("div", {});
+    if (travelFormOpen) {
+      var card = h("div", { class: "edit-form" });
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Set where you're traveling — your partner's weather and local-story line will show this instead of home, until you clear it.") }));
+      var fields = h("div", { class: "puzzle-setup" });
+      fields.appendChild(textField(travelDraft.location, "City you're traveling to", function (v) { travelDraft.location = v; }));
+      var dateInput = document.createElement("input");
+      dateInput.type = "date";
+      dateInput.value = travelDraft.until;
+      dateInput.addEventListener("input", function () { travelDraft.until = dateInput.value; });
+      fields.appendChild(h("div", { class: "travel-until-row" }, [
+        h("span", { class: "travel-until-label", text: t("Return date (optional)") }),
+        dateInput,
+      ]));
+      card.appendChild(fields);
+      if (travelError) card.appendChild(h("p", { class: "puzzle-guess-note", text: travelError }));
+      var actions = h("div", { class: "edit-actions" });
+      var cancel = h("button", { class: "mini-btn ghost", text: t("Cancel") });
+      cancel.addEventListener("click", cancelTravelForm);
+      actions.appendChild(cancel);
+      if (my.travelLocation) {
+        var clearBtn = h("button", { class: "mini-btn ghost", text: travelBusy ? t("Working…") : t("Back home") });
+        clearBtn.disabled = travelBusy;
+        clearBtn.addEventListener("click", clearTravel);
+        actions.appendChild(clearBtn);
+      }
+      var save = h("button", { class: "mini-btn primary", text: travelBusy ? t("Working…") : t("Save") });
+      save.disabled = travelBusy;
+      save.addEventListener("click", saveTravelForm);
+      actions.appendChild(save);
+      card.appendChild(actions);
+      wrap.appendChild(card);
+    } else {
+      var row = h("div", { class: "switch-row" });
+      var label = my.travelLocation
+        ? (my.travelUntil
+            ? tTemplate("✈️ Showing as traveling to {place} until {date} — edit", { place: my.travelLocation, date: formatShortDate(my.travelUntil) })
+            : tTemplate("✈️ Showing as traveling to {place} — edit", { place: my.travelLocation }))
+        : t("✈️ Traveling? Set a location");
+      var link = h("button", { class: "switch-link", text: label });
+      link.addEventListener("click", openTravelForm);
+      row.appendChild(link);
+      wrap.appendChild(row);
+    }
+    return wrap;
   }
 
   function pushToggleRow() {

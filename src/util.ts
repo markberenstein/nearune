@@ -1,6 +1,6 @@
 // Nearune — small shared helpers.
 
-import type { State, PersonKey } from "./types";
+import type { State, PersonKey, PersonProfile } from "./types";
 
 export function json(data: unknown, init?: ResponseInit): Response {
   return Response.json(data, init);
@@ -124,6 +124,19 @@ export function todayKeyPT(): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
+}
+
+// Where `who` should be treated as being right now, for weather and the
+// local-lore line only (see types.ts's travelLocation/travelUntil) — their
+// travel city if they've set one and it hasn't expired, their registered
+// home location otherwise. `todayKey` is todayKeyPT()'s result, passed in
+// rather than recomputed here so a caller already holding it doesn't fetch
+// the date twice.
+export function effectiveLocation(person: PersonProfile | undefined, todayKey: string): string {
+  if (person?.travelLocation && (!person.travelUntil || person.travelUntil >= todayKey)) {
+    return person.travelLocation;
+  }
+  return person?.location || "";
 }
 
 export function isDayComplete(state: State, key: string): boolean {

@@ -23,7 +23,7 @@ import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, personalBadge } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, personalBadge, effectiveLocation } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
@@ -404,24 +404,58 @@ Bun.serve({
     // server-side regardless.
     if (req.method === "GET" && restPath === "/api/weather") {
       const state = await loadState(roomId);
+      const today = todayKeyPT();
       const [markWeather, nikitaWeather] = await Promise.all([
-        currentWeather(state.people?.mark?.location || ""),
-        currentWeather(state.people?.nikita?.location || ""),
+        currentWeather(effectiveLocation(state.people?.mark, today)),
+        currentWeather(effectiveLocation(state.people?.nikita, today)),
       ]);
       return json({ weather: { mark: markWeather, nikita: nikitaWeather } });
     }
 
     // SANDBOX EXPERIMENT: top local news story (biased toward genuinely
     // odd/funny real stories — see localnews.ts) at each person's
-    // registered location — same shape and caching approach as
+    // effective location (their travel city if they've set one and it
+    // hasn't expired, their registered home city otherwise — see
+    // util.ts's effectiveLocation) — same shape and caching approach as
     // /api/weather above, no API key required.
     if (req.method === "GET" && restPath === "/api/news") {
       const state = await loadState(roomId);
+      const today = todayKeyPT();
       const [markNews, nikitaNews] = await Promise.all([
-        topLocalStory(state.people?.mark?.location || ""),
-        topLocalStory(state.people?.nikita?.location || ""),
+        topLocalStory(effectiveLocation(state.people?.mark, today)),
+        topLocalStory(effectiveLocation(state.people?.nikita, today)),
       ]);
       return json({ news: { mark: markNews, nikita: nikitaNews } });
+    }
+
+    // Sets or clears a traveling override of where THIS person is shown as
+    // being, for their partner's weather/local-lore widgets only (see
+    // types.ts's travelLocation/travelUntil and util.ts's
+    // effectiveLocation) — their real registered location/timezone, the
+    // daily question rollover, and everything else are untouched. An empty
+    // location clears it outright, back to their home location; `until`
+    // is optional (YYYY-MM-DD) — leaving it out means it stays set until
+    // explicitly cleared.
+    if (req.method === "POST" && restPath === "/api/travel") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who } = body || {};
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      const untilRaw = typeof body?.until === "string" ? body.until.trim() : "";
+      const until = /^\d{4}-\d{2}-\d{2}$/.test(untilRaw) ? untilRaw : "";
+      const state = await saveState(roomId, (s) => {
+        if (!s.people || !s.people[who]) return;
+        if (!location) {
+          delete s.people[who]!.travelLocation;
+          delete s.people[who]!.travelUntil;
+        } else {
+          s.people[who]!.travelLocation = location;
+          if (until) s.people[who]!.travelUntil = until;
+          else delete s.people[who]!.travelUntil;
+        }
+      });
+      return json(forClient(state));
     }
 
     if (req.method === "POST" && restPath === "/api/status") {

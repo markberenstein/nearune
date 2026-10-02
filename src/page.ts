@@ -634,6 +634,14 @@ const RAW = String.raw`<!doctype html>
   var editingEntry = null;
   var editDraftText = "";
   var commentDrafts = {};
+  // Barrier against answering as the wrong person. Tapping your partner's
+  // status chip (see statusRow) switches viewerKey into a persistent
+  // preview of their screen — handy for peeking at their weather, but it
+  // stays switched on reload until you switch back, so it's easy to type
+  // and send an answer while still "being" them without noticing. Holds
+  // { date, text, isEdit } between asking and the person confirming who
+  // they actually are.
+  var answerConfirmPending = null;
 
   // Push notifications / app-icon badge. "unsupported" means this browser
   // can't do Web Push at all (e.g. Safari in a regular tab rather than an
@@ -1439,15 +1447,54 @@ const RAW = String.raw`<!doctype html>
     renderApp();
   }
   function cancelEdit() { editingEntry = null; renderApp(); }
-  async function saveEdit(dateKeyVal) {
-    var text = editDraftText.trim();
-    if (!text) return;
-    try { await api("/api/answer", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { online = false; }
-    editingEntry = null;
+
+  // Asks "send this as {name}?" before the API call actually goes out —
+  // the barrier itself. isEdit distinguishes an edited existing answer
+  // (handled by editingEntry) from a brand-new one (handled by draftText).
+  function askAnswerConfirm(dateKeyVal, text, isEdit) {
+    answerConfirmPending = { date: dateKeyVal, text: text, isEdit: isEdit };
     renderApp();
   }
+  function cancelAnswerConfirm() {
+    answerConfirmPending = null;
+    renderApp();
+  }
+  // "That's not me" — switches into the correct identity (same switch as
+  // tapping a status chip) and asks again under that identity, keeping the
+  // same drafted text so nothing typed is lost.
+  function switchAndReaskAnswerConfirm() {
+    var pending = answerConfirmPending;
+    if (!pending) return;
+    chooseViewer(otherKeyOf(viewerKey));
+    askAnswerConfirm(pending.date, pending.text, pending.isEdit);
+  }
+  async function confirmAnswerSend() {
+    var pending = answerConfirmPending;
+    if (!pending) return;
+    answerConfirmPending = null;
+    try { await api("/api/answer", { date: pending.date, who: viewerKey, text: pending.text }); }
+    catch (e) { online = false; }
+    if (pending.isEdit) editingEntry = null; else draftText = "";
+    renderApp();
+  }
+  function answerConfirmBlock() {
+    var wrap = h("div", { class: "edit-form" });
+    wrap.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Send this answer as {name}?", { name: personName(viewerKey) }) }));
+    var actions = h("div", { class: "edit-actions" });
+    var cancel = h("button", { class: "mini-btn ghost", text: t("Cancel") });
+    cancel.addEventListener("click", cancelAnswerConfirm);
+    var notMe = h("button", { class: "mini-btn ghost", text: tTemplate("That's {name}, not me", { name: personName(viewerKey) }) });
+    notMe.addEventListener("click", switchAndReaskAnswerConfirm);
+    var send = h("button", { class: "mini-btn primary", text: t("Yes, send") });
+    send.addEventListener("click", confirmAnswerSend);
+    actions.appendChild(cancel); actions.appendChild(notMe); actions.appendChild(send);
+    wrap.appendChild(actions);
+    return wrap;
+  }
   function ownAnswerEditor(dateKeyVal) {
+    if (answerConfirmPending && answerConfirmPending.date === dateKeyVal && answerConfirmPending.isEdit) {
+      return answerConfirmBlock();
+    }
     var wrap = h("div", { class: "edit-form" });
     var ta = document.createElement("textarea");
     ta.value = editDraftText;
@@ -1456,7 +1503,11 @@ const RAW = String.raw`<!doctype html>
     var cancel = h("button", { class: "mini-btn ghost", text: t("Cancel") });
     cancel.addEventListener("click", cancelEdit);
     var save = h("button", { class: "mini-btn primary", text: t("Save") });
-    save.addEventListener("click", function () { saveEdit(dateKeyVal); });
+    save.addEventListener("click", function () {
+      var text = editDraftText.trim();
+      if (!text) return;
+      askAnswerConfirm(dateKeyVal, text, true);
+    });
     actions.appendChild(cancel); actions.appendChild(save);
     wrap.appendChild(ta); wrap.appendChild(actions);
     return wrap;
@@ -2356,6 +2407,8 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(mineWrap);
       }
       card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>' + tTemplate("Sent — waiting for {name} to answer too.", { name: personName(otherKeyOf(viewerKey)) }) + '</span>' }));
+    } else if (answerConfirmPending && answerConfirmPending.date === today && !answerConfirmPending.isEdit) {
+      card.appendChild(answerConfirmBlock());
     } else {
       var form = h("div", { class: "answer-form" });
       var textarea = document.createElement("textarea");
@@ -2363,13 +2416,11 @@ const RAW = String.raw`<!doctype html>
       textarea.value = draftText;
       textarea.addEventListener("input", function () { draftText = textarea.value; });
       var btn = h("button", { class: "send-btn", text: t("Send") });
-      btn.addEventListener("click", async function () {
+      btn.addEventListener("click", function () {
         var text = textarea.value.trim();
         if (!text) return;
-        btn.disabled = true;
-        try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
-        catch (e) { online = false; }
-        renderApp();
+        draftText = text;
+        askAnswerConfirm(today, text, false);
       });
       form.appendChild(textarea); form.appendChild(btn);
       card.appendChild(form);

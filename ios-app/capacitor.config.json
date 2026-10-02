@@ -20,6 +20,9 @@
       "launchAutoHide": true,
       "backgroundColor": "#FAF6EE",
       "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
     }
   }
 }

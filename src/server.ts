@@ -429,31 +429,51 @@ Bun.serve({
     }
 
     // Sets or clears a traveling override of where THIS person is shown as
-    // being, for their partner's weather/local-lore widgets only (see
-    // types.ts's travelLocation/travelUntil and util.ts's
-    // effectiveLocation) — their real registered location/timezone, the
-    // daily question rollover, and everything else are untouched. An empty
-    // location clears it outright, back to their home location; `until`
-    // is optional (YYYY-MM-DD) — leaving it out means it stays set until
-    // explicitly cleared.
+    // being, for their partner's weather/local-lore widgets AND clock (see
+    // types.ts's travel* fields and util.ts's effectiveLocation/
+    // effectiveTz/isTraveling) — their real registered location/timezone,
+    // the daily question rollover, and everything else are untouched. An
+    // empty location clears it outright, back to home. `from`/`until` are
+    // optional date keys (YYYY-MM-DD): `from` schedules travel ahead of
+    // time instead of starting it immediately, and `showEarly` (only
+    // meaningful with a future `from`) opts into the override appearing
+    // TRAVEL_EARLY_DAYS days before `from` rather than exactly on it, so
+    // the partner gets a few days' heads-up. Leaving out `until` means it
+    // stays set until explicitly cleared.
     if (req.method === "POST" && restPath === "/api/travel") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const { who } = body || {};
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
-      const untilRaw = typeof body?.until === "string" ? body.until.trim() : "";
-      const until = /^\d{4}-\d{2}-\d{2}$/.test(untilRaw) ? untilRaw : "";
+      const asDateKey = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
+      const from = asDateKey(body?.from);
+      const until = asDateKey(body?.until);
+      const showEarly = !!body?.showEarly;
+      // Resolved up front (needs a network call) rather than inside
+      // saveState's mutator, which must stay synchronous — same geocoding
+      // lookup registration uses (see geo.ts), so a travel city gets a
+      // real timezone for the clock without anyone typing one by hand.
+      const travelTz = location ? await resolveTimezoneFromLocation(location) : null;
       const state = await saveState(roomId, (s) => {
         if (!s.people || !s.people[who]) return;
         if (!location) {
           delete s.people[who]!.travelLocation;
+          delete s.people[who]!.travelTz;
+          delete s.people[who]!.travelFrom;
           delete s.people[who]!.travelUntil;
-        } else {
-          s.people[who]!.travelLocation = location;
-          if (until) s.people[who]!.travelUntil = until;
-          else delete s.people[who]!.travelUntil;
+          delete s.people[who]!.travelShowEarly;
+          return;
         }
+        s.people[who]!.travelLocation = location;
+        if (travelTz) s.people[who]!.travelTz = travelTz;
+        else delete s.people[who]!.travelTz;
+        if (from) s.people[who]!.travelFrom = from;
+        else delete s.people[who]!.travelFrom;
+        if (until) s.people[who]!.travelUntil = until;
+        else delete s.people[who]!.travelUntil;
+        if (from && showEarly) s.people[who]!.travelShowEarly = true;
+        else delete s.people[who]!.travelShowEarly;
       });
       return json(forClient(state));
     }

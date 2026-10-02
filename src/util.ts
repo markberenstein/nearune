@@ -126,17 +126,52 @@ export function todayKeyPT(): string {
   return `${y}-${m}-${dd}`;
 }
 
-// Where `who` should be treated as being right now, for weather and the
-// local-lore line only (see types.ts's travelLocation/travelUntil) — their
-// travel city if they've set one and it hasn't expired, their registered
-// home location otherwise. `todayKey` is todayKeyPT()'s result, passed in
-// rather than recomputed here so a caller already holding it doesn't fetch
-// the date twice.
-export function effectiveLocation(person: PersonProfile | undefined, todayKey: string): string {
-  if (person?.travelLocation && (!person.travelUntil || person.travelUntil >= todayKey)) {
-    return person.travelLocation;
+// How many days before a scheduled travelFrom date the travel override can
+// kick in early, when the person opted into travelShowEarly (see
+// types.ts's PersonProfile) — a few days' heads-up for their partner
+// instead of switching over right on the morning of.
+const TRAVEL_EARLY_DAYS = 2;
+
+// Whether `person`'s travel override (travelLocation/travelFrom/
+// travelUntil/travelShowEarly — see types.ts) is in effect as of
+// `todayKey`: a travel city is set, we're not past travelUntil, and we're
+// at or after travelFrom itself — or, with travelShowEarly on,
+// TRAVEL_EARLY_DAYS before it. No travelFrom means travel started the
+// moment it was saved, so it's always "at or after" it.
+function travelActive(person: PersonProfile | undefined, todayKey: string): boolean {
+  if (!person?.travelLocation) return false;
+  if (person.travelUntil && person.travelUntil < todayKey) return false;
+  if (person.travelFrom && person.travelFrom > todayKey) {
+    const earliestShow = person.travelShowEarly ? keyOffsetDays(person.travelFrom, -TRAVEL_EARLY_DAYS) : person.travelFrom;
+    if (todayKey < earliestShow) return false;
   }
+  return true;
+}
+
+// Where `who` should be treated as being right now, for weather and the
+// local-lore line only (see types.ts's travel* fields) — their travel city
+// while travelActive(), their registered home location otherwise.
+// `todayKey` is todayKeyPT()'s result, passed in rather than recomputed
+// here so a caller already holding it doesn't fetch the date twice.
+export function effectiveLocation(person: PersonProfile | undefined, todayKey: string): string {
+  if (travelActive(person, todayKey)) return person!.travelLocation!;
   return person?.location || "";
+}
+
+// Same idea as effectiveLocation, but for `who`'s own clock: their travel
+// city's resolved timezone (travelTz) while travelActive(), their
+// registered home tz otherwise.
+export function effectiveTz(person: PersonProfile | undefined, todayKey: string): string | undefined {
+  if (travelActive(person, todayKey) && person?.travelTz) return person.travelTz;
+  return person?.tz;
+}
+
+// Whether `who` is currently (or, with travelShowEarly, about to be shown
+// as) traveling — drives the small "✈️ traveling" marker next to their
+// clock/weather/lore so their partner knows what they're seeing is a
+// travel city, not home.
+export function isTraveling(person: PersonProfile | undefined, todayKey: string): boolean {
+  return travelActive(person, todayKey);
 }
 
 export function isDayComplete(state: State, key: string): boolean {

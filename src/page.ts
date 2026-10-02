@@ -142,6 +142,7 @@ const RAW = String.raw`<!doctype html>
     padding: 8px 14px; font-size: 0.82rem;
   }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .status-travel-flag { font-size: 0.75rem; line-height: 1; flex: none; }
   .status-chip input { border: none; background: transparent; color: var(--ink); font: inherit; flex: 1; min-width: 0; outline: none; }
   .status-chip input::placeholder { color: var(--ink-soft); }
   /* SANDBOX EXPERIMENT: the partner's chip is tappable to preview their
@@ -549,6 +550,40 @@ const RAW = String.raw`<!doctype html>
     var p = state.people && state.people[key];
     return (p && p.tz) || PEOPLE[key].tz;
   }
+  // Mirrors util.ts's TRAVEL_EARLY_DAYS/travelActive — see that file's
+  // comments for what each field means. Kept in sync by hand since the
+  // client has no way to import server code.
+  var TRAVEL_EARLY_DAYS = 2;
+  function travelActive(person, todayKey) {
+    if (!person || !person.travelLocation) return false;
+    if (person.travelUntil && person.travelUntil < todayKey) return false;
+    if (person.travelFrom && person.travelFrom > todayKey) {
+      var earliestShow = person.travelShowEarly ? keyOffsetDays(person.travelFrom, -TRAVEL_EARLY_DAYS) : person.travelFrom;
+      if (todayKey < earliestShow) return false;
+    }
+    return true;
+  }
+  // Whether the given person key is (effectively) traveling right now —
+  // drives the small plane marker shown wherever their clock/weather/lore
+  // is displayed, so their partner knows what they're seeing is a travel
+  // city, not home.
+  function personIsTraveling(key) {
+    var p = state.people && state.people[key];
+    return travelActive(p, dateKey(new Date()));
+  }
+  // Travel-aware versions of personLocation/personTz, for the clock only —
+  // everything else about that person (their status, answers, etc.) stays
+  // tied to their real home location/tz.
+  function effectiveClockLocation(key) {
+    var p = state.people && state.people[key];
+    if (travelActive(p, dateKey(new Date())) && p.travelLocation) return p.travelLocation;
+    return personLocation(key);
+  }
+  function effectiveClockTz(key) {
+    var p = state.people && state.people[key];
+    if (travelActive(p, dateKey(new Date())) && p.travelTz) return p.travelTz;
+    return personTz(key);
+  }
   function nextRolloverMs() {
     var n = Date.now(), d = new Date(n);
     var c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 1, 0, 0);
@@ -647,14 +682,17 @@ const RAW = String.raw`<!doctype html>
   // own view) on reload.
   var previewKey = null;
 
-  // Traveling: lets you temporarily tell your partner's weather/local-lore
-  // widgets to treat you as being somewhere other than home — see
+  // Traveling: lets you temporarily tell your partner's weather/local-lore/
+  // clock to treat you as being somewhere other than home — see
   // travelBlock(). travelFormOpen/travelDraft are this device's own
   // in-progress edit; the actual traveling state lives on your profile in
-  // state.people (travelLocation/travelUntil), same as everything else
-  // server-synced.
+  // state.people (travelLocation/travelFrom/travelUntil/travelShowEarly),
+  // same as everything else server-synced. The start date lets travel be
+  // scheduled ahead of time instead of starting immediately; the early-show
+  // option lets your partner see it a couple of days before that start
+  // date instead of exactly on it.
   var travelFormOpen = false;
-  var travelDraft = { location: "", until: "" };
+  var travelDraft = { location: "", from: "", until: "", showEarly: true };
   var travelBusy = false;
   var travelError = "";
 
@@ -1962,7 +2000,8 @@ const RAW = String.raw`<!doctype html>
   function newsLineBlock() {
     var story = currentPartnerNews();
     if (!story || !story.headline) return null;
-    var shownName = personName(otherKeyOf(effectiveViewKey()));
+    var shownKey = otherKeyOf(effectiveViewKey());
+    var shownName = personName(shownKey) + (personIsTraveling(shownKey) ? " (traveling)" : "");
     var line = h("p", { class: "news-line" });
     line.appendChild(document.createTextNode("🤪 Quirky story near " + shownName + ": "));
     line.appendChild(
@@ -1984,7 +2023,9 @@ const RAW = String.raw`<!doctype html>
     var w = currentSkyWeather();
     if (!w || !viewerKey) return null;
     var icon = (w.theme && w.theme.icon) || "";
-    var shownName = personName(otherKeyOf(effectiveViewKey()));
+    var shownKey = otherKeyOf(effectiveViewKey());
+    var shownName = personName(shownKey);
+    var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
     // Secondary unit under the big temp: primary is already Fahrenheit for
@@ -2038,14 +2079,14 @@ const RAW = String.raw`<!doctype html>
       document.createTextNode(
         "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. "
       ),
-      h("strong", { text: "The sky over " + shownName + "'s head right now." }),
+      h("strong", { text: "The sky over " + (shownTraveling ? "✈️ " : "") + shownName + "'s head right now." }),
     ]);
     wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
         h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
-        h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" }),
+        h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" + (shownTraveling ? " — traveling" : "") }),
       ];
       if (w.recentHours && w.recentHours.length > 1) {
         var temps = w.recentHours.map(function (p) { return p.temp; });
@@ -2066,10 +2107,18 @@ const RAW = String.raw`<!doctype html>
     }
     return wrap;
   }
+  function clockBlock(key) {
+    var cityText = effectiveClockLocation(key);
+    var cityLabel = personIsTraveling(key) ? ("✈️ " + cityText) : cityText;
+    return h("div", { class: "clock-block" }, [
+      h("div", { class: "clock-city", text: cityLabel }),
+      h("div", { class: "clock-time", text: clockFor(effectiveClockTz(key)) }),
+    ]);
+  }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
-    var markClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("mark") }), h("div", { class: "clock-time", text: clockFor(personTz("mark")) })]);
-    var nikitaClock = h("div", { class: "clock-block" }, [h("div", { class: "clock-city", text: personLocation("nikita") }), h("div", { class: "clock-time", text: clockFor(personTz("nikita")) })]);
+    var markClock = clockBlock("mark");
+    var nikitaClock = clockBlock("nikita");
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
     return h("div", {}, [wordmark, clocks]);
@@ -2326,7 +2375,9 @@ const RAW = String.raw`<!doctype html>
       var current = (state.status[key] && state.status[key].text) || "";
       var isSelf = viewerKey === key;
       var chipClass = "status-chip" + (!isSelf ? " status-chip-preview" : "");
-      var chip = h("div", { class: chipClass }, [h("span", { class: "status-dot", style: "background:" + person.color })]);
+      var chipKids = [h("span", { class: "status-dot", style: "background:" + person.color })];
+      if (personIsTraveling(key)) chipKids.unshift(h("span", { class: "status-travel-flag", text: "✈️", title: t("Traveling") }));
+      var chip = h("div", { class: chipClass }, chipKids);
       var input = document.createElement("input");
       input.type = "text"; input.maxLength = 60; input.placeholder = tTemplate("{name}'s world right now…", { name: personName(key) });
       input.value = current;
@@ -2669,7 +2720,12 @@ const RAW = String.raw`<!doctype html>
 
   function openTravelForm() {
     var my = state.people && state.people[viewerKey];
-    travelDraft = { location: (my && my.travelLocation) || "", until: (my && my.travelUntil) || "" };
+    travelDraft = {
+      location: (my && my.travelLocation) || "",
+      from: (my && my.travelFrom) || "",
+      until: (my && my.travelUntil) || "",
+      showEarly: my && my.travelLocation ? !!my.travelShowEarly : true,
+    };
     travelError = "";
     travelFormOpen = true;
     renderApp();
@@ -2683,7 +2739,13 @@ const RAW = String.raw`<!doctype html>
     if (!location) { travelError = t("Enter a city, or use Back home to clear it."); renderApp(); return; }
     travelBusy = true; travelError = ""; renderApp();
     try {
-      await api("/api/travel", { who: viewerKey, location: location, until: travelDraft.until });
+      await api("/api/travel", {
+        who: viewerKey,
+        location: location,
+        from: travelDraft.from,
+        until: travelDraft.until,
+        showEarly: !!(travelDraft.from && travelDraft.showEarly),
+      });
       travelFormOpen = false;
     } catch (e) { travelError = t("Something went wrong — try again."); }
     travelBusy = false;
@@ -2692,25 +2754,59 @@ const RAW = String.raw`<!doctype html>
   async function clearTravel() {
     travelBusy = true; travelError = ""; renderApp();
     try {
-      await api("/api/travel", { who: viewerKey, location: "", until: "" });
+      await api("/api/travel", { who: viewerKey, location: "", from: "", until: "" });
       travelFormOpen = false;
     } catch (e) { travelError = t("Something went wrong — try again."); }
     travelBusy = false;
     renderApp();
   }
-  // Lets you temporarily tell your PARTNER's weather/local-lore widgets to
-  // show a travel city instead of your home location — see
-  // effectiveLocation in util.ts. Everything else (your own clock,
-  // timezone, daily rollover) stays on your real registered location.
+  // The "set a location" link's label, covering four states: no travel set,
+  // travel already in effect (optionally with a return date), travel
+  // scheduled for a future date (not visible to your partner yet), and that
+  // same scheduled case with the early-heads-up opted in. Kept as distinct
+  // full strings (rather than splicing a fragment into one template)
+  // because tTemplate's translation pass runs on the whole template text.
+  function travelStatusLabel(my, today) {
+    if (!my.travelLocation) return t("✈️ Traveling? Set a location");
+    if (travelActive(my, today)) {
+      return my.travelUntil
+        ? tTemplate("✈️ Showing as traveling to {place} until {date} — edit", { place: my.travelLocation, date: formatShortDate(my.travelUntil) })
+        : tTemplate("✈️ Showing as traveling to {place} — edit", { place: my.travelLocation });
+    }
+    if (my.travelUntil) {
+      return my.travelShowEarly
+        ? tTemplate("✈️ Traveling to {place} from {from} to {until} (your partner sees it 2 days early) — edit", { place: my.travelLocation, from: formatShortDate(my.travelFrom), until: formatShortDate(my.travelUntil) })
+        : tTemplate("✈️ Traveling to {place} from {from} to {until} — edit", { place: my.travelLocation, from: formatShortDate(my.travelFrom), until: formatShortDate(my.travelUntil) });
+    }
+    return my.travelShowEarly
+      ? tTemplate("✈️ Traveling to {place} from {from} (your partner sees it 2 days early) — edit", { place: my.travelLocation, from: formatShortDate(my.travelFrom) })
+      : tTemplate("✈️ Traveling to {place} from {from} — edit", { place: my.travelLocation, from: formatShortDate(my.travelFrom) });
+  }
+  // Lets you temporarily tell your PARTNER's weather/local-lore widgets and
+  // clock to show a travel city instead of your home location — see
+  // effectiveLocation/effectiveTz in util.ts. Everything about YOUR OWN
+  // screen (your clock, timezone, daily rollover) stays on your real
+  // registered location. Travel can start immediately or be scheduled
+  // ahead of time via the "Starts" date, and — once scheduled — optionally
+  // shown to your partner a couple of days before it actually starts.
   function travelBlock() {
     var my = state.people && state.people[viewerKey];
     if (!my) return null;
+    var today = dateKey(new Date());
     var wrap = h("div", {});
     if (travelFormOpen) {
       var card = h("div", { class: "edit-form" });
-      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Set where you're traveling — your partner's weather and local-story line will show this instead of home, until you clear it.") }));
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Set where you're traveling — your partner's weather, local-story line and clock will show this instead of home. Leave \"Starts\" blank to begin right away, or pick a future date to schedule it ahead.") }));
       var fields = h("div", { class: "puzzle-setup" });
       fields.appendChild(textField(travelDraft.location, "City you're traveling to", function (v) { travelDraft.location = v; }));
+      var fromInput = document.createElement("input");
+      fromInput.type = "date";
+      fromInput.value = travelDraft.from;
+      fromInput.addEventListener("input", function () { travelDraft.from = fromInput.value; renderApp(); });
+      fields.appendChild(h("div", { class: "travel-until-row" }, [
+        h("span", { class: "travel-until-label", text: t("Starts (optional)") }),
+        fromInput,
+      ]));
       var dateInput = document.createElement("input");
       dateInput.type = "date";
       dateInput.value = travelDraft.until;
@@ -2719,6 +2815,19 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "travel-until-label", text: t("Return date (optional)") }),
         dateInput,
       ]));
+      // Only meaningful when travel is scheduled for a future date — lets
+      // your partner see it a couple of days ahead instead of right on
+      // the morning it starts.
+      if (travelDraft.from && travelDraft.from > today) {
+        var earlyRow = h("label", { class: "travel-until-row" });
+        var earlyCheckbox = document.createElement("input");
+        earlyCheckbox.type = "checkbox";
+        earlyCheckbox.checked = !!travelDraft.showEarly;
+        earlyCheckbox.addEventListener("change", function () { travelDraft.showEarly = earlyCheckbox.checked; });
+        earlyRow.appendChild(earlyCheckbox);
+        earlyRow.appendChild(h("span", { class: "travel-until-label", text: t("Let your partner see this 2 days early") }));
+        fields.appendChild(earlyRow);
+      }
       card.appendChild(fields);
       if (travelError) card.appendChild(h("p", { class: "puzzle-guess-note", text: travelError }));
       var actions = h("div", { class: "edit-actions" });
@@ -2739,12 +2848,7 @@ const RAW = String.raw`<!doctype html>
       wrap.appendChild(card);
     } else {
       var row = h("div", { class: "switch-row" });
-      var label = my.travelLocation
-        ? (my.travelUntil
-            ? tTemplate("✈️ Showing as traveling to {place} until {date} — edit", { place: my.travelLocation, date: formatShortDate(my.travelUntil) })
-            : tTemplate("✈️ Showing as traveling to {place} — edit", { place: my.travelLocation }))
-        : t("✈️ Traveling? Set a location");
-      var link = h("button", { class: "switch-link", text: label });
+      var link = h("button", { class: "switch-link", text: travelStatusLabel(my, today) });
       link.addEventListener("click", openTravelForm);
       row.appendChild(link);
       wrap.appendChild(row);
@@ -2828,7 +2932,7 @@ const RAW = String.raw`<!doctype html>
 
   function tickClocks() {
     document.querySelectorAll(".clock-time").forEach(function (el, i) {
-      el.textContent = i === 0 ? clockFor(personTz("mark")) : clockFor(personTz("nikita"));
+      el.textContent = i === 0 ? clockFor(effectiveClockTz("mark")) : clockFor(effectiveClockTz("nikita"));
     });
     var cd = document.getElementById("cd-note");
     if (cd) cd.textContent = countdownText();

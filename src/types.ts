@@ -19,16 +19,42 @@ export type Comment = { who: PersonKey; text: string; at: string };
 // replaces it with the boolean hasVoice, so the client (and anyone
 // inspecting network traffic) only ever learns "yes/no", never an id that
 // could be replayed directly against the provider.
-// travelLocation/travelUntil: an optional temporary override of WHERE this
-// person is shown as being — just for weather and the local-lore line (see
-// util.ts's effectiveLocation), nothing else. Their real `location`, `tz`
-// and everything tied to it (the daily rollover, their registered city on
-// the clock) stay exactly as registered; travel only changes what city
-// feeds their partner's "what's it like where they are" weather/lore.
-// travelUntil is an optional date key (YYYY-MM-DD, same format as
-// todayKeyPT) — once that day has passed, effectiveLocation reverts to
-// `location` on its own. No travelUntil means it stays set until cleared.
-export type PersonProfile = { name: string; location: string; language: string; tz?: string; confirmed: boolean; emailHash?: string; voiceId?: string; hasVoice?: boolean; travelLocation?: string; travelUntil?: string };
+// travelLocation/travelTz/travelFrom/travelUntil/travelShowEarly: an
+// optional temporary override of WHERE this person is shown as being —
+// their weather, local-lore line, AND clock (see util.ts's
+// effectiveLocation/effectiveTz/isTraveling), nothing else. Their real
+// `location`, `tz` and everything tied to it (the daily rollover, their
+// registered city) stay exactly as registered; travel only changes what
+// city/timezone feeds their partner's "what's it like where they are"
+// widgets and clock.
+// - travelTz is resolved automatically from travelLocation the same way
+//   registration resolves tz from location (see geo.ts) — never typed by
+//   hand.
+// - travelFrom/travelUntil are optional date keys (YYYY-MM-DD, same format
+//   as todayKeyPT) letting travel be scheduled ahead of time rather than
+//   starting the moment it's saved: before travelFrom, nothing changes yet;
+//   once travelUntil has passed, effectiveLocation/effectiveTz revert to
+//   `location`/`tz` on their own. No travelFrom means it's active
+//   immediately; no travelUntil means it stays set until cleared.
+// - travelShowEarly opts into showing the travel override starting
+//   TRAVEL_EARLY_DAYS days before travelFrom instead of exactly on it, so a
+//   partner gets a few days' heads-up. Only meaningful alongside a future
+//   travelFrom.
+export type PersonProfile = {
+  name: string;
+  location: string;
+  language: string;
+  tz?: string;
+  confirmed: boolean;
+  emailHash?: string;
+  voiceId?: string;
+  hasVoice?: boolean;
+  travelLocation?: string;
+  travelTz?: string;
+  travelFrom?: string;
+  travelUntil?: string;
+  travelShowEarly?: boolean;
+};
 
 // A browser's Web Push subscription (from the PushSubscription object) —
 // endpoint + keys needed to encrypt and deliver a push to that browser.

@@ -634,14 +634,14 @@ const RAW = String.raw`<!doctype html>
   var editingEntry = null;
   var editDraftText = "";
   var commentDrafts = {};
-  // Barrier against answering as the wrong person. Tapping your partner's
-  // status chip (see statusRow) switches viewerKey into a persistent
-  // preview of their screen — handy for peeking at their weather, but it
-  // stays switched on reload until you switch back, so it's easy to type
-  // and send an answer while still "being" them without noticing. Holds
-  // { date, text, isEdit } between asking and the person confirming who
-  // they actually are.
-  var answerConfirmPending = null;
+  // Whoever's weather/news is being PREVIEWED right now (see statusRow's
+  // chip tap and effectiveViewKey below) — separate from viewerKey, your
+  // actual, device-pinned identity. Previewing your partner's screen never
+  // changes viewerKey, so it can't make you answer, edit your status, or
+  // do anything else as them — see effectiveViewKey's comment for why
+  // that split exists. Not persisted: always starts back at null (your
+  // own view) on reload.
+  var previewKey = null;
 
   // Push notifications / app-icon badge. "unsupported" means this browser
   // can't do Web Push at all (e.g. Safari in a regular tab rather than an
@@ -1447,54 +1447,19 @@ const RAW = String.raw`<!doctype html>
     renderApp();
   }
   function cancelEdit() { editingEntry = null; renderApp(); }
-
-  // Asks "send this as {name}?" before the API call actually goes out —
-  // the barrier itself. isEdit distinguishes an edited existing answer
-  // (handled by editingEntry) from a brand-new one (handled by draftText).
-  function askAnswerConfirm(dateKeyVal, text, isEdit) {
-    answerConfirmPending = { date: dateKeyVal, text: text, isEdit: isEdit };
-    renderApp();
-  }
-  function cancelAnswerConfirm() {
-    answerConfirmPending = null;
-    renderApp();
-  }
-  // "That's not me" — switches into the correct identity (same switch as
-  // tapping a status chip) and asks again under that identity, keeping the
-  // same drafted text so nothing typed is lost.
-  function switchAndReaskAnswerConfirm() {
-    var pending = answerConfirmPending;
-    if (!pending) return;
-    chooseViewer(otherKeyOf(viewerKey));
-    askAnswerConfirm(pending.date, pending.text, pending.isEdit);
-  }
-  async function confirmAnswerSend() {
-    var pending = answerConfirmPending;
-    if (!pending) return;
-    answerConfirmPending = null;
-    try { await api("/api/answer", { date: pending.date, who: viewerKey, text: pending.text }); }
+  // Posts under viewerKey — your actual, device-pinned identity (see
+  // previewKey below: tapping your partner's status chip to preview their
+  // weather never touches viewerKey, so there's no "wait, who am I
+  // answering as" moment to confirm here any more).
+  async function saveEdit(dateKeyVal) {
+    var text = editDraftText.trim();
+    if (!text) return;
+    try { await api("/api/answer", { date: dateKeyVal, who: viewerKey, text: text }); }
     catch (e) { online = false; }
-    if (pending.isEdit) editingEntry = null; else draftText = "";
+    editingEntry = null;
     renderApp();
-  }
-  function answerConfirmBlock() {
-    var wrap = h("div", { class: "edit-form" });
-    wrap.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Send this answer as {name}?", { name: personName(viewerKey) }) }));
-    var actions = h("div", { class: "edit-actions" });
-    var cancel = h("button", { class: "mini-btn ghost", text: t("Cancel") });
-    cancel.addEventListener("click", cancelAnswerConfirm);
-    var notMe = h("button", { class: "mini-btn ghost", text: tTemplate("That's {name}, not me", { name: personName(viewerKey) }) });
-    notMe.addEventListener("click", switchAndReaskAnswerConfirm);
-    var send = h("button", { class: "mini-btn primary", text: t("Yes, send") });
-    send.addEventListener("click", confirmAnswerSend);
-    actions.appendChild(cancel); actions.appendChild(notMe); actions.appendChild(send);
-    wrap.appendChild(actions);
-    return wrap;
   }
   function ownAnswerEditor(dateKeyVal) {
-    if (answerConfirmPending && answerConfirmPending.date === dateKeyVal && answerConfirmPending.isEdit) {
-      return answerConfirmBlock();
-    }
     var wrap = h("div", { class: "edit-form" });
     var ta = document.createElement("textarea");
     ta.value = editDraftText;
@@ -1503,11 +1468,7 @@ const RAW = String.raw`<!doctype html>
     var cancel = h("button", { class: "mini-btn ghost", text: t("Cancel") });
     cancel.addEventListener("click", cancelEdit);
     var save = h("button", { class: "mini-btn primary", text: t("Save") });
-    save.addEventListener("click", function () {
-      var text = editDraftText.trim();
-      if (!text) return;
-      askAnswerConfirm(dateKeyVal, text, true);
-    });
+    save.addEventListener("click", function () { saveEdit(dateKeyVal); });
     actions.appendChild(cancel); actions.appendChild(save);
     wrap.appendChild(ta); wrap.appendChild(actions);
     return wrap;
@@ -1756,7 +1717,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(form);
     if (!soloRegistration) {
       var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-      sw.addEventListener("click", function () { viewerKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
+      sw.addEventListener("click", function () { viewerKey = null; previewKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
     var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
@@ -1923,8 +1884,15 @@ const RAW = String.raw`<!doctype html>
       ])
     ]);
   }
+  // Sets your ACTUAL identity for this device — everything you do (answer,
+  // edit your status, comment, guess the puzzle) posts as this from here
+  // on. Only called from the "who's here?" picker (first use) and the
+  // explicit "Not {name}? Switch" link — never from a status-chip tap, see
+  // previewAsPartner below, so nothing short of deliberately re-picking
+  // who you are can change who you answer as.
   function chooseViewer(key) {
     viewerKey = key;
+    previewKey = null;
     weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
     applyWeatherSky(); // instant, from whatever weather data is already loaded
@@ -1933,11 +1901,24 @@ const RAW = String.raw`<!doctype html>
     loadNews();
   }
 
-  // SANDBOX EXPERIMENT: whose home screen is effectively being shown right
-  // now — always just whoever you're currently viewing as (see chooseViewer,
-  // which handles both the initial "who's here?" pick and tapping your
-  // partner's status chip to switch into their view).
-  function effectiveViewKey() { return viewerKey; }
+  // Toggles PREVIEWING your partner's weather/background (see
+  // effectiveViewKey below) without touching viewerKey — tapping their
+  // status chip again, or your own, clears it. Purely cosmetic: it never
+  // changes who you answer, comment, or edit your status as.
+  function previewAsPartner(key) {
+    previewKey = previewKey === key ? null : key;
+    weatherExpanded = false;
+    applyWeatherSky();
+    renderApp();
+  }
+
+  // Whose weather/background is being shown right now — the previewed
+  // partner if you tapped their status chip (see previewAsPartner), your
+  // own otherwise. Deliberately separate from viewerKey (your real,
+  // device-pinned identity, set only by chooseViewer): this is cosmetic
+  // only, so previewing a partner's screen can never make you answer,
+  // comment, or edit a status as them.
+  function effectiveViewKey() { return previewKey || viewerKey; }
   // The weather that SHOULD be tinting the background right now: whoever's
   // screen is effectively being shown, this is the weather at THEIR
   // partner's location — same rule the real app always applies, just
@@ -2338,19 +2319,17 @@ const RAW = String.raw`<!doctype html>
           api("/api/status", { who: key, text: input.value }).catch(function () { online = false; renderApp(); });
         });
       } else {
-        // SANDBOX EXPERIMENT: tapping your partner's chip actually switches
-        // you into their view — same as picking them on the "who's here?"
-        // screen (chooseViewer), so their status becomes editable, the
-        // background shows the weather their home screen would show, and
-        // it's remembered on reload. Tapping your OWN chip's counterpart
-        // (now the non-self one, after switching) switches back — same
-        // handler, symmetric. The input itself is disabled, so clicks on
-        // it wouldn't otherwise reach this handler — pointer-events routes
-        // them to the chip.
+        // Tapping your partner's chip previews the background/weather
+        // their home screen would show (see previewAsPartner) — NOT a
+        // switch of who you are: their status input stays disabled, and
+        // nothing you do still posts as anyone but viewerKey. Tapping
+        // again (either chip) clears the preview. The input itself is
+        // disabled, so clicks on it wouldn't otherwise reach this handler
+        // — pointer-events routes them to the chip.
         input.style.pointerEvents = "none";
         chip.style.cursor = "pointer";
         chip.addEventListener("click", function () {
-          chooseViewer(key);
+          previewAsPartner(key);
         });
       }
       chip.appendChild(input);
@@ -2411,8 +2390,6 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(mineWrap);
       }
       card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>' + tTemplate("Sent — waiting for {name} to answer too.", { name: personName(otherKeyOf(viewerKey)) }) + '</span>' }));
-    } else if (answerConfirmPending && answerConfirmPending.date === today && !answerConfirmPending.isEdit) {
-      card.appendChild(answerConfirmBlock());
     } else {
       var form = h("div", { class: "answer-form" });
       var textarea = document.createElement("textarea");
@@ -2420,11 +2397,13 @@ const RAW = String.raw`<!doctype html>
       textarea.value = draftText;
       textarea.addEventListener("input", function () { draftText = textarea.value; });
       var btn = h("button", { class: "send-btn", text: t("Send") });
-      btn.addEventListener("click", function () {
+      btn.addEventListener("click", async function () {
         var text = textarea.value.trim();
         if (!text) return;
-        draftText = text;
-        askAnswerConfirm(today, text, false);
+        btn.disabled = true;
+        try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
+        catch (e) { online = false; }
+        renderApp();
       });
       form.appendChild(textarea); form.appendChild(btn);
       card.appendChild(form);
@@ -2689,6 +2668,7 @@ const RAW = String.raw`<!doctype html>
     var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
     link.addEventListener("click", function () {
       viewerKey = null;
+      previewKey = null;
       weatherExpanded = false;
       try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
       renderApp();

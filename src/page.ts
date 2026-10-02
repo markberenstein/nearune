@@ -2453,13 +2453,17 @@ const RAW = String.raw`<!doctype html>
     return outputArray;
   }
 
-  // Pushes the shared "how many of you two haven't answered yet" count to
-  // this tab's own icon (works while the app is open; the service worker
-  // handles it the rest of the time via incoming pushes).
+  // Pushes THIS viewer's own pending state (0 or 1 — do I personally still
+  // need to answer today) to this tab's own icon. Used to show the shared
+  // "how many of you two haven't answered" count (0/1/2) instead, which
+  // could leave a stray "1" or "2" on your own icon even after you'd
+  // already answered, just because your partner hadn't yet — see
+  // personalBadgeLocal below. Works while the app is open; the service
+  // worker handles it the rest of the time via incoming pushes.
   function syncAppBadge() {
     if (!("setAppBadge" in navigator)) return;
     var today = todayKeyStr();
-    var count = unansweredCountLocal(today);
+    var count = personalBadgeLocal(today);
     try {
       if (count > 0) navigator.setAppBadge(count); else navigator.clearAppBadge();
     } catch (e) {}
@@ -2476,11 +2480,12 @@ const RAW = String.raw`<!doctype html>
     return latest && latest >= iso ? latest : iso;
   }
 
-  function unansweredCountLocal(key) {
+  // This viewer's own pending state for the given day: 1 if they personally
+  // haven't answered yet, 0 if they have (or we don't yet know who they are).
+  function personalBadgeLocal(key) {
+    if (!viewerKey) return 0;
     var a = state.answers && state.answers[key];
-    var n = 0;
-    ["mark", "nikita"].forEach(function (who) { if (!a || !a[who] || !a[who].text) n++; });
-    return n;
+    return a && a[viewerKey] && a[viewerKey].text ? 0 : 1;
   }
 
   // Fetches the VAPID key and registers the service worker ahead of time

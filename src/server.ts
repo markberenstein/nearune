@@ -23,7 +23,7 @@ import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, personalBadge } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
@@ -186,7 +186,7 @@ Bun.serve({
               const res = await sendPush(sub, {
                 title: "Today's question is up",
                 body: "Your Nearune question for today is ready.",
-                badge: count,
+                badge: personalBadge(state, today, who),
                 tag: "morning",
               });
               if (res.ok) sent++;
@@ -257,10 +257,11 @@ Bun.serve({
           ...(prev ? { editedAt: new Date().toISOString() } : {}),
         };
       });
-      // Nudge whoever hasn't answered yet with the updated shared badge
-      // count. Fire-and-forget — a slow or failed push shouldn't delay the
-      // answer response, and a dead subscription is cleaned up in the
-      // background rather than blocking this request.
+      // Nudge whoever hasn't answered yet, with THEIR OWN badge (1 — they
+      // still have something to do), not the shared unanswered count.
+      // Fire-and-forget — a slow or failed push shouldn't delay the answer
+      // response, and a dead subscription is cleaned up in the background
+      // rather than blocking this request.
       if (anyPushConfigured && state.pushSubs) {
         const count = unansweredCount(state, date);
         // TEMPORARY diagnostic — re-added to catch a report of the badge
@@ -280,7 +281,7 @@ Bun.serve({
             sendPush(sub, {
               title: answererName + " answered today's question",
               body: "Your turn on Nearune.",
-              badge: count,
+              badge: personalBadge(state, date, other),
               tag: "partner-answered",
             })
               .then((res) => {
@@ -307,7 +308,12 @@ Bun.serve({
         // for a foregrounded notification — only the badge updates. Only
         // needed for APNs; web subs sync locally. Skipped when count is 0 —
         // the day-complete block below already sends both people a real
-        // badge-clearing push in that case.
+        // badge-clearing push in that case. badge is always 0 here — the
+        // answerer just answered, so THEY have nothing pending, regardless
+        // of whether their partner has. This used to send `badge: count`,
+        // which could still be 1 (partner hasn't answered) — showing a
+        // stray "1" (or, before this fix, a shared 2) on the answerer's own
+        // icon even though they were done for the day.
         const ownSub = state.pushSubs[who];
         // TEMPORARY diagnostic — see note above.
         console.log("[own-badge] who=" + who + " count=" + count + " ownSub=" + (ownSub ? (ownSub.kind || "web") : "none"));
@@ -315,7 +321,7 @@ Bun.serve({
           sendPush(ownSub, {
             title: "Answer saved",
             body: "Waiting on your partner to answer today's question.",
-            badge: count,
+            badge: 0,
             tag: "own-answered",
           })
             .then((res) => {
@@ -605,7 +611,7 @@ Bun.serve({
         sendPush(inviterSub, {
           title: "Your Nearune partner joined!",
           body: name + " just joined Nearune — today's question is ready for you both.",
-          badge: unansweredCount(state, today),
+          badge: personalBadge(state, today, inviter),
           tag: "partner-joined",
         }).then((res) => {
           if (res.gone) {

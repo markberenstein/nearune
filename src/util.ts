@@ -131,8 +131,22 @@ export function isDayComplete(state: State, key: string): boolean {
   return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text);
 }
 
+// Whether `who` personally still has something to do for the given day —
+// 1 if they haven't answered yet, 0 if they have. This is what each
+// person's own app-icon badge should show: "do I have something pending",
+// not "how many of the two of us still do". unansweredCount (below) was
+// being sent as EVERY badge, including the badge push a person gets right
+// after answering their own question — so their icon could still show "1"
+// even though they were done for the day, because their partner hadn't
+// answered yet. That "1" was never about them.
+export function personalBadge(state: State, key: string, who: PersonKey): number {
+  const a = state.answers[key];
+  return a && a[who] && a[who]!.text ? 0 : 1;
+}
+
 // How many of the two people (0/1/2) have NOT yet answered the given day's
-// question — used as the shared app-icon badge count.
+// question. Kept for isDayComplete-adjacent bookkeeping — NOT for a
+// per-person app badge (see personalBadge above).
 export function unansweredCount(state: State, key: string): number {
   const a = state.answers[key];
   let n = 0;

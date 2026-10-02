@@ -1,86 +1,139 @@
-// Nearune — fun, openly-invented "neighborhood lore" line for a free-text
-// location. SANDBOX EXPERIMENT: this used to pull a REAL Google News
-// headline for each person's area (biased toward lighter/fun stories via
-// a rotating daily theme) — but real local news mostly turns out to be
-// ribbon-cuttings, city-council votes, and minor business items, not the
-// kind of delightful nonsense two people actually want to share ("ooh, in
-// Delhi, monkeys apparently..."). So this is now a pure made-up vignette
-// generator instead of a news fetch: no API, no key, nothing to go stale
-// or rate-limit against — same spirit as translate.ts's Gibberish/Klingon
-// generators, just whimsical "local folklore" instead of a language.
-// Shown as a single line between the Today/Puzzle content and the "next
-// question" countdown — see page.ts's newsLineBlock().
+// Nearune — top local news headline at a free-text location string, biased
+// toward genuinely odd/funny stories, via Google News' public RSS search
+// (no API key required — unlike weather.ts's WeatherKit path, there's
+// nothing to configure here). SANDBOX EXPERIMENT: shown as a single line
+// between the Today/Puzzle content and the "next question" countdown —
+// see page.ts's newsLineBlock(). Real stories, with a real link, so both
+// of you can actually open and laugh over the same thing — see
+// topLocalStory's doc comment below for why these are tone-targeted
+// rather than category-targeted. Results are cached for a while since a
+// "fun local story" doesn't need to be near-real-time, and this keeps
+// from hammering Google's endpoint on every client poll.
+//
+// A single broad "fun" query tends to return the SAME top headline for
+// days at a time (Google News' top match for an evergreen query is sticky),
+// which is what made the news line feel repetitive. To fix that, each day
+// picks one narrow theme (see THEMES below) from a rotating list, keyed to
+// the app's own day boundary (todayKeyPT — 6:30am IST, same as everywhere
+// else in the app), so the query itself — not just the cache — changes
+// daily and both people see a genuinely different kind of story each day.
 
 import { todayKeyPT } from "./util";
 
-export type LocalStory = { headline: string } | null;
+export type LocalStory = { headline: string; source: string; url: string } | null;
 
-function hashStr(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
+const newsCache = new Map<string, { at: number; value: LocalStory }>();
+const NEWS_TTL = 2 * 60 * 60 * 1000; // 2 hours — news doesn't need to be fresh-by-the-minute
 
-// Each line slots a free-text location in via {location} and is written
-// to read like cheerful, obviously-invented neighborhood folklore —
-// wandering animals, pop-up art, tiny parades, odd little traditions —
-// never like a real headline, so nobody mistakes it for actual news about
-// where their partner lives.
-const VIGNETTES: string[] = [
-  "Local artists in {location} are reportedly plotting a surprise mural across three blocks downtown — rumor is it'll be finished by sunrise.",
-  "A small troop of mischievous monkeys has apparently taken up residence in the fountains of {location}, stealing sunglasses and the occasional sandwich.",
-  "Word around {location} is that a marching band of kazoo players appears out of nowhere every full moon.",
-  "Someone in {location} built a Rube Goldberg machine just to water one houseplant — neighbors are reportedly obsessed.",
-  "A flock of pigeons in {location} has allegedly learned to recognize the mail carrier's whistle and now escorts them door to door.",
-  "Local legend says a giant chalk dragon appears on the sidewalks of {location} every time it rains, then washes away by noon.",
-  "Rumor has it a pop-up night market selling nothing but tiny hats has taken over a side street in {location}.",
-  "A group of retirees in {location} reportedly started an underground synchronized-swimming club that meets at dawn.",
-  "Someone spotted a hot air balloon shaped like a teapot drifting low over {location} this week — nobody's claimed it yet.",
-  "Local cats in {location} have apparently unionized and are demanding better rooftop access, according to absolutely nobody official.",
-  "A traveling puppet troupe is said to be staging an opera entirely about lost socks somewhere in {location}.",
-  "Word is a bakery in {location} accidentally invented a croissant that whistles when it's done baking.",
-  "A mysterious gnome statue keeps appearing in different yards across {location}, always holding a tiny sign that says 'hello'.",
-  "Local kids in {location} claim a squirrel has been running a very small, very serious lemonade stand.",
-  "Someone painted an entire crosswalk in {location} to look like piano keys, and now everyone tiptoes across humming showtunes.",
-  "Rumor has it {location}'s oldest tree is covered in hand-knit sweaters every winter by an anonymous 'yarn bomber'.",
-  "A flash mob of accordion players reportedly ambushed the farmers market in {location} last weekend, much to everyone's delight.",
-  "Local legend claims a very polite raccoon in {location} has taken to returning dropped mittens to porches.",
-  "Someone in {location} apparently trained their parrot to recite the weather forecast, and it's oddly more accurate than the news.",
-  "A secret society of amateur kite-builders is said to gather at dawn over {location}, launching increasingly elaborate dragons.",
-  "Word is a food truck in {location} now serves soup exclusively shaped like clouds, and nobody can explain how.",
-  "Local rumor: a brass band ambushes unsuspecting joggers in {location} every Saturday morning, just for fun.",
-  "A duck has reportedly adopted the front steps of a café in {location} as its personal throne.",
-  "Someone built a tiny free library shaped like a lighthouse on a corner in {location}, and it's somehow always perfectly stocked.",
-  "Local legend holds that the fountains in {location} briefly turn the color of whatever fruit is in season.",
-  "A troupe of unicyclists has reportedly been seen weaving through the farmers market in {location}, selling kazoos as they go.",
-  "Someone in {location} apparently keeps leaving tiny painted rocks with jokes on them along the main trail.",
-  "Word is a group of office workers in {location} started a lunchtime hula-hoop club that's now oddly competitive.",
-  "A local theater in {location} is reportedly staging an entire play performed by shadow puppets made of houseplants.",
-  "Rumor has it the ice cream shop in {location} invents a wildly impractical flavor every full moon — this month's was apparently 'thunderstorm'.",
-  "Someone spotted a very dignified goose leading a line of ducklings directly into the {location} farmers market like it owns the place.",
-  "Local legend says a hidden door behind a bakery in {location} leads to a room that's just for naps.",
-  "A roving brass quintet has reportedly been serenading dog walkers in {location} at exactly 7am, for reasons nobody can explain.",
-  "Word is a community garden in {location} grew a pumpkin shaped suspiciously like a local landmark, and nobody's taking it down.",
-  "A self-appointed 'town crier' in {location} has been biking around announcing made-up holidays, and people are into it.",
-  "Someone in {location} taught a crow to return lost hair ties, and now there's apparently a small pile waiting on their windowsill each morning.",
-  "Rumor has it a tiny brass band of children ambushes the {location} bus stop every Friday with a two-song set and a hat for tips.",
-  "A local sign painter in {location} has reportedly been adding one tiny hidden mouse to every shopfront mural in town.",
-  "Word is the {location} public pool briefly turned into an impromptu synchronized rubber-duck race last weekend, cause unknown.",
-  "Someone spotted a very small parade — just a kazoo, a dog in a cape, and three kids on scooters — looping the block in {location} at dusk.",
+// These used to be CATEGORIES of event (festival, art, community) — but a
+// real "art exhibit opens" or "community fundraiser" headline is usually
+// a flat, press-release-style local-news item, not something to laugh
+// over. Retuned to TONE words instead: things real local reporters use
+// specifically for the "huh, no way" story — an escaped animal, a viral
+// video, a world-record attempt — which is a much better predictor of
+// something genuinely shareable than the event category was.
+const THEMES: { name: string; terms: string }[] = [
+  { name: "loose animal", terms: "(\"on the loose\" OR escaped OR \"spotted wandering\" OR \"roaming the streets\" OR \"chased down\")" },
+  { name: "viral moment", terms: "(viral OR \"caught on camera\" OR \"caught on video\" OR \"internet can't stop\" OR \"go viral\")" },
+  { name: "bizarre but true", terms: "(bizarre OR baffled OR \"you won't believe\" OR stunned OR \"left speechless\")" },
+  { name: "world record", terms: "(\"world record\" OR \"guinness world records\" OR \"record attempt\" OR \"largest ever\")" },
+  { name: "wacky contest", terms: "(\"wacky contest\" OR \"pie-eating\" OR \"costume contest\" OR \"weirdest\" OR \"silly olympics\")" },
+  { name: "unusual find", terms: "(\"time capsule\" OR \"buried treasure\" OR \"mysteriously appeared\" OR \"unearthed\" OR \"hidden message found\")" },
+  { name: "mix-up", terms: "(\"mistaken for\" OR \"wrong address\" OR \"accidentally delivered\" OR \"case of mistaken identity\" OR mix-up)" },
+  { name: "oddly specific", terms: "(\"world's smallest\" OR \"world's largest\" OR \"only one of its kind\" OR \"unlike anything\")" },
+  { name: "unlikely friendship", terms: "(\"unlikely friendship\" OR \"best friends\" OR adopted OR reunited) (dog OR cat OR goat OR duck OR animal)" },
+  { name: "hilarious fail", terms: "(hilarious OR blooper OR \"goes wrong\" OR \"not according to plan\") -injur* -hospital*" },
 ];
 
-function fillTemplate(tpl: string, location: string): string {
-  return tpl.split("{location}").join(location);
+function todaysTheme(): { name: string; terms: string } {
+  const key = todayKeyPT(); // "YYYY-MM-DD"
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return THEMES[hash % THEMES.length];
 }
 
-// Deterministic per Nearune day + location (see todayKeyPT) — both of you
-// see a stable story for a given place that changes once a day, rather
-// than one that reshuffles on every poll. Different locations on the same
-// day get different vignettes since the location feeds the hash too.
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(parseInt(code, 10)));
+}
+
+function firstItem(xml: string): { title: string; link: string } | null {
+  const itemMatch = xml.match(/<item>([\s\S]*?)<\/item>/);
+  if (!itemMatch) return null;
+  const itemXml = itemMatch[1];
+  const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
+  const linkMatch = itemXml.match(/<link>([\s\S]*?)<\/link>/);
+  if (!titleMatch) return null;
+  return { title: decodeEntities(titleMatch[1].trim()), link: linkMatch ? linkMatch[1].trim() : "" };
+}
+
+async function fetchTopStory(query: string): Promise<LocalStory> {
+  try {
+    const url = "https://news.google.com/rss/search?q=" + encodeURIComponent(query) + "&hl=en-US&gl=US&ceid=US:en";
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log("[localnews] fetch " + JSON.stringify(query) + " -> HTTP " + res.status + " " + res.statusText);
+      return null;
+    }
+    const xml = await res.text();
+    const item = firstItem(xml);
+    if (!item || !item.title) {
+      console.log("[localnews] fetch " + JSON.stringify(query) + " -> no <item>/<title> found in RSS (" + xml.length + " bytes)");
+      return null;
+    }
+    // Google News titles are usually "Headline - Source" — split on the
+    // LAST " - " so a hyphen inside the headline itself doesn't break it.
+    const idx = item.title.lastIndexOf(" - ");
+    const headline = idx > 0 ? item.title.slice(0, idx) : item.title;
+    const source = idx > 0 ? item.title.slice(idx + 3) : "";
+    return { headline, source, url: item.link };
+  } catch (err: any) {
+    console.log("[localnews] fetch " + JSON.stringify(query) + " -> threw: " + (err && err.message ? err.message : String(err)));
+    return null;
+  }
+}
+
+// Excluded so a story merely mentioning "event" or "festival" in passing
+// (a shooting AT an event, a crash NEAR a festival) can't sneak through —
+// Google News search supports "-" exclusion the same way its web search does.
+const EXCLUDE_TERMS =
+  "-crime -shooting -shot -killed -dead -death -died -murder -stabbing " +
+  "-robbery -arrest -arrested -crash -accident -fire -explosion -war " +
+  "-attack -assault -abuse -scandal -lawsuit -controversy -protest " +
+  "-flood -disaster -storm -outage -layoffs -bankruptcy -indicted -trial";
+
+// Top local story for a free-text location, biased toward genuinely odd
+// or funny stories using today's single rotating TONE theme (see
+// THEMES/todaysTheme above) rather than an event category — a tone word
+// like "viral" or "on the loose" is a much better filter for "something
+// to laugh over together" than a category like "festival" or "art",
+// which mostly surfaces flat, press-release-style local news instead.
+// Unlike the weather/weatherkit path, there's no looser fallback query
+// here on purpose: if nothing genuinely on-theme turns up, this returns
+// null (no story shown that day) rather than falling back to an
+// unfiltered "top local headline", which would defeat the point.
 export async function topLocalStory(location: string): Promise<LocalStory> {
-  const loc = (location || "").trim();
-  if (!loc) return null;
-  const key = todayKeyPT() + "|" + loc.toLowerCase();
-  const idx = hashStr(key) % VIGNETTES.length;
-  return { headline: fillTemplate(VIGNETTES[idx], loc) };
+  const q = (location || "").trim();
+  if (!q) return null;
+  const theme = todaysTheme();
+  // Cache key includes the date + theme so a cache entry can never survive
+  // across the app's day boundary and serve yesterday's story.
+  const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
+  const cached = newsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
+  const value = await fetchTopStory(q + " " + theme.terms + " " + EXCLUDE_TERMS);
+  // Temporary diagnostic — same idea as weatherkit.ts's, to confirm from
+  // the Railway logs whether this is actually pulling real stories, and
+  // which theme is active for the day.
+  console.log(
+    "[localnews] " + q + " (theme=" + theme.name + ") -> " +
+    (value ? "ok: " + JSON.stringify(value.headline) : "no on-theme story found")
+  );
+  newsCache.set(cacheKey, { at: Date.now(), value });
+  return value;
 }

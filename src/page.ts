@@ -1954,18 +1954,23 @@ const RAW = String.raw`<!doctype html>
     if (!key) return null;
     return newsByPerson[otherKeyOf(key)] || null;
   }
-  // SANDBOX EXPERIMENT: a single muted line — "Local lore near <name>:
+  // SANDBOX EXPERIMENT: a single muted line — "Quirky story near <name>:
   // ..." — sitting between the Today/Puzzle content and the "next
-  // question" countdown. These are openly made-up (see localnews.ts), not
-  // real headlines, so this renders as plain text rather than a link.
-  // Returns null when there's no story to show yet.
+  // question" countdown. A real story (see localnews.ts), so it links out
+  // to the actual article — that's the point, so you can both open and
+  // read/laugh over the same real thing. Returns null when there's no
+  // on-theme story for today (see localnews.ts — it skips the line rather
+  // than showing something that isn't actually quirky).
   function newsLineBlock() {
     var story = currentPartnerNews();
     if (!story || !story.headline) return null;
     var shownName = personName(otherKeyOf(effectiveViewKey()));
     var line = h("p", { class: "news-line" });
-    line.appendChild(document.createTextNode("✨ Local lore near " + shownName + ": "));
-    line.appendChild(h("span", { class: "news-link", text: story.headline }));
+    line.appendChild(document.createTextNode("🤪 Quirky story near " + shownName + ": "));
+    line.appendChild(
+      h("a", { class: "news-link", href: story.url || "#", target: "_blank", rel: "noopener noreferrer", text: story.headline })
+    );
+    if (story.source) line.appendChild(document.createTextNode(" (" + story.source + ")"));
     return line;
   }
   // SANDBOX EXPERIMENT: the weather badge (#weather-widget) — built inline

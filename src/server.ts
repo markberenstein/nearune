@@ -411,10 +411,9 @@ Bun.serve({
       return json({ weather: { mark: markWeather, nikita: nikitaWeather } });
     }
 
-    // SANDBOX EXPERIMENT: top local news story (biased toward lighter/fun
-    // stories) at each person's registered location — same shape and
-    // caching approach as /api/weather above, no API key required (see
-    // localnews.ts).
+    // SANDBOX EXPERIMENT: a fun, openly made-up "local lore" line for each
+    // person's registered location (not real news — see localnews.ts) —
+    // same response shape as /api/weather above.
     if (req.method === "GET" && restPath === "/api/news") {
       const state = await loadState(roomId);
       const [markNews, nikitaNews] = await Promise.all([

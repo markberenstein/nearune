@@ -1891,6 +1891,14 @@ const RAW = String.raw`<!doctype html>
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
 
     app.appendChild(header());
+    // Traveling button sits right under the clock/timezone block at the
+    // very top of the page, with the "enable notifications" link directly
+    // beneath it (only while notifications are actually off — once they're
+    // on, pushToggleRow() returns null and nothing renders there).
+    var travelRow = travelBlock();
+    if (travelRow) app.appendChild(travelRow);
+    var pushRow = pushToggleRow();
+    if (pushRow) app.appendChild(pushRow);
     app.appendChild(statusRow());
     // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
     // "next question" countdown used to be), right under the status row.
@@ -1916,10 +1924,6 @@ const RAW = String.raw`<!doctype html>
     // the status row at the very top of the page.
     var voiceBlock = voiceRecorderBlock();
     if (voiceBlock) app.appendChild(voiceBlock);
-    var pushRow = pushToggleRow();
-    if (pushRow) app.appendChild(pushRow);
-    var travelRow = travelBlock();
-    if (travelRow) app.appendChild(travelRow);
     app.appendChild(switchRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
@@ -2882,18 +2886,19 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // Only rendered while notifications are actually off (not yet enabled,
+  // or mid-enabling) — once pushState is "on" this returns null, so the
+  // link disappears from its spot under the traveling button rather than
+  // flipping to a "turn off" label.
   function pushToggleRow() {
     if (!pushSupported() || !viewerKey) return null;
+    if (pushState === "on") return null;
     var wrap = h("div", {});
     var row = h("div", { class: "switch-row" });
-    var label = pushState === "on" ? t("Reminders on — turn off")
-      : pushState === "busy" ? t("Working…")
-      : t("Enable reminders");
+    var label = pushState === "busy" ? t("Working…") : t("Enable reminders");
     var btn = h("button", { class: "switch-link", text: label });
     btn.disabled = pushState === "busy";
-    btn.addEventListener("click", function () {
-      if (pushState === "on") disablePush(); else enablePush();
-    });
+    btn.addEventListener("click", function () { enablePush(); });
     row.appendChild(btn);
     wrap.appendChild(row);
     if (pushError) wrap.appendChild(h("p", { class: "offline-note", text: pushError }));

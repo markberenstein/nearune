@@ -138,7 +138,8 @@ const RAW = String.raw`<!doctype html>
   body.weather-active .card,
   body.weather-active .clocks,
   body.weather-active .status-chip,
-  body.weather-active .streak-card {
+  body.weather-active .streak-card,
+  body.weather-active .top-action-row {
     background: color-mix(in srgb, var(--surface) 86%, var(--weather-tint, transparent) 14%);
     transition: background 1.4s ease;
   }
@@ -328,6 +329,16 @@ const RAW = String.raw`<!doctype html>
 
   .switch-row { text-align: center; }
   .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.78rem; text-decoration: underline; cursor: pointer; padding: 4px; }
+  /* The traveling button and (under it) the notifications link now sit
+     right at the top of the page, directly over the full-height weather
+     sky wash — too low-contrast there as plain text, so they get the same
+     solid pill surface as the clock/status cards instead. Text inside
+     switches to the stronger --ink (not --ink-soft) for the same reason. */
+  .top-action-row {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 10px 16px; text-align: center; margin: 0 0 12px;
+  }
+  .top-action-row .switch-link { color: var(--ink); }
   .offline-note { text-align: center; font-size: 0.8rem; color: var(--ink-soft); padding: 4px 8px; }
   .cdt { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; }
   /* SANDBOX EXPERIMENT: the fun-local-news line — same muted, centered
@@ -2877,7 +2888,7 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(actions);
       wrap.appendChild(card);
     } else {
-      var row = h("div", { class: "switch-row" });
+      var row = h("div", { class: "switch-row top-action-row" });
       var link = h("button", { class: "switch-link", text: travelStatusLabel(my, today) });
       link.addEventListener("click", openTravelForm);
       row.appendChild(link);
@@ -2894,7 +2905,7 @@ const RAW = String.raw`<!doctype html>
     if (!pushSupported() || !viewerKey) return null;
     if (pushState === "on") return null;
     var wrap = h("div", {});
-    var row = h("div", { class: "switch-row" });
+    var row = h("div", { class: "switch-row top-action-row" });
     var label = pushState === "busy" ? t("Working…") : t("Enable reminders");
     var btn = h("button", { class: "switch-link", text: label });
     btn.disabled = pushState === "busy";

@@ -2036,20 +2036,25 @@ const RAW = String.raw`<!doctype html>
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
-    // Which unit leads the big number: based entirely on the location being
-    // SHOWN (w, whichever city this tile's weather is actually for), never
-    // on who's holding the device. A non-US shown city displays Celsius
-    // only, full stop, no Fahrenheit anywhere on the tile, regardless of
-    // where the person looking at it lives. A US shown city displays
-    // Fahrenheit as the big number with Celsius underneath as the
-    // secondary. w.unit is that city's own native unit (see
-    // unitForCountry in weather.ts); w.tempF/w.tempC are the same reading
-    // pre-converted to both units.
-    var primaryUnit = w.unit;
-    var primaryTemp = w.unit === "F" ? w.tempF : w.tempC;
+    // Which unit leads the big number: based on whoever is actually
+    // holding THIS device (viewerKey — their real, device-pinned identity,
+    // not previewKey/effectiveViewKey, so peeking at a partner's screen
+    // never changes your own units), never on which city's weather is
+    // being shown. weatherByPerson[viewerKey] is the weather at the
+    // viewer's own effective location (see effectiveLocation in util.ts),
+    // so its unit field tells us where the viewer lives, independent of w
+    // (whichever city this tile's weather happens to be for). A viewer
+    // outside the US sees Celsius only, full stop, no matter which city's
+    // weather is on screen. A US-based viewer sees Fahrenheit as the big
+    // number with Celsius underneath as the secondary, again no matter
+    // which city is shown.
+    var viewerWeather = weatherByPerson[viewerKey];
+    var viewerIsUS = !!(viewerWeather && viewerWeather.unit === "F");
+    var primaryUnit = viewerIsUS ? "F" : "C";
+    var primaryTemp = viewerIsUS ? w.tempF : w.tempC;
     var secondaryTemp = w.tempC;
     var secondaryUnit = "C";
-    var showSecondary = w.unit === "F" && typeof secondaryTemp === "number";
+    var showSecondary = viewerIsUS && typeof secondaryTemp === "number";
     // Styled like a small native weather widget (colored gradient tile,
     // icon + big temp), not a plain pill button — tap it to expand the
     // detail card below, which sits with its own gap rather than crowding

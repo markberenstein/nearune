@@ -143,6 +143,19 @@ const RAW = String.raw`<!doctype html>
     background: color-mix(in srgb, var(--surface) 86%, var(--weather-tint, transparent) 14%);
     transition: background 1.4s ease;
   }
+  /* Text that sits directly on the weather-sky gradient (not inside one of
+     the surface cards above) stays readable against it: pinned to a solid
+     dark ink rather than var(--ink)/var(--ink-soft), which flip to a pale
+     color in dark mode and nearly disappear against the bright sky wash.
+     switch-row links inside .top-action-row are excluded — those sit on a
+     card surface and already get good contrast from var(--ink). */
+  body.weather-active .sky-line,
+  body.weather-active .sky-line strong,
+  body.weather-active .cdt,
+  body.weather-active .news-line,
+  body.weather-active .switch-row:not(.top-action-row) .switch-link {
+    color: #2B211B;
+  }
 
   .status-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .status-chip {

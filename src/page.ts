@@ -2036,17 +2036,22 @@ const RAW = String.raw`<!doctype html>
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
-    // Secondary unit under the big temp: primary is already Fahrenheit for
-    // a US location and Celsius elsewhere (w.unit, set server-side). Show
-    // the OTHER unit underneath whenever either partner is US-based — if
-    // this location itself is US, that's trivially true; if it's not, we
-    // still show the Fahrenheit conversion underneath for the US-based
-    // partner's benefit.
+    // Which unit leads the big number: Fahrenheit whenever either partner
+    // is US-based (checked against each partner's OWN location, not just
+    // whichever location is currently shown) — so a US partner always sees
+    // °F up top, even when looking at a partner whose own city is
+    // naturally Celsius. w.tempF/w.tempC (see weather.ts) carry the same
+    // reading in both units regardless of which is "native" to this
+    // location, so no extra fetch is needed to swap them. With no US
+    // partner, there's no reason to show Fahrenheit at all — primary stays
+    // the location's native unit and there's no secondary line.
     var eitherPartnerIsUS =
       (weatherByPerson.mark && weatherByPerson.mark.unit === "F") ||
       (weatherByPerson.nikita && weatherByPerson.nikita.unit === "F");
-    var secondaryTemp = w.unit === "F" ? w.tempC : w.tempF;
-    var secondaryUnit = w.unit === "F" ? "C" : "F";
+    var primaryUnit = eitherPartnerIsUS ? "F" : w.unit;
+    var primaryTemp = primaryUnit === "F" ? w.tempF : w.tempC;
+    var secondaryTemp = primaryUnit === "F" ? w.tempC : w.tempF;
+    var secondaryUnit = primaryUnit === "F" ? "C" : "F";
     var showSecondary = eitherPartnerIsUS && typeof secondaryTemp === "number";
     // Styled like a small native weather widget (colored gradient tile,
     // icon + big temp), not a plain pill button — tap it to expand the
@@ -2071,7 +2076,7 @@ const RAW = String.raw`<!doctype html>
           "span",
           { class: "weather-widget-tile-temp-wrap" },
           [
-            h("span", { class: "weather-widget-tile-temp", text: w.temp + "°" + w.unit }),
+            h("span", { class: "weather-widget-tile-temp", text: primaryTemp + "°" + primaryUnit }),
             showSecondary
               ? h("span", { class: "weather-widget-tile-temp-secondary", text: secondaryTemp + "°" + secondaryUnit })
               : null,

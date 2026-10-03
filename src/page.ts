@@ -2459,6 +2459,17 @@ const RAW = String.raw`<!doctype html>
       }
       card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>' + tTemplate("Sent — waiting for {name} to answer too.", { name: personName(otherKeyOf(viewerKey)) }) + '</span>' }));
     } else {
+      // Before you've answered yourself, say whether your partner already
+      // has — so you know your answer will reveal both right away, or that
+      // you're not the one holding things up.
+      var otherKey = otherKeyOf(viewerKey);
+      var partnerAnswered = !!(entry[otherKey] && entry[otherKey].text);
+      var partnerName = personName(otherKey);
+      if (partnerAnswered) {
+        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("{name} has already answered — send yours to see both.", { name: partnerName }) }));
+      } else {
+        card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + "<span>" + tTemplate("{name} hasn't answered yet either.", { name: partnerName }) + "</span>" }));
+      }
       var form = h("div", { class: "answer-form" });
       var textarea = document.createElement("textarea");
       textarea.placeholder = t("Type your answer…");

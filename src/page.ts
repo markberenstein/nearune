@@ -357,7 +357,7 @@ const RAW = String.raw`<!doctype html>
   /* SANDBOX EXPERIMENT: the fun-local-news line — same muted, centered
      treatment as .cdt so it doesn't compete for attention, just the
      headline itself underlined as a link out to the source. */
-  .news-line { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; margin: 0; text-wrap: balance; }
+  .news-line { text-align: center; font-size: 0.95rem; color: var(--ink-soft); padding: 2px 8px; margin: 0; text-wrap: balance; }
   .news-link { color: var(--accent); text-decoration: underline; }
   [hidden] { display: none !important; }
 </style>

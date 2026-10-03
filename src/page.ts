@@ -2036,20 +2036,18 @@ const RAW = String.raw`<!doctype html>
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
-    // Which unit leads the big number: Fahrenheit whenever either partner
-    // is US-based (checked against each partner's OWN location, not just
-    // whichever location is currently shown) — so a US partner always sees
-    // °F up top, even when looking at a partner whose own city is
-    // naturally Celsius. w.tempF/w.tempC (see weather.ts) carry the same
-    // reading in both units regardless of which is "native" to this
-    // location, so no extra fetch is needed to swap them. With no US
-    // partner, there's no reason to show Fahrenheit at all — primary stays
-    // the location's native unit and there's no secondary line.
+    // Which unit leads the big number: the SHOWN location's own native unit
+    // (w.unit, set server-side — Fahrenheit for a US location, Celsius
+    // elsewhere), never swapped based on who's viewing. A partner outside
+    // the US always reads as °C up top. Underneath, show the OTHER unit
+    // whenever either partner is US-based — if the shown location itself
+    // is US, that's trivially true; if it's not, a US-based partner still
+    // gets the °F conversion as the secondary line for their own benefit.
     var eitherPartnerIsUS =
       (weatherByPerson.mark && weatherByPerson.mark.unit === "F") ||
       (weatherByPerson.nikita && weatherByPerson.nikita.unit === "F");
-    var primaryUnit = eitherPartnerIsUS ? "F" : w.unit;
-    var primaryTemp = primaryUnit === "F" ? w.tempF : w.tempC;
+    var primaryUnit = w.unit;
+    var primaryTemp = w.temp;
     var secondaryTemp = primaryUnit === "F" ? w.tempC : w.tempF;
     var secondaryUnit = primaryUnit === "F" ? "C" : "F";
     var showSecondary = eitherPartnerIsUS && typeof secondaryTemp === "number";

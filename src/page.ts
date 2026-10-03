@@ -2036,17 +2036,24 @@ const RAW = String.raw`<!doctype html>
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
-    // Which unit leads the big number: the SHOWN location's own native unit
-    // (w.unit, set server-side — Fahrenheit for a US location, Celsius
-    // elsewhere), never swapped based on who's viewing. A partner outside
-    // the US reads as °C ONLY — no Fahrenheit conversion shown at all. A
-    // US-based partner reads as °F primary with °C underneath as the
-    // secondary.
-    var primaryUnit = w.unit;
-    var primaryTemp = w.temp;
+    // Which unit leads the big number: whoever is actually holding THIS
+    // device (viewerKey — their real, device-pinned identity, not
+    // previewKey/effectiveViewKey, so peeking at a partner's screen never
+    // changes your own units) and whether THEIR OWN location is in the US
+    // — not the location currently being shown. weatherByPerson[viewerKey]
+    // is the weather at the viewer's own effective location (see
+    // effectiveLocation in util.ts), so its unit field tells us where they
+    // live, independent of w (which is always the OTHER person's
+    // location). A viewer outside the US sees °C ONLY, always — even when
+    // looking at a partner's weather in a US city. A US-based viewer sees
+    // °F primary with °C underneath as the secondary.
+    var viewerWeather = weatherByPerson[viewerKey];
+    var viewerIsUS = !!(viewerWeather && viewerWeather.unit === "F");
+    var primaryUnit = viewerIsUS ? "F" : "C";
+    var primaryTemp = viewerIsUS ? w.tempF : w.tempC;
     var secondaryTemp = w.tempC;
     var secondaryUnit = "C";
-    var showSecondary = primaryUnit === "F" && typeof secondaryTemp === "number";
+    var showSecondary = viewerIsUS && typeof secondaryTemp === "number";
     // Styled like a small native weather widget (colored gradient tile,
     // icon + big temp), not a plain pill button — tap it to expand the
     // detail card below, which sits with its own gap rather than crowding

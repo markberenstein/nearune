@@ -2566,17 +2566,15 @@ const RAW = String.raw`<!doctype html>
     return outputArray;
   }
 
-  // Pushes THIS viewer's own pending state (0 or 1 — do I personally still
-  // need to answer today) to this tab's own icon. Used to show the shared
-  // "how many of you two haven't answered" count (0/1/2) instead, which
-  // could leave a stray "1" or "2" on your own icon even after you'd
-  // already answered, just because your partner hadn't yet — see
-  // personalBadgeLocal below. Works while the app is open; the service
-  // worker handles it the rest of the time via incoming pushes.
+  // Pushes the shared "how many of you two still need to answer today"
+  // count (0/1/2) to this tab's own icon — the same number both of your
+  // devices show, regardless of which of you has or hasn't answered. Works
+  // while the app is open; the service worker handles it the rest of the
+  // time via incoming pushes.
   function syncAppBadge() {
     if (!("setAppBadge" in navigator)) return;
     var today = todayKeyStr();
-    var count = personalBadgeLocal(today);
+    var count = unansweredCountLocal(today);
     try {
       if (count > 0) navigator.setAppBadge(count); else navigator.clearAppBadge();
     } catch (e) {}
@@ -2593,12 +2591,14 @@ const RAW = String.raw`<!doctype html>
     return latest && latest >= iso ? latest : iso;
   }
 
-  // This viewer's own pending state for the given day: 1 if they personally
-  // haven't answered yet, 0 if they have (or we don't yet know who they are).
-  function personalBadgeLocal(key) {
-    if (!viewerKey) return 0;
+  // How many of the two of you (0/1/2) haven't answered the given day's
+  // question yet — mirrors the server's unansweredCount in util.ts.
+  function unansweredCountLocal(key) {
     var a = state.answers && state.answers[key];
-    return a && a[viewerKey] && a[viewerKey].text ? 0 : 1;
+    var n = 0;
+    if (!a || !a.mark || !a.mark.text) n++;
+    if (!a || !a.nikita || !a.nikita.text) n++;
+    return n;
   }
 
   // Fetches the VAPID key and registers the service worker ahead of time

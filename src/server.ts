@@ -23,7 +23,7 @@ import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, personalBadge, effectiveLocation } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
@@ -186,7 +186,7 @@ Bun.serve({
               const res = await sendPush(sub, {
                 title: "Today's question is up",
                 body: "Your Nearune question for today is ready.",
-                badge: personalBadge(state, today, who),
+                badge: count,
                 tag: "morning",
               });
               if (res.ok) sent++;
@@ -257,20 +257,14 @@ Bun.serve({
           ...(prev ? { editedAt: new Date().toISOString() } : {}),
         };
       });
-      // Nudge whoever hasn't answered yet, with THEIR OWN badge (1 — they
-      // still have something to do), not the shared unanswered count.
-      // Fire-and-forget — a slow or failed push shouldn't delay the answer
-      // response, and a dead subscription is cleaned up in the background
-      // rather than blocking this request.
+      // Nudge whoever hasn't answered yet, and sync badges to the shared
+      // "how many of you two still need to answer today" count (0/1/2) —
+      // both people's badges always show the same number. Fire-and-forget —
+      // a slow or failed push shouldn't delay the answer response, and a
+      // dead subscription is cleaned up in the background rather than
+      // blocking this request.
       if (anyPushConfigured && state.pushSubs) {
         const count = unansweredCount(state, date);
-        // TEMPORARY diagnostic — re-added to catch a report of the badge
-        // sometimes not clearing to 0 for whoever submits the completing
-        // answer. Remove once confirmed working across a few real days.
-        console.log(
-          "[answer] who=" + who + " date=" + date + " count=" + count +
-          " subs=" + JSON.stringify(Object.keys(state.pushSubs).map((k) => k + ":" + ((state.pushSubs as any)[k].kind || "web")))
-        );
         if (count > 0) {
           const answererName = state.people?.[who]?.name || "Your partner";
           for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
@@ -281,7 +275,7 @@ Bun.serve({
             sendPush(sub, {
               title: answererName + " answered today's question",
               body: "Your turn on Nearune.",
-              badge: personalBadge(state, date, other),
+              badge: count,
               tag: "partner-answered",
             })
               .then((res) => {
@@ -293,63 +287,47 @@ Bun.serve({
               })
               .catch(() => {});
           }
-        }
-        // The answerer's own native badge still shows the old count — a real
-        // alert push only went to the person who hasn't answered yet, and
-        // native has no client-side badge API to update it locally. A silent
-        // (content-available) push would be the quiet way to sync it, but
-        // iOS treats those as low-priority background pushes and can defer
-        // delivery unpredictably — the same reason the day-complete push
-        // below uses a real alert instead of a silent one. So this sends a
-        // real push too. It won't show as a visible banner in practice: this
-        // fires immediately after the person's own answer request completes,
-        // so their app is in the foreground, and the app has no
-        // `presentationOptions` configured, which means iOS presents nothing
-        // for a foregrounded notification — only the badge updates. Only
-        // needed for APNs; web subs sync locally. Skipped when count is 0 —
-        // the day-complete block below already sends both people a real
-        // badge-clearing push in that case. badge is always 0 here — the
-        // answerer just answered, so THEY have nothing pending, regardless
-        // of whether their partner has. This used to send `badge: count`,
-        // which could still be 1 (partner hasn't answered) — showing a
-        // stray "1" (or, before this fix, a shared 2) on the answerer's own
-        // icon even though they were done for the day.
-        const ownSub = state.pushSubs[who];
-        // TEMPORARY diagnostic — see note above.
-        console.log("[own-badge] who=" + who + " count=" + count + " ownSub=" + (ownSub ? (ownSub.kind || "web") : "none"));
-        if (count > 0 && ownSub && ownSub.kind === "apns") {
-          sendPush(ownSub, {
-            title: "Answer saved",
-            body: "Waiting on your partner to answer today's question.",
-            badge: 0,
-            tag: "own-answered",
-          })
-            .then((res) => {
-              // TEMPORARY diagnostic — see note above.
-              console.log("[own-badge] who=" + who + " result=" + JSON.stringify(res));
-              if (res.gone) {
-                saveState(roomId, (s) => {
-                  if (s.pushSubs) delete s.pushSubs[who];
-                }).catch(() => {});
-              }
+          // The answerer's own native badge still shows the pre-answer
+          // count — a real alert push only went to whoever hasn't answered
+          // yet, and native has no client-side badge API to update it
+          // locally otherwise. Won't show as a visible banner in practice:
+          // this fires immediately after the person's own answer request
+          // completes, so their app is in the foreground, and the app has
+          // no `presentationOptions` configured, which means iOS presents
+          // nothing for a foregrounded notification — only the badge
+          // updates. Only needed for APNs; web subs sync locally via the
+          // poll loop.
+          const ownSub = state.pushSubs[who];
+          if (ownSub && ownSub.kind === "apns") {
+            sendPush(ownSub, {
+              title: "Answer saved",
+              body: "Waiting on your partner to answer today's question.",
+              badge: count,
+              tag: "own-answered",
             })
-            .catch((err) => console.log("[own-badge] who=" + who + " threw " + (err && err.message)));
-        }
-        // Once both people have answered today, clear both native badges.
-        // Native has no client-side badge API (no navigator.setAppBadge in
-        // Capacitor's WebView), so a push is the only way to update it — but
-        // a silent (content-available) push is low-priority and iOS can
-        // throttle its delivery for an unpredictable amount of time, which
-        // isn't good enough for "the badge should clear now". A real alert
-        // push is delivered immediately, so this sends one to both people,
-        // collapsed under one tag so re-editing an answer afterward doesn't
-        // pile up repeat notifications. Web subscriptions already sync their
-        // own badge client-side, so this only targets APNs.
-        if (count === 0) {
+              .then((res) => {
+                if (res.gone) {
+                  saveState(roomId, (s) => {
+                    if (s.pushSubs) delete s.pushSubs[who];
+                  }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          }
+        } else {
+          // Both answers are in — clear both native badges to 0. Native has
+          // no client-side badge API (no navigator.setAppBadge in
+          // Capacitor's WebView), so a push is the only way to update it —
+          // but a silent (content-available) push is low-priority and iOS
+          // can throttle its delivery for an unpredictable amount of time,
+          // which isn't good enough for "the badge should clear now". A
+          // real alert push is delivered immediately, so this sends one to
+          // both people, collapsed under one tag so re-editing an answer
+          // afterward doesn't pile up repeat notifications. Web
+          // subscriptions already sync their own badge client-side, so this
+          // only targets APNs.
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
-            // TEMPORARY diagnostic — see note above.
-            console.log("[day-complete] " + person + " sub=" + (sub ? (sub.kind || "web") : "none"));
             if (!sub || sub.kind !== "apns") continue;
             sendPush(sub, {
               title: "You're all caught up",
@@ -358,15 +336,13 @@ Bun.serve({
               tag: "day-complete",
             })
               .then((res) => {
-                // TEMPORARY diagnostic — see note above.
-                console.log("[day-complete] " + person + " result=" + JSON.stringify(res));
                 if (res.gone) {
                   saveState(roomId, (s) => {
                     if (s.pushSubs) delete s.pushSubs[person];
                   }).catch(() => {});
                 }
               })
-              .catch((err) => console.log("[day-complete] " + person + " threw " + (err && err.message)));
+              .catch(() => {});
           }
         }
       }
@@ -665,7 +641,7 @@ Bun.serve({
         sendPush(inviterSub, {
           title: "Your Nearune partner joined!",
           body: name + " just joined Nearune — today's question is ready for you both.",
-          badge: personalBadge(state, today, inviter),
+          badge: unansweredCount(state, today),
           tag: "partner-joined",
         }).then((res) => {
           if (res.gone) {

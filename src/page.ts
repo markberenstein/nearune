@@ -4,7 +4,15 @@ const RAW = String.raw`<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes,viewport-fit=cover">
+<!-- user-scalable is off on purpose: the puzzle photo (puzzleZoomableGrid
+     below) implements its own pinch-to-zoom/pan in JS via touch-action:none
+     on .puzzle-grid-wrap. Leaving the native page pinch-zoom enabled too
+     made the two fight over the same two-finger gesture — on iOS/WebKit a
+     pinch can zoom the whole page instead of (or along with) shrinking the
+     photo, since WebKit's native pinch-zoom isn't fully suppressed by
+     touch-action or preventDefault() alone. Disabling page-level zoom
+     leaves the custom pinch handler as the only thing listening. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Nearune</title>
 <meta name="description" content="A private daily-question ritual for two people who live apart — one shared question a day, and a photo puzzle that slowly reveals itself as you keep your streak going.">
 <link rel="icon" type="image/png" href="/favicon.png?v=__ICON_V__">

@@ -2039,18 +2039,14 @@ const RAW = String.raw`<!doctype html>
     // Which unit leads the big number: the SHOWN location's own native unit
     // (w.unit, set server-side — Fahrenheit for a US location, Celsius
     // elsewhere), never swapped based on who's viewing. A partner outside
-    // the US always reads as °C up top. Underneath, show the OTHER unit
-    // whenever either partner is US-based — if the shown location itself
-    // is US, that's trivially true; if it's not, a US-based partner still
-    // gets the °F conversion as the secondary line for their own benefit.
-    var eitherPartnerIsUS =
-      (weatherByPerson.mark && weatherByPerson.mark.unit === "F") ||
-      (weatherByPerson.nikita && weatherByPerson.nikita.unit === "F");
+    // the US reads as °C ONLY — no Fahrenheit conversion shown at all. A
+    // US-based partner reads as °F primary with °C underneath as the
+    // secondary.
     var primaryUnit = w.unit;
     var primaryTemp = w.temp;
-    var secondaryTemp = primaryUnit === "F" ? w.tempC : w.tempF;
-    var secondaryUnit = primaryUnit === "F" ? "C" : "F";
-    var showSecondary = eitherPartnerIsUS && typeof secondaryTemp === "number";
+    var secondaryTemp = w.tempC;
+    var secondaryUnit = "C";
+    var showSecondary = primaryUnit === "F" && typeof secondaryTemp === "number";
     // Styled like a small native weather widget (colored gradient tile,
     // icon + big temp), not a plain pill button — tap it to expand the
     // detail card below, which sits with its own gap rather than crowding

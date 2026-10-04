@@ -1098,12 +1098,55 @@ const RAW = String.raw`<!doctype html>
   function canSpeak(lang) {
     return !!lang && !!SPEECH_LANG_MAP[lang] && typeof window !== "undefined" && !!window.speechSynthesis;
   }
-  function speak(text, lang) {
+  // Only two people ever use this app, so their genders are fixed rather
+  // than a profile field someone sets — used below to pick a sensibly
+  // gendered browser voice for whichever of them hasn't recorded a cloned
+  // sample yet, instead of whatever voice the device happens to default to
+  // for a given language (which is often just "the first one in the list"
+  // and can land on either gender regardless of who's speaking).
+  var VOICE_GENDER = { mark: "male", nikita: "female" };
+  // SpeechSynthesisVoice has no standard gender field, so this is a
+  // name-based heuristic covering the common built-in voices on iOS/macOS
+  // (where this app actually runs) plus the usual Chrome/Android/Windows
+  // ones, in case it's ever opened there too.
+  var FEMALE_VOICE_HINTS = ["female", "samantha", "victoria", "karen", "moira", "tessa", "veena", "fiona", "susan", "zira", "allison", "ava", "serena", "kate", "amelie", "anna", "lekha", "mariska", "monica", "paulina", "yuna", "mei-jia", "sin-ji", "ting-ting"];
+  var MALE_VOICE_HINTS = ["male", "alex", "daniel", "fred", "albert", "arthur", "gordon", "lee", "tom", "aaron", "david", "oliver", "james", "thomas", "diego", "jorge", "luca", "rishi", "yannick", "xander"];
+  var cachedVoices = null;
+  function getVoicesSafe() {
+    if (typeof window === "undefined" || !window.speechSynthesis) return [];
+    var v = window.speechSynthesis.getVoices();
+    if (v && v.length) cachedVoices = v;
+    return cachedVoices || v || [];
+  }
+  // Picks the best-matching installed voice for the given BCP-47 lang and
+  // gender hint. Prefers a voice that matches both; falls back to
+  // lang-only, then to null (meaning: let the browser use its own default
+  // for that utterance, same as before this existed).
+  function pickVoiceFor(lang, gender) {
+    var voices = getVoicesSafe();
+    if (!voices.length) return null;
+    var langPrefix = (lang || "").split("-")[0].toLowerCase();
+    var candidates = voices.filter(function (v) { return v.lang && v.lang.toLowerCase().indexOf(langPrefix) === 0; });
+    if (!candidates.length) candidates = voices;
+    var hints = gender === "female" ? FEMALE_VOICE_HINTS : gender === "male" ? MALE_VOICE_HINTS : null;
+    if (hints) {
+      var match = candidates.filter(function (v) {
+        var n = v.name.toLowerCase();
+        return hints.some(function (h) { return n.indexOf(h) !== -1; });
+      });
+      if (match.length) return match[0];
+    }
+    return candidates[0] || null;
+  }
+  function speak(text, lang, authorKey) {
     if (!canSpeak(lang) || !text) return;
     try {
       window.speechSynthesis.cancel(); // stop anything already playing first
       var u = new SpeechSynthesisUtterance(text);
       u.lang = SPEECH_LANG_MAP[lang];
+      var gender = authorKey && VOICE_GENDER[authorKey];
+      var voice = pickVoiceFor(u.lang, gender);
+      if (voice) u.voice = voice;
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }
@@ -1153,12 +1196,12 @@ const RAW = String.raw`<!doctype html>
           if (audio !== activeCloneAudio) { URL.revokeObjectURL(url); return; }
           audio.addEventListener("ended", function () { URL.revokeObjectURL(url); });
           audio.src = url;
-          audio.play().catch(function () { URL.revokeObjectURL(url); speak(text, lang); });
+          audio.play().catch(function () { URL.revokeObjectURL(url); speak(text, lang, authorKey); });
         })
-        .catch(function () { speak(text, lang); });
+        .catch(function () { speak(text, lang, authorKey); });
       return;
     }
-    speak(text, lang);
+    speak(text, lang, authorKey);
   }
   function speakButton(text, lang, label, authorKey) {
     var hasClone = !!authorKey && personHasVoice(authorKey);

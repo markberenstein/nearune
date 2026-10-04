@@ -20,6 +20,7 @@ import {
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
+import { aiGuessMatches } from "./ai";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
@@ -807,17 +808,37 @@ Bun.serve({
       }
       const trimmed = text.trim().slice(0, 120);
       const today = todayKeyPT();
+
+      // guessMatches() (exact/substring) is the fast, free first check.
+      // aiGuessMatches() is the generous fallback — catches a paraphrase,
+      // synonym, or typo-past-what-substring-forgives that's still clearly
+      // the right answer. It's a network call, so it has to happen here,
+      // before the atomic save below, rather than inside saveState()'s
+      // synchronous mutator. If the puzzle changes out from under us
+      // between this peek and the save (new photo loaded, guess already
+      // answered elsewhere), the guard checks inside the mutator still
+      // protect against a guess landing on the wrong puzzle — that one
+      // unlucky request just falls back to the plain guessMatches() check,
+      // same as before this existed.
+      const peeked = await loadState(roomId);
+      const peekedAnswer = peeked.puzzleAnswer;
+      let correct = peekedAnswer ? guessMatches(trimmed, peekedAnswer) : false;
+      if (!correct && peekedAnswer) {
+        const aiVerdict = await aiGuessMatches(trimmed, peekedAnswer);
+        if (aiVerdict === true) correct = true;
+      }
+
       let rejected = false;
       const state = await saveState(roomId, (s) => {
         if (!s.puzzleAnswer || s.puzzleSolved) return;
         if (s.puzzleSetBy && who === s.puzzleSetBy) { rejected = true; return; }
         if (s.puzzleLastGuessDate === today) return;
-        const correct = guessMatches(trimmed, s.puzzleAnswer);
+        const finalCorrect = s.puzzleAnswer === peekedAnswer ? correct : guessMatches(trimmed, s.puzzleAnswer);
         s.puzzleLastGuessDate = today;
         s.puzzleLastGuessBy = who;
         s.puzzleLastGuessText = trimmed;
-        s.puzzleLastGuessCorrect = correct;
-        if (correct) {
+        s.puzzleLastGuessCorrect = finalCorrect;
+        if (finalCorrect) {
           s.puzzleSolved = true;
           s.puzzleSolvedCount = (s.puzzleSolvedCount || 0) + 1;
           s.puzzlePendingBonus = true;

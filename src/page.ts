@@ -2723,11 +2723,13 @@ const RAW = String.raw`<!doctype html>
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
       h("p", { class: "question", text: q }),
-      // Today's question read aloud in YOUR OWN cloned voice when you've
-      // recorded one (per Mark's explicit request) — not your partner's.
-      // Falls back to the plain browser voice same as everywhere else if
-      // you haven't recorded a sample.
-      uiTranslateBlock(q, viewerKey)
+      // Today's question read aloud in your partner's own cloned voice when
+      // they've recorded one — it's their question to ask you, not a
+      // generic narrator. Each person's own answer (below) stays in their
+      // own voice via translateBlock's authorKey=key. Falls back to the
+      // plain browser voice same as everywhere else if they haven't
+      // recorded a sample.
+      uiTranslateBlock(q, viewerKey ? otherKeyOf(viewerKey) : null)
     ]);
 
     if (complete) {
@@ -2826,7 +2828,7 @@ const RAW = String.raw`<!doctype html>
           var entryDiv = h("div", { class: "journal-entry" }, [
             h("div", { class: "journal-date", text: t(formatDateLabel(key)) }),
             h("p", { class: "journal-q", text: questionForKey(key) }),
-            uiTranslateBlock(questionForKey(key), viewerKey)
+            uiTranslateBlock(questionForKey(key), viewerKey ? otherKeyOf(viewerKey) : null)
           ]);
           ["mark", "nikita"].forEach(function (pKey) {
             if (pKey === viewerKey && editingEntry === key) { entryDiv.appendChild(ownAnswerEditor(key)); return; }

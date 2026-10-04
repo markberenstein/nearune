@@ -1218,6 +1218,27 @@ const RAW = String.raw`<!doctype html>
       } else {
         u.lang = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
       }
+      // TEMPORARY diagnostic: reports of the same person's fallback voice
+      // sounding different between two lines haven't reproduced in testing,
+      // so this phones home what the device actually picked (fire-and-
+      // forget, never blocks playback) to compare real device behavior
+      // against what's expected. Safe to remove once that's sorted out.
+      try {
+        fetch(RP + "/api/voice-debug", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            authorKey: authorKey || null,
+            contentLang: lang,
+            utterLang: u.lang,
+            voiceName: u.voice ? u.voice.name : null,
+            voiceLang: u.voice ? u.voice.lang : null,
+            voicesAvailable: getVoicesSafe().length,
+            text: (text || "").slice(0, 30),
+            ua: (typeof navigator !== "undefined" && navigator.userAgent) || "",
+          }),
+        }).catch(function () {});
+      } catch (e2) {}
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }

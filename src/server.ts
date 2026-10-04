@@ -799,6 +799,19 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    // TEMPORARY diagnostic endpoint — see the matching comment in page.ts's
+    // speak(). Just logs what a real device actually picked for its
+    // fallback voice, visible in Railway deploy logs. Remove once the
+    // voice-consistency issue it's debugging is sorted out.
+    if (req.method === "POST" && restPath === "/api/voice-debug") {
+      if (!rateLimit("voice-debug:" + roomId, 60, HOUR)) {
+        return json({ ok: true });
+      }
+      const body = await readJson(req);
+      if (body) console.log("[voice-debug]", roomId || "legacy", JSON.stringify(body));
+      return json({ ok: true });
+    }
+
     if (req.method === "POST" && restPath === "/api/speak") {
       // Each call is a real text-to-speech request against a paid API — cap
       // it well above normal use (someone tapping 🔊 on every line of a long

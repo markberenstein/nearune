@@ -3174,23 +3174,22 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
-  // Only rendered while notifications are actually off (not yet enabled,
-  // or mid-enabling) — once pushState is "on" this returns null, so the
-  // link disappears from its spot under the traveling button rather than
-  // flipping to a "turn off" label.
+  // Always rendered (whenever push itself is supported) — the label and
+  // action flip with the actual current state, rather than the row just
+  // disappearing once reminders are on: "Enable reminders" turns them on
+  // when they're off, "Disable reminders" turns them off when they're on.
   function pushToggleRow() {
     if (!pushSupported() || !viewerKey) return null;
-    if (pushState === "on") return null;
     var wrap = h("div", {});
     // Plain switch-row styling (no top-action-row pill card) now that this
     // sits at the bottom of the page among the other plain links, rather
     // than up top against the weather gradient where top-action-row's
     // solid-background card was needed for contrast.
     var row = h("div", { class: "switch-row" });
-    var label = pushState === "busy" ? t("Working…") : t("Enable reminders");
+    var label = pushState === "busy" ? t("Working…") : pushState === "on" ? t("Disable reminders") : t("Enable reminders");
     var btn = h("button", { class: "switch-link", text: label });
     btn.disabled = pushState === "busy";
-    btn.addEventListener("click", function () { enablePush(); });
+    btn.addEventListener("click", function () { if (pushState === "on") disablePush(); else enablePush(); });
     row.appendChild(btn);
     wrap.appendChild(row);
     if (pushError) wrap.appendChild(h("p", { class: "offline-note", text: pushError }));

@@ -779,6 +779,26 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    // Clears a saved voice sample without recording a new one — e.g. the
+    // sample on file was recorded by the wrong person (device identity was
+    // on someone else's slot at the time) and needs to come off entirely
+    // rather than being replaced with another recording right away. Once
+    // cleared, speak/speakAs fall back to the plain default voice until
+    // that person records a real sample of their own.
+    if (req.method === "POST" && restPath === "/api/voice-sample-delete") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const existing = await loadState(roomId);
+      const oldVoiceId = existing.people && existing.people[who] && existing.people[who]!.voiceId;
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who]) delete s.people[who]!.voiceId;
+      });
+      if (oldVoiceId) deleteVoice(oldVoiceId).catch(() => {});
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/speak") {
       // Each call is a real text-to-speech request against a paid API — cap
       // it well above normal use (someone tapping 🔊 on every line of a long

@@ -145,16 +145,20 @@ const RAW = String.raw`<!doctype html>
   }
   /* Text that sits directly on the weather-sky gradient (not inside one of
      the surface cards above) stays readable against it: pinned to a solid
-     dark ink rather than var(--ink)/var(--ink-soft), which flip to a pale
+     ink color rather than var(--ink)/var(--ink-soft), which flip to a pale
      color in dark mode and nearly disappear against the bright sky wash.
-     switch-row links inside .top-action-row are excluded — those sit on a
-     card surface and already get good contrast from var(--ink). */
+     --weather-ink is set per-render by applyWeatherSky() to dark ink for a
+     bright (daytime) sky gradient or pale ink for a near-black (nighttime)
+     one — a single hardcoded dark color used to go nearly invisible against
+     a night sky's near-black gradient. switch-row links inside
+     .top-action-row are excluded — those sit on a card surface and already
+     get good contrast from var(--ink). */
   body.weather-active .sky-line,
   body.weather-active .sky-line strong,
   body.weather-active .cdt,
   body.weather-active .news-line,
   body.weather-active .switch-row:not(.top-action-row) .switch-link {
-    color: #2B211B;
+    color: var(--weather-ink, #2B211B);
   }
 
   .status-row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -3376,6 +3380,11 @@ const RAW = String.raw`<!doctype html>
       "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
     document.body.classList.add("weather-active");
     document.body.style.setProperty("--weather-tint", glow);
+    // Night themes' sky gradient is near-black (see weather.ts's THEMES),
+    // so text pinned to dark ink (the daytime default) goes nearly
+    // invisible against it — switch to a pale ink instead whenever it's
+    // nighttime at the OTHER person's location (the sky shown here).
+    document.body.style.setProperty("--weather-ink", w.isDay ? "#2B211B" : "#F2EFE9");
   }
 
   async function poll() {

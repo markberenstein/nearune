@@ -1111,6 +1111,38 @@ const RAW = String.raw`<!doctype html>
   // ones, in case it's ever opened there too.
   var FEMALE_VOICE_HINTS = ["female", "samantha", "victoria", "karen", "moira", "tessa", "veena", "fiona", "susan", "zira", "allison", "ava", "serena", "kate", "amelie", "anna", "lekha", "mariska", "monica", "paulina", "yuna", "mei-jia", "sin-ji", "ting-ting"];
   var MALE_VOICE_HINTS = ["male", "alex", "daniel", "fred", "albert", "arthur", "gordon", "lee", "tom", "aaron", "david", "oliver", "james", "thomas", "diego", "jorge", "luca", "rishi", "yannick", "xander"];
+  // English has many regional accents, so SPEECH_LANG_MAP's flat "en" ->
+  // "en-US" used to send everyone's English fallback voice out in a
+  // generic American accent, even someone registered in Delhi or London —
+  // and, for anyone whose own language ISN'T English (see otherUiLang),
+  // made the "hear in original language" (English) and "hear in your
+  // language" (their language) buttons sound like two unrelated people
+  // instead of the same one. Each person's tz is captured automatically
+  // at registration (see types.ts) from wherever they actually are, so it's
+  // used here to pick an English accent that matches them, with no profile
+  // field to set. This list only needs to cover tz prefixes for places an
+  // English voice accent actually differs; anything unlisted (and anyone
+  // with no tz yet) just gets the plain "en-US" default, same as before.
+  var TZ_EN_LOCALE = [
+    [/^Asia\/(Kolkata|Calcutta)$/, "en-IN"],
+    [/^Asia\/(Karachi)$/, "en-IN"],
+    [/^Asia\/(Dhaka)$/, "en-IN"],
+    [/^Asia\/(Colombo)$/, "en-IN"],
+    [/^Europe\/(London|Belfast)$/, "en-GB"],
+    [/^Europe\/Dublin$/, "en-IE"],
+    [/^Australia\//, "en-AU"],
+    [/^Pacific\/Auckland$/, "en-NZ"],
+    [/^Africa\/Johannesburg$/, "en-ZA"],
+    [/^America\/Toronto$|^America\/Vancouver$|^America\/(Edmonton|Winnipeg|Halifax|St_Johns)$/, "en-CA"],
+  ];
+  function enLocaleFor(authorKey) {
+    var tz = authorKey && state.people && state.people[authorKey] && state.people[authorKey].tz;
+    if (!tz) return "en-US";
+    for (var i = 0; i < TZ_EN_LOCALE.length; i++) {
+      if (TZ_EN_LOCALE[i][0].test(tz)) return TZ_EN_LOCALE[i][1];
+    }
+    return "en-US";
+  }
   var cachedVoices = null;
   function getVoicesSafe() {
     if (typeof window === "undefined" || !window.speechSynthesis) return [];
@@ -1119,33 +1151,37 @@ const RAW = String.raw`<!doctype html>
     return cachedVoices || v || [];
   }
   // Picks the best-matching installed voice for the given BCP-47 lang and
-  // gender hint. Prefers a voice that matches both; falls back to
-  // lang-only, then to null (meaning: let the browser use its own default
-  // for that utterance, same as before this existed).
+  // gender hint. Prefers an exact locale + gender match (e.g. a female
+  // en-IN voice), then falls back in stages — same language family
+  // ignoring region, then gender-only, then whatever's installed — down to
+  // null (meaning: let the browser use its own default for that utterance,
+  // same as before this existed).
   function pickVoiceFor(lang, gender) {
     var voices = getVoicesSafe();
     if (!voices.length) return null;
-    var langPrefix = (lang || "").split("-")[0].toLowerCase();
-    var candidates = voices.filter(function (v) { return v.lang && v.lang.toLowerCase().indexOf(langPrefix) === 0; });
-    if (!candidates.length) candidates = voices;
+    var full = (lang || "").toLowerCase();
+    var prefix = full.split("-")[0];
     var hints = gender === "female" ? FEMALE_VOICE_HINTS : gender === "male" ? MALE_VOICE_HINTS : null;
-    if (hints) {
-      var match = candidates.filter(function (v) {
-        var n = v.name.toLowerCase();
-        return hints.some(function (h) { return n.indexOf(h) !== -1; });
-      });
-      if (match.length) return match[0];
+    function hinted(v) {
+      if (!hints) return false;
+      var n = v.name.toLowerCase();
+      return hints.some(function (h) { return n.indexOf(h) !== -1; });
     }
-    return candidates[0] || null;
+    var exact = voices.filter(function (v) { return v.lang && v.lang.toLowerCase() === full; });
+    var byPrefix = voices.filter(function (v) { return v.lang && v.lang.toLowerCase().indexOf(prefix) === 0; });
+    var pools = [exact.filter(hinted), byPrefix.filter(hinted), exact, byPrefix, voices];
+    for (var i = 0; i < pools.length; i++) if (pools[i].length) return pools[i][0];
+    return null;
   }
   function speak(text, lang, authorKey) {
     if (!canSpeak(lang) || !text) return;
     try {
       window.speechSynthesis.cancel(); // stop anything already playing first
       var u = new SpeechSynthesisUtterance(text);
-      u.lang = SPEECH_LANG_MAP[lang];
+      var locale = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
+      u.lang = locale;
       var gender = authorKey && VOICE_GENDER[authorKey];
-      var voice = pickVoiceFor(u.lang, gender);
+      var voice = pickVoiceFor(locale, gender);
       if (voice) u.voice = voice;
       window.speechSynthesis.speak(u);
     } catch (e) {}

@@ -73,8 +73,11 @@ export type PushSubscriptionRecord = WebPushSubscriptionRecord | ApnsSubscriptio
 // relationship set (every room created before this field existed, which
 // includes the legacy main room) defaults to "significant_other" — see
 // questionPoolFor() in page.ts — so existing rooms keep exactly the
-// questions they've always gotten.
-export type RelationshipType = "significant_other" | "family" | "friend";
+// questions they've always gotten. "its_complicated" also uses the
+// significant_other pool (same questionPoolFor() default branch) — it's
+// offered as its own label so people aren't forced into "family"/"friend"
+// when neither fits, but the questions are the significant-other ones.
+export type RelationshipType = "significant_other" | "family" | "friend" | "its_complicated";
 
 export type State = {
   version: number;

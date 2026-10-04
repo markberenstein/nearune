@@ -435,7 +435,8 @@ const RAW = String.raw`<!doctype html>
   var RELATIONSHIPS = [
     ["significant_other", "Significant other / partner"],
     ["family", "Family"],
-    ["friend", "Friend"]
+    ["friend", "Friend"],
+    ["its_complicated", "It's complicated"]
   ];
   var LANG_NAME_TO_CODE = (function () {
     var m = {};
@@ -680,7 +681,8 @@ const RAW = String.raw`<!doctype html>
   // Picks the right pool for this room's relationship (see RelationshipType
   // in types.ts). Unset — every room created before this existed, plus the
   // legacy main room — defaults to significant_other so nothing already
-  // running changes which questions it gets.
+  // running changes which questions it gets. its_complicated gets the same
+  // pool as significant_other (falls through to the default below).
   function questionPoolFor() {
     var rel = state && state.relationship;
     if (rel === "family") return QUESTIONS_FAMILY;

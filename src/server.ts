@@ -478,7 +478,10 @@ Bun.serve({
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       const relationship =
-        body?.relationship === "significant_other" || body?.relationship === "family" || body?.relationship === "friend"
+        body?.relationship === "significant_other" ||
+        body?.relationship === "family" ||
+        body?.relationship === "friend" ||
+        body?.relationship === "its_complicated"
           ? body.relationship
           : undefined;
       if (!isPerson(who) || !name || !isValidEmail(email)) {

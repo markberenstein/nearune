@@ -1150,6 +1150,25 @@ const RAW = String.raw`<!doctype html>
     if (v && v.length) cachedVoices = v;
     return cachedVoices || v || [];
   }
+  // iOS (confirmed via live diagnostic logging) returns an EMPTY voice list
+  // from the very first getVoices() call of a fresh session — the list
+  // loads asynchronously and usually isn't ready yet by the time the page
+  // has barely rendered. Without this, whichever line got spoken first
+  // (typically today's question, the first thing on screen) found zero
+  // voices, picked no voice at all, and fell back to the browser's bare
+  // default — while everything spoken a few seconds later, once the list
+  // had loaded, correctly got pinned to the person's proper voice. That's
+  // exactly what made the question and a reply sound like two different
+  // voices. Kicking off getVoices() here, as soon as this script runs
+  // (well before anyone can tap a speak button), and catching the
+  // voiceschanged event that fires once the real list is ready, gives the
+  // list time to load before it's actually needed.
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    getVoicesSafe();
+    try {
+      window.speechSynthesis.addEventListener("voiceschanged", getVoicesSafe);
+    } catch (e) {}
+  }
   // Picks the best-matching installed voice for the given BCP-47 lang and
   // gender hint. Prefers an exact locale + gender match (e.g. a female
   // en-IN voice), then falls back in stages — same language family

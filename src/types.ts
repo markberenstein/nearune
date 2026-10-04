@@ -66,12 +66,23 @@ export type WebPushSubscriptionRecord = { kind?: "web"; endpoint: string; keys: 
 export type ApnsSubscriptionRecord = { kind: "apns"; token: string };
 export type PushSubscriptionRecord = WebPushSubscriptionRecord | ApnsSubscriptionRecord;
 
+// How the two people in a room relate to each other — set once, by whoever
+// registers first, and shared by the room rather than tracked per-person
+// (it describes the pair, not either individual). Picks which of page.ts's
+// three QUESTIONS pools the daily question is drawn from. A room with no
+// relationship set (every room created before this field existed, which
+// includes the legacy main room) defaults to "significant_other" — see
+// questionPoolFor() in page.ts — so existing rooms keep exactly the
+// questions they've always gotten.
+export type RelationshipType = "significant_other" | "family" | "friend";
+
 export type State = {
   version: number;
   // ISO timestamp set once, when the room is first created — only present on
   // rooms created after this field was added; older rooms show as unknown in
   // the admin view rather than guessing a date.
   createdAt?: string;
+  relationship?: RelationshipType;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
   status: Partial<Record<PersonKey, { text: string; at: string }>>;
   comments: Record<string, Comment[]>;

@@ -477,6 +477,10 @@ Bun.serve({
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      const relationship =
+        body?.relationship === "significant_other" || body?.relationship === "family" || body?.relationship === "friend"
+          ? body.relationship
+          : undefined;
       if (!isPerson(who) || !name || !isValidEmail(email)) {
         return json({ error: "invalid" }, { status: 400 });
       }
@@ -506,6 +510,10 @@ Bun.serve({
         s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false, emailHash };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
+        // Only whoever registers first sets this for the room — the second
+        // person's own registration (or re-registering after a bounced
+        // confirm) never overwrites an already-chosen relationship.
+        if (relationship && !s.relationship) s.relationship = relationship;
       });
       const confirmUrl = url.origin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
       // Sent in whichever language this person just picked on the

@@ -428,6 +428,15 @@ const RAW = String.raw`<!doctype html>
     ["Ukrainian", "uk"], ["Romanian", "ro"], ["Czech", "cs"], ["Swahili", "sw"],
     ["Gibberish", "gib"], ["Klingon", "tlh"]
   ];
+  // The relationship picker shown to whoever registers first (see
+  // registrationFlow()) — value is what's sent as the relationship field
+  // to /api/register and stored once on the room (see questionPoolFor()
+  // below for how it picks the daily question pool).
+  var RELATIONSHIPS = [
+    ["significant_other", "Significant other / partner"],
+    ["family", "Family"],
+    ["friend", "Friend"]
+  ];
   var LANG_NAME_TO_CODE = (function () {
     var m = {};
     LANGUAGES.forEach(function (pair) { m[pair[0].toLowerCase()] = pair[1]; });
@@ -467,7 +476,12 @@ const RAW = String.raw`<!doctype html>
     return null;
   }
 
-  var QUESTIONS = [
+  // Three separate question pools, one per relationship type (see
+  // RELATIONSHIPS above and questionPoolFor() below). QUESTIONS_SIGNIFICANT_OTHER
+  // is the original list, unchanged, so every room created before the
+  // relationship picker existed (including the legacy main room) keeps
+  // getting exactly the questions it always has.
+  var QUESTIONS_SIGNIFICANT_OTHER = [
     "What made you smile today, even for a second?",
     "If you were here right now, what would we be doing?",
     "What's a small thing from today you wish I'd seen?",
@@ -531,6 +545,149 @@ const RAW = String.raw`<!doctype html>
     "What's something you'd want us to do together the very first evening we're in the same place?"
   ];
 
+  // Family-relationship pool — warm and curious like the above, but without
+  // assuming a romantic pairing (no "us as a couple" framing), so it reads
+  // naturally between a parent and adult child, siblings, cousins, etc.
+  var QUESTIONS_FAMILY = [
+    "What made you smile today, even for a second?",
+    "What's a small thing from today you wish I'd seen?",
+    "What's the best thing you ate today?",
+    "What's a memory of us growing up that randomly popped into your head recently?",
+    "What's something you're looking forward to this week?",
+    "What did your morning look like today, minute by minute?",
+    "What's the last thing that made you laugh out loud?",
+    "What's a small comfort that got you through today?",
+    "What's something you learned about yourself this year?",
+    "What would a perfect lazy Sunday look like for you right now?",
+    "What's a smell that instantly reminds you of home?",
+    "What's a skill you'd want to learn, given the chance?",
+    "What's the view from wherever you're sitting right now?",
+    "What's a compliment you got recently that you're still thinking about?",
+    "What's your comfort show or movie right now?",
+    "What's something ordinary about today that you're grateful for?",
+    "What's a place you've never been but really want to see?",
+    "What's your current favorite way to waste ten minutes?",
+    "What's something you're proud of yourself for this week?",
+    "What's a family recipe or dish you want to make sure doesn't get lost?",
+    "What's the weather doing where you are, and how does it feel?",
+    "What's a childhood memory that came to mind recently?",
+    "What's something you noticed about people today that stuck with you?",
+    "If you had a free afternoon right now, what would you do with it?",
+    "What's a tiny habit you've picked up lately?",
+    "What's something you wish more people understood about your job?",
+    "What's a question you wish I'd ask you more often?",
+    "What's your favorite sound in the world right now?",
+    "What's something you're curious about lately that has nothing to do with work?",
+    "What's a color that matches your mood today?",
+    "What's one thing you'd want me to know about your day without you saying it?",
+    "What's a family tradition you want to make sure we keep?",
+    "What's something small I do that you appreciate more than I probably realize?",
+    "What's a book, article, or video you've thought about since you saw it?",
+    "What's your ideal way to spend a rainy day?",
+    "What's a place near you that feels like yours?",
+    "What's something you're better at than you were a year ago?",
+    "What's a food from home you miss most when you're away?",
+    "What made today different from yesterday?",
+    "What's something you'd want to frame and hang on a wall?",
+    "What's a story from our family that you hope gets told for generations?",
+    "What's a version of the future you like imagining?",
+    "What's something you overheard or saw today that stuck with you?",
+    "What's your go-to order when you don't want to think about it?",
+    "What's something about your city or town you'd want to show me first?",
+    "What's a small win from today that nobody else noticed?",
+    "What's something you're better at explaining in person than by text?",
+    "What's a scent, taste, or sound that reminds you of our family?",
+    "What's a question you've never been asked that you wish someone would ask?",
+    "What's something you do differently when you're on your own?",
+    "What's a story from your day that needs more detail than a text can give?",
+    "What's something you want to remember about this exact week?",
+    "What's a plan, even a small one, that you're excited about?",
+    "What's a piece of advice from an older relative that's stuck with you?",
+    "What's something you hope the next generation of our family holds onto?",
+    "What's a holiday or gathering memory you still think about?",
+    "What's something you'd want us to do together the next time we're all in the same place?",
+    "What's a strength you think runs in our family?",
+    "What's something you're grateful I'm part of your life for?",
+    "What's a question about our family history you've always wanted answered?"
+  ];
+
+  // Friend-relationship pool — casual and curious, catching-up energy
+  // rather than the warmth-coded ones above; still daily-check-in shaped so
+  // it fits the same card.
+  var QUESTIONS_FRIEND = [
+    "What made you laugh today, even for a second?",
+    "What's a small thing from today you wish I'd seen?",
+    "What's the best thing you ate today?",
+    "What's a memory of us that randomly popped into your head recently?",
+    "What's something you're looking forward to this week?",
+    "What did your morning look like today, minute by minute?",
+    "What's the last thing that made you laugh out loud?",
+    "What's a small win that got you through today?",
+    "What's something you learned about yourself this year?",
+    "What would your perfect lazy Sunday look like right now?",
+    "What's a smell that instantly reminds you of home?",
+    "What's a skill you'd want to learn together if we lived closer?",
+    "What's the view from wherever you're sitting right now?",
+    "What's a compliment you got recently that you're still thinking about?",
+    "What's your comfort show or movie right now?",
+    "What's something ordinary about today that you're grateful for?",
+    "What's a place you've never been but really want to see?",
+    "What's your current favorite way to waste ten minutes?",
+    "What's something you're proud of yourself for this week?",
+    "What's a food you want to try cooking or eating together someday?",
+    "What's the weather doing where you are, and how does it feel?",
+    "What's a memory from when we first met that you still think about?",
+    "What's something you noticed about people today that stuck with you?",
+    "If you had a free afternoon right now, what would you do with it?",
+    "What's a tiny habit you've picked up lately?",
+    "What's something you wish more people understood about your job?",
+    "What's a question you wish I'd ask you more often?",
+    "What's your favorite sound in the world right now?",
+    "What's something you're curious about that has nothing to do with either of us?",
+    "What's a color that matches your mood today?",
+    "What's one thing you'd want me to know about your day without you saying it?",
+    "What's a running joke or bit between us you hope never dies?",
+    "What's something small I do that you like more than I probably realize?",
+    "What's a book, article, or video you've thought about since you saw it?",
+    "What's your ideal way to spend a rainy day?",
+    "What's a place near you that feels like yours?",
+    "What's something you're better at than you were a year ago?",
+    "What's a food from home you miss most when you're away?",
+    "What made today different from yesterday?",
+    "What's something you'd want to frame and hang on a wall?",
+    "What's a joke or bit only the two of us would find funny?",
+    "What's a version of the future you like imagining?",
+    "What's something you overheard or saw today that stuck with you?",
+    "What's your go-to order when you don't want to think about it?",
+    "What's something about your city that you'd want to show me first?",
+    "What's a small win from today that nobody else noticed?",
+    "What's something you're better at explaining in person than by text?",
+    "What's a scent, taste, or sound that makes you think of good times with me?",
+    "What's a question you've never been asked that you wish someone would ask?",
+    "What's something you do differently when I'm not around?",
+    "What's a story from your day that needs more detail than a text can give?",
+    "What's something you want to remember about this exact week?",
+    "What's a plan, even a small one, that you're excited about?",
+    "What's something about your city that you'd want to show me first thing if I visited?",
+    "What's a trip or hangout we keep talking about but haven't actually planned?",
+    "What's something you're better at than you give yourself credit for?",
+    "What's a story about us you'd tell at a party?",
+    "What's something you'd want us to do together the very first time we're in the same city again?",
+    "What's a way I could surprise you this week, realistically?",
+    "What's something you're grateful we became friends over?"
+  ];
+
+  // Picks the right pool for this room's relationship (see RelationshipType
+  // in types.ts). Unset — every room created before this existed, plus the
+  // legacy main room — defaults to significant_other so nothing already
+  // running changes which questions it gets.
+  function questionPoolFor() {
+    var rel = state && state.relationship;
+    if (rel === "family") return QUESTIONS_FAMILY;
+    if (rel === "friend") return QUESTIONS_FRIEND;
+    return QUESTIONS_SIGNIFICANT_OTHER;
+  }
+
   var EPOCH_MS = Date.UTC(2026, 0, 1);
   var DAY_MS = 86400000;
   var POLL_MS = 6000;
@@ -563,9 +720,10 @@ const RAW = String.raw`<!doctype html>
     return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
   function questionForKey(key) {
+    var pool = questionPoolFor();
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
-    var idx = ((days % QUESTIONS.length) + QUESTIONS.length) % QUESTIONS.length;
-    return QUESTIONS[idx];
+    var idx = ((days % pool.length) + pool.length) % pool.length;
+    return pool[idx];
   }
   function formatDateLabel(key) {
     var d = new Date(keyToUtcMs(key) + 12 * 3600000);
@@ -1627,7 +1785,7 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
     return null;
   })();
-  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false };
+  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Looks up the typed location and, unless the person has already picked
   // a language themselves, pre-selects the language most likely spoken
@@ -1691,6 +1849,26 @@ const RAW = String.raw`<!doctype html>
     sel.addEventListener("change", function () { onInput(sel.value); });
     return sel;
   }
+  // Shown only to whoever registers first (soloRegistration) — see
+  // registrationFlow(). Sets the room's shared relationship, which picks
+  // the daily question pool for both people (questionPoolFor() in
+  // questionForKey() above) for as long as the room exists.
+  function relationshipSelectField(value, onInput) {
+    var sel = document.createElement("select");
+    sel.className = "lang-select";
+    var placeholder = document.createElement("option");
+    placeholder.value = ""; placeholder.textContent = t("Your relationship to each other"); placeholder.disabled = true;
+    if (!value) placeholder.selected = true;
+    sel.appendChild(placeholder);
+    RELATIONSHIPS.forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0]; opt.textContent = t(pair[1]);
+      if (value === pair[0]) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", function () { onInput(sel.value); });
+    return sel;
+  }
 
   function acceptInviteForm() {
     var card = h("div", { class: "card" }, [
@@ -1738,10 +1916,15 @@ const RAW = String.raw`<!doctype html>
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     if (!name || !email) { regError = t("Name and email required."); renderApp(); return; }
+    // Only the first registrant's choice is asked for (see
+    // registrationFlow()) and only their choice is ever saved (the server
+    // ignores a relationship on a room that already has one) — so this is
+    // only required when it's actually shown.
+    if (soloRegistration && !registerDraft.relationship) { regError = t("Pick how you two know each other."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, email: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz() })
+      body: JSON.stringify({ who: viewerKey, name: name, email: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -1794,6 +1977,13 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
+    // Only the first person through sets this — it's shared by the room
+    // (questionPoolFor() uses it for both people's daily question), so
+    // asking again on the second person's own registration would just be
+    // a choice that silently gets thrown away.
+    if (soloRegistration) {
+      form.appendChild(relationshipSelectField(registerDraft.relationship, function (v) { registerDraft.relationship = v; }));
+    }
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Register") });
     btn.disabled = regBusy;

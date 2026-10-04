@@ -924,10 +924,18 @@ const RAW = String.raw`<!doctype html>
   // offering to turn reminders on, rather than just the quiet link — shown
   // once, the first time this device reaches the main app after finishing
   // registration (see renderApp()'s call site for exactly when).
-  function pushPromptDialog() {
+  // awaitingPartner: true when whoever's seeing this hasn't had their
+  // partner join yet (they're about to land on, or are on, the "invite your
+  // partner" screen right after this) — the message tells them push is also
+  // how they'll hear the moment that happens, since nothing else will unless
+  // they happen to have the app open.
+  function pushPromptDialog(awaitingPartner) {
+    var body = awaitingPartner
+      ? t("Turn these on and we'll let you know the moment your partner accepts your invite — plus a daily nudge whenever today's question is ready.")
+      : t("Nearune can let you know when today's question is ready, so neither of you misses a day.");
     var card = h("div", { class: "picker-card" }, [
       h("h2", { text: t("Want a daily reminder?") }),
-      h("p", { text: t("Nearune can let you know when today's question is ready, so neither of you misses a day.") })
+      h("p", { text: body })
     ]);
     if (pushError) card.appendChild(h("p", { class: "puzzle-guess-note", text: pushError }));
     var choices = h("div", { class: "picker-choices" });
@@ -2136,17 +2144,23 @@ const RAW = String.raw`<!doctype html>
 
       var otherKey = viewerKey === "mark" ? "nikita" : "mark";
       var other = state.people && state.people[otherKey];
-      if (!other || !other.confirmed) { app.appendChild(inviteFlow(otherKey)); return; }
-    }
+      var otherConfirmedYet = !!(other && other.confirmed);
 
-    // One-time "want a daily reminder?" dialog — the first time THIS room
-    // (ROOM, not the legacy one) reaches the main app on this device, which
-    // is exactly the moment registration (or, for the invited partner,
-    // accepting the invite) finishes. pushPromptDismissed is set the first
-    // time this is answered, either way, so it never shows again; the
-    // persistent pushToggleRow link below stays as the ongoing way back in.
-    if (ROOM && pushSupported() && pushState === "off" && !pushPromptDismissed) {
-      app.appendChild(pushPromptDialog()); return;
+      // One-time "want a daily reminder?" dialog — shown as soon as YOUR OWN
+      // registration is confirmed, which for whoever registers first is
+      // before they've even sent their partner's invite (not after, like it
+      // used to be — that left them no way to turn push on until their
+      // partner had already joined, so the "your partner joined!" push
+      // below had nobody to send to). pushPromptDialog() is told whether the
+      // partner's already in yet so it can say the right thing either way.
+      // pushPromptDismissed is set the first time this is answered, either
+      // way, so it never shows again; the persistent pushToggleRow link
+      // further down stays as the ongoing way back in.
+      if (pushSupported() && pushState === "off" && !pushPromptDismissed) {
+        app.appendChild(pushPromptDialog(!otherConfirmedYet)); return;
+      }
+
+      if (!otherConfirmedYet) { app.appendChild(inviteFlow(otherKey)); return; }
     }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }

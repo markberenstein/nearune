@@ -907,6 +907,41 @@ const RAW = String.raw`<!doctype html>
   var swRegistrationCache = null;
   try { if (localStorage.getItem(PUSH_LS_KEY) === "on") pushState = "on"; } catch (e) {}
 
+  // Whether the one-time "want a daily reminder?" dialog (see
+  // pushPromptDialog() below) has already been shown and answered on this
+  // device, for this room — set the first time it's dismissed, either way
+  // (enabled or "Not now"), so it never asks twice. The persistent link
+  // under the traveling button (pushToggleRow) stays as the ongoing way to
+  // turn reminders on later.
+  var PUSH_PROMPT_LS_KEY = ROOM ? "nearunePushPrompted_" + ROOM : "nearunePushPrompted";
+  var pushPromptDismissed = false;
+  try { if (localStorage.getItem(PUSH_PROMPT_LS_KEY) === "1") pushPromptDismissed = true; } catch (e) {}
+  function dismissPushPrompt() {
+    pushPromptDismissed = true;
+    try { localStorage.setItem(PUSH_PROMPT_LS_KEY, "1"); } catch (e) {}
+  }
+  // A real modal (reuses the "Who's here?" picker's overlay/card styling)
+  // offering to turn reminders on, rather than just the quiet link — shown
+  // once, the first time this device reaches the main app after finishing
+  // registration (see renderApp()'s call site for exactly when).
+  function pushPromptDialog() {
+    var card = h("div", { class: "picker-card" }, [
+      h("h2", { text: t("Want a daily reminder?") }),
+      h("p", { text: t("Nearune can let you know when today's question is ready, so neither of you misses a day.") })
+    ]);
+    if (pushError) card.appendChild(h("p", { class: "puzzle-guess-note", text: pushError }));
+    var choices = h("div", { class: "picker-choices" });
+    var enableBtn = h("button", { class: "picker-btn", text: pushState === "busy" ? t("Working…") : t("Turn on notifications") });
+    enableBtn.disabled = pushState === "busy";
+    enableBtn.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
+    var notNowBtn = h("button", { class: "picker-btn", text: t("Not now") });
+    notNowBtn.addEventListener("click", function () { dismissPushPrompt(); renderApp(); });
+    choices.appendChild(enableBtn);
+    choices.appendChild(notNowBtn);
+    card.appendChild(choices);
+    return h("div", { class: "picker-overlay" }, [card]);
+  }
+
   function isComplete(key) {
     var a = state.answers[key];
     return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text);
@@ -2102,6 +2137,16 @@ const RAW = String.raw`<!doctype html>
       var otherKey = viewerKey === "mark" ? "nikita" : "mark";
       var other = state.people && state.people[otherKey];
       if (!other || !other.confirmed) { app.appendChild(inviteFlow(otherKey)); return; }
+    }
+
+    // One-time "want a daily reminder?" dialog — the first time THIS room
+    // (ROOM, not the legacy one) reaches the main app on this device, which
+    // is exactly the moment registration (or, for the invited partner,
+    // accepting the invite) finishes. pushPromptDismissed is set the first
+    // time this is answered, either way, so it never shows again; the
+    // persistent pushToggleRow link below stays as the ongoing way back in.
+    if (ROOM && pushSupported() && pushState === "off" && !pushPromptDismissed) {
+      app.appendChild(pushPromptDialog()); return;
     }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }

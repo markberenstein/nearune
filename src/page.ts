@@ -909,16 +909,25 @@ const RAW = String.raw`<!doctype html>
 
   // Whether the one-time "want a daily reminder?" dialog (see
   // pushPromptDialog() below) has already been shown and answered on this
-  // device, for this room — set the first time it's dismissed, either way
-  // (enabled or "Not now"), so it never asks twice. The persistent link
-  // under the traveling button (pushToggleRow) stays as the ongoing way to
-  // turn reminders on later.
-  var PUSH_PROMPT_LS_KEY = ROOM ? "nearunePushPrompted_" + ROOM : "nearunePushPrompted";
-  var pushPromptDismissed = false;
-  try { if (localStorage.getItem(PUSH_PROMPT_LS_KEY) === "1") pushPromptDismissed = true; } catch (e) {}
+  // device, BY THIS PERSON — set the first time it's dismissed, either way
+  // (enabled or "Not now"), so it never asks that person again. Keyed by
+  // viewerKey as well as room (not just room): on a device only one of you
+  // ever uses that's a distinction without a difference, but if the two of
+  // you ever do share one device (testing, a shared family tablet), keying
+  // by room alone would let whoever answers first silently suppress the
+  // dialog for the other person too — computed fresh each call rather than
+  // cached, since viewerKey can still be unset the first time renderApp()
+  // runs and can change later (the "Not {name}? Switch" link). The
+  // persistent link under the traveling button (pushToggleRow) stays as the
+  // ongoing way to turn reminders on later regardless.
+  function pushPromptLsKey() {
+    return (ROOM ? "nearunePushPrompted_" + ROOM : "nearunePushPrompted") + "_" + (viewerKey || "");
+  }
+  function isPushPromptDismissed() {
+    try { return localStorage.getItem(pushPromptLsKey()) === "1"; } catch (e) { return false; }
+  }
   function dismissPushPrompt() {
-    pushPromptDismissed = true;
-    try { localStorage.setItem(PUSH_PROMPT_LS_KEY, "1"); } catch (e) {}
+    try { localStorage.setItem(pushPromptLsKey(), "1"); } catch (e) {}
   }
   // A real modal (reuses the "Who's here?" picker's overlay/card styling)
   // offering to turn reminders on, rather than just the quiet link — shown
@@ -2153,10 +2162,10 @@ const RAW = String.raw`<!doctype html>
       // partner had already joined, so the "your partner joined!" push
       // below had nobody to send to). pushPromptDialog() is told whether the
       // partner's already in yet so it can say the right thing either way.
-      // pushPromptDismissed is set the first time this is answered, either
-      // way, so it never shows again; the persistent pushToggleRow link
-      // further down stays as the ongoing way back in.
-      if (pushSupported() && pushState === "off" && !pushPromptDismissed) {
+      // isPushPromptDismissed() is set the first time this is answered,
+      // either way, so it never shows again to THIS person; the persistent
+      // pushToggleRow link further down stays as the ongoing way back in.
+      if (pushSupported() && pushState === "off" && !isPushPromptDismissed()) {
         app.appendChild(pushPromptDialog(!otherConfirmedYet)); return;
       }
 

@@ -2176,13 +2176,11 @@ const RAW = String.raw`<!doctype html>
 
     app.appendChild(header());
     // Traveling button sits right under the clock/timezone block at the
-    // very top of the page, with the "enable notifications" link directly
-    // beneath it (only while notifications are actually off — once they're
-    // on, pushToggleRow() returns null and nothing renders there).
+    // very top of the page. The "enable notifications" link used to sit
+    // right under it too — moved to the bottom of the page, under the
+    // voice-recording box, per feedback (see its new call site below).
     var travelRow = travelBlock();
     if (travelRow) app.appendChild(travelRow);
-    var pushRow = pushToggleRow();
-    if (pushRow) app.appendChild(pushRow);
     app.appendChild(statusRow());
     // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
     // "next question" countdown used to be), right under the status row.
@@ -2208,6 +2206,12 @@ const RAW = String.raw`<!doctype html>
     // the status row at the very top of the page.
     var voiceBlock = voiceRecorderBlock();
     if (voiceBlock) app.appendChild(voiceBlock);
+    // The "enable notifications" link — now sits here, under the
+    // voice-recording box, instead of up under the traveling button (see
+    // that call site above). Only renders while notifications are actually
+    // off (pushToggleRow() returns null once they're on).
+    var pushRow = pushToggleRow();
+    if (pushRow) app.appendChild(pushRow);
     app.appendChild(switchRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
@@ -3178,7 +3182,11 @@ const RAW = String.raw`<!doctype html>
     if (!pushSupported() || !viewerKey) return null;
     if (pushState === "on") return null;
     var wrap = h("div", {});
-    var row = h("div", { class: "switch-row top-action-row" });
+    // Plain switch-row styling (no top-action-row pill card) now that this
+    // sits at the bottom of the page among the other plain links, rather
+    // than up top against the weather gradient where top-action-row's
+    // solid-background card was needed for contrast.
+    var row = h("div", { class: "switch-row" });
     var label = pushState === "busy" ? t("Working…") : t("Enable reminders");
     var btn = h("button", { class: "switch-link", text: label });
     btn.disabled = pushState === "busy";

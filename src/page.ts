@@ -1173,16 +1173,51 @@ const RAW = String.raw`<!doctype html>
     for (var i = 0; i < pools.length; i++) if (pools[i].length) return pools[i][0];
     return null;
   }
+  // A person's fallback voice is picked ONCE per person and reused for
+  // every line attributed to them, in whichever language that particular
+  // line happens to be in — not re-picked per call based on that line's
+  // language. Most devices only have one voice MODEL per language, so
+  // picking per-call (English voice for English lines, Hindi voice for
+  // Hindi lines) meant the question and a reply from the same person could
+  // come out of two audibly different synthetic voices even though both
+  // were nominally "their" fallback. Pinning one voice (keyed to their own
+  // registered language — e.g. a Hindi/Indian-accented voice for someone
+  // whose language is Hindi) and reusing its voice+lang pair for
+  // everything they "say" keeps it sounding like one consistent narrator
+  // for that person, the same way their real cloned voice would once they
+  // record a sample.
+  var personVoiceCache = {};
+  function personVoice(authorKey) {
+    if (!authorKey) return null;
+    if (personVoiceCache[authorKey]) return personVoiceCache[authorKey];
+    var ownLang = langCodeFor(authorKey) || "en";
+    var locale = ownLang === "en" ? enLocaleFor(authorKey) : (SPEECH_LANG_MAP[ownLang] || "en-US");
+    var gender = VOICE_GENDER[authorKey];
+    var voice = pickVoiceFor(locale, gender);
+    // Only cache once a real voice list is available — getVoices() can come
+    // back empty before the browser has loaded its voices, and caching a
+    // null result then would pin "no voice" forever for this session.
+    if (!voice) return null;
+    var result = { voice: voice, locale: locale };
+    personVoiceCache[authorKey] = result;
+    return result;
+  }
   function speak(text, lang, authorKey) {
     if (!canSpeak(lang) || !text) return;
     try {
       window.speechSynthesis.cancel(); // stop anything already playing first
       var u = new SpeechSynthesisUtterance(text);
-      var locale = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
-      u.lang = locale;
-      var gender = authorKey && VOICE_GENDER[authorKey];
-      var voice = pickVoiceFor(locale, gender);
-      if (voice) u.voice = voice;
+      var pinned = authorKey && personVoice(authorKey);
+      if (pinned) {
+        // Keep voice and lang paired as a matched set — some engines
+        // silently ignore the voice setting when it doesn't match lang,
+        // falling back to their own default for that lang instead, which
+        // would quietly undo the whole point of pinning one voice.
+        u.voice = pinned.voice;
+        u.lang = pinned.locale;
+      } else {
+        u.lang = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
+      }
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }

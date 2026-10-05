@@ -2366,14 +2366,13 @@ const RAW = String.raw`<!doctype html>
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     app.appendChild(tabBar());
-    // The fun local-news line, then the countdown — both now sit here,
-    // above the Today/Puzzle content.
-    var newsBlock = newsLineBlock();
-    if (newsBlock) app.appendChild(newsBlock);
-    // SANDBOX EXPERIMENT: top-songs/top-movies chart lines — same spot,
-    // same idea, as the news line above. Today tab only, per feedback (the
-    // puzzle tab should stay focused on the puzzle itself).
+    // The fun local-news line, the music/movies chart lines, then the
+    // countdown — all now sit here, above the Today/Puzzle content. Today
+    // tab only, per feedback (the puzzle tab should stay focused on the
+    // puzzle itself).
     if (activeTab !== "puzzle") {
+      var newsBlock = newsLineBlock();
+      if (newsBlock) app.appendChild(newsBlock);
       var musicBlock = musicLineBlock();
       if (musicBlock) app.appendChild(musicBlock);
       var moviesBlock = moviesLineBlock();

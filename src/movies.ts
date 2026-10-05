@@ -22,6 +22,8 @@ export type MovieChart = MovieEntry[] | null;
 
 const chartCache = new Map<string, { at: number; value: MovieChart }>();
 const CHART_TTL = 6 * 60 * 60 * 1000; // 6 hours — same as music.ts
+// See music.ts's FAILURE_TTL comment — same reasoning here.
+const FAILURE_TTL = 2 * 60 * 1000; // 2 minutes
 
 function findEnclosureUrl(linkField: any): string | null {
   const links = Array.isArray(linkField) ? linkField : linkField ? [linkField] : [];
@@ -56,7 +58,10 @@ export async function topMovies(location: string, limit = 5): Promise<MovieChart
   if (!country) return null;
   const cacheKey = country + "|" + limit;
   const cached = chartCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CHART_TTL) return cached.value;
+  if (cached) {
+    const ttl = cached.value ? CHART_TTL : FAILURE_TTL;
+    if (Date.now() - cached.at < ttl) return cached.value;
+  }
   let value: MovieChart = null;
   try {
     const url = "https://itunes.apple.com/" + country + "/rss/topmovies/limit=" + limit + "/json";

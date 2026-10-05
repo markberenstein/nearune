@@ -26,6 +26,11 @@ export type MusicChart = SongEntry[] | null;
 
 const chartCache = new Map<string, { at: number; value: MusicChart }>();
 const CHART_TTL = 6 * 60 * 60 * 1000; // 6 hours — a top-songs chart doesn't move fast
+// A failed/empty fetch (Apple's feed is occasionally down or slow — seen a
+// real 504 from apple's own servers for the US songs chart) gets a much
+// shorter TTL, so a transient outage doesn't lock in "no chart" for a
+// whole 6-hour window once Apple recovers.
+const FAILURE_TTL = 2 * 60 * 1000; // 2 minutes
 
 async function fetchPreviewUrl(appleId: string): Promise<string | null> {
   try {
@@ -46,7 +51,10 @@ export async function topSongs(location: string, limit = 5): Promise<MusicChart>
   if (!country) return null;
   const cacheKey = country + "|" + limit;
   const cached = chartCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CHART_TTL) return cached.value;
+  if (cached) {
+    const ttl = cached.value ? CHART_TTL : FAILURE_TTL;
+    if (Date.now() - cached.at < ttl) return cached.value;
+  }
   let value: MusicChart = null;
   try {
     // Apple's feed only serves a few fixed sizes (10/25/50/100) — always

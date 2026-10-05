@@ -157,6 +157,10 @@ const RAW = String.raw`<!doctype html>
   body.weather-active .sky-line strong,
   body.weather-active .cdt,
   body.weather-active .news-line,
+  body.weather-active .music-line,
+  body.weather-active .movie-line,
+  body.weather-active .chart-list .chart-rank,
+  body.weather-active .chart-list .chart-title,
   body.weather-active .switch-row:not(.top-action-row) .switch-link {
     color: var(--weather-ink, #2B211B);
   }
@@ -1277,40 +1281,46 @@ const RAW = String.raw`<!doctype html>
   // SANDBOX EXPERIMENT: plays a 30s song preview from the music chart (see
   // chartPlayButton below) — a single shared <audio> element so starting
   // one preview stops whichever one was already playing, the same
-  // one-at-a-time rule as activeCloneAudio. activeChartBtn is the button
-  // that started it, so the button's own icon can flip back to "play" the
-  // moment playback actually stops, however it stopped (tapped again,
-  // another preview started, a video opened, or the clip just finished) —
-  // that's the "easy to stop" part: the same tap that started it stops it.
+  // one-at-a-time rule as activeCloneAudio.
+  //
+  // activeChartUrl (not a button reference) is the source of truth for
+  // which preview is playing. A background poll calls renderApp() every
+  // few seconds (see POLL_MS) independent of anything the person does,
+  // which rebuilds every button from scratch — an earlier version tracked
+  // the *button element* that started playback, so the very next poll's
+  // rebuild replaced it with a brand-new button that always started back
+  // at "▶️", even while the audio was still genuinely playing underneath
+  // (the audio itself is untouched by a rerender — only the stale button
+  // reference was the problem). Deriving each button's icon from
+  // activeChartUrl + activeChartAudio.paused instead means every rebuild
+  // — poll-triggered or not — reconstructs the correct icon for whichever
+  // preview (if any) is actually still playing.
   var activeChartAudio = null;
-  var activeChartBtn = null;
-  function resetChartBtn(btn) {
-    btn.textContent = "▶️";
-    btn.setAttribute("aria-label", "Play preview");
-  }
+  var activeChartUrl = null;
   function stopChartAudio() {
     if (activeChartAudio) { try { activeChartAudio.pause(); } catch (e) {} }
   }
-  function playChartPreview(url, btn) {
+  function playChartPreview(url) {
     if (!url) return;
     stopChartAudio();
     closeChartVideo();
-    if (activeChartBtn) resetChartBtn(activeChartBtn);
     var audio = new Audio(url);
     activeChartAudio = audio;
-    activeChartBtn = btn;
-    if (btn) { btn.textContent = "⏸️"; btn.setAttribute("aria-label", "Stop preview"); }
+    activeChartUrl = url;
     function onStop() {
-      // Guards against a stale event from an audio/button pair that's
-      // already been superseded by a newer tap (see playChartPreview's own
-      // stopChartAudio() call above) — without this, that older element's
-      // delayed "pause" could reset the WRONG (newer) button's icon.
-      if (activeChartAudio === audio) activeChartAudio = null;
-      if (btn && activeChartBtn === btn) { resetChartBtn(btn); activeChartBtn = null; }
+      // Guards against a stale event from an audio element that's already
+      // been superseded by a newer tap (see stopChartAudio() above).
+      if (activeChartAudio === audio) {
+        activeChartAudio = null;
+        activeChartUrl = null;
+        renderApp();
+      }
     }
     audio.addEventListener("ended", onStop);
     audio.addEventListener("pause", onStop);
+    audio.addEventListener("error", onStop);
     audio.play().catch(onStop);
+    renderApp(); // optimistic — flips this button to the stop icon right away, not on the next poll
   }
   // kind "video" opens the trailer in a small overlay player instead of
   // playing audio-only — a movie trailer is the point, so you should
@@ -1318,18 +1328,22 @@ const RAW = String.raw`<!doctype html>
   // audio-only, toggled by tapping the same button again.
   function chartPlayButton(previewUrl, label, kind) {
     if (!previewUrl) return null;
-    var btn = h("button", { class: "chart-play-btn", type: "button", "aria-label": label || "Play preview" });
-    btn.textContent = "▶️";
+    var btn = h("button", { class: "chart-play-btn", type: "button" });
     if (kind === "video") {
+      btn.textContent = "▶️";
+      btn.setAttribute("aria-label", label || "Play preview");
       btn.addEventListener("click", function () { openChartVideo(previewUrl); });
       return btn;
     }
+    var isPlaying = activeChartUrl === previewUrl && activeChartAudio && !activeChartAudio.paused;
+    btn.textContent = isPlaying ? "⏸️" : "▶️";
+    btn.setAttribute("aria-label", isPlaying ? "Stop preview" : (label || "Play preview"));
     btn.addEventListener("click", function () {
-      if (activeChartBtn === btn && activeChartAudio && !activeChartAudio.paused) {
+      if (activeChartUrl === previewUrl && activeChartAudio && !activeChartAudio.paused) {
         activeChartAudio.pause();
         return;
       }
-      playChartPreview(previewUrl, btn);
+      playChartPreview(previewUrl);
     });
     return btn;
   }

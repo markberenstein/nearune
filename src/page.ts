@@ -2371,11 +2371,14 @@ const RAW = String.raw`<!doctype html>
     var newsBlock = newsLineBlock();
     if (newsBlock) app.appendChild(newsBlock);
     // SANDBOX EXPERIMENT: top-songs/top-movies chart lines — same spot,
-    // same idea, as the news line above.
-    var musicBlock = musicLineBlock();
-    if (musicBlock) app.appendChild(musicBlock);
-    var moviesBlock = moviesLineBlock();
-    if (moviesBlock) app.appendChild(moviesBlock);
+    // same idea, as the news line above. Today tab only, per feedback (the
+    // puzzle tab should stay focused on the puzzle itself).
+    if (activeTab !== "puzzle") {
+      var musicBlock = musicLineBlock();
+      if (musicBlock) app.appendChild(musicBlock);
+      var moviesBlock = moviesLineBlock();
+      if (moviesBlock) app.appendChild(moviesBlock);
+    }
     app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     if (activeTab === "puzzle") {
       var flash = puzzleFlashBanner();

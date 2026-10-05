@@ -1,8 +1,13 @@
-// Nearune — top movies chart at a free-text location. Same approach and
-// same reasoning as music.ts (see its header comment): Apple's public
-// "top movies" marketing feed, no API key required, country-level only
-// (there's no such thing as a city-level box office chart either), plus a
-// trailer preview clip for the #1 movie from the public iTunes Search API.
+// Nearune — top movies chart at a free-text location. Apple's marketing
+// RSS feed used by music.ts (rss.applemarketingtools.com) only covers apps,
+// music, podcasts, books and audiobooks — it has no movies chart at all
+// (confirmed: every /movies/... path 404s). The older iTunes Store RSS
+// feed generator (itunes.apple.com/{country}/rss/topmovies/...) still
+// works and does cover movies, so that's the source here instead. Bonus:
+// each entry already includes a direct trailer/preview clip link, so no
+// second iTunes Search API round trip is needed the way music.ts needs one
+// for its preview — every entry in the chart gets a preview url for free.
+// No API key required, same as music.ts.
 
 import { resolveCountryCode } from "./geo";
 
@@ -11,7 +16,6 @@ export type MovieEntry = {
   title: string;
   url: string;
   artworkUrl: string;
-  // Only populated for rank 1 — see music.ts's SongEntry for why.
   previewUrl: string | null;
 };
 export type MovieChart = MovieEntry[] | null;
@@ -19,16 +23,30 @@ export type MovieChart = MovieEntry[] | null;
 const chartCache = new Map<string, { at: number; value: MovieChart }>();
 const CHART_TTL = 6 * 60 * 60 * 1000; // 6 hours — same as music.ts
 
-async function fetchPreviewUrl(appleId: string): Promise<string | null> {
-  try {
-    const res = await fetch("https://itunes.apple.com/lookup?id=" + encodeURIComponent(appleId) + "&entity=movie");
-    if (!res.ok) return null;
-    const data: any = await res.json();
-    const first = data && Array.isArray(data.results) && data.results[0];
-    return (first && typeof first.previewUrl === "string" && first.previewUrl) || null;
-  } catch {
-    return null;
+function findEnclosureUrl(linkField: any): string | null {
+  const links = Array.isArray(linkField) ? linkField : linkField ? [linkField] : [];
+  for (const l of links) {
+    if (l && l.attributes && l.attributes.rel === "enclosure" && typeof l.attributes.href === "string") {
+      return l.attributes.href;
+    }
   }
+  return null;
+}
+
+function findAlternateUrl(linkField: any): string {
+  const links = Array.isArray(linkField) ? linkField : linkField ? [linkField] : [];
+  for (const l of links) {
+    if (l && l.attributes && l.attributes.rel === "alternate" && typeof l.attributes.href === "string") {
+      return l.attributes.href;
+    }
+  }
+  return "";
+}
+
+function largestImageUrl(imageField: any): string {
+  const images = Array.isArray(imageField) ? imageField : imageField ? [imageField] : [];
+  const last = images[images.length - 1];
+  return (last && typeof last.label === "string" && last.label) || "";
 }
 
 // Top `limit` movies (default 5) currently popular in whichever country a
@@ -41,20 +59,18 @@ export async function topMovies(location: string, limit = 5): Promise<MovieChart
   if (cached && Date.now() - cached.at < CHART_TTL) return cached.value;
   let value: MovieChart = null;
   try {
-    const url = "https://rss.applemarketingtools.com/api/v2/" + country + "/movies/top-movies/10/movies.json";
+    const url = "https://itunes.apple.com/" + country + "/rss/topmovies/limit=" + limit + "/json";
     const res = await fetch(url);
     if (res.ok) {
       const data: any = await res.json();
-      const results: any[] = (data && data.feed && Array.isArray(data.feed.results) && data.feed.results) || [];
-      const top = results.slice(0, limit);
-      if (top.length) {
-        const previewUrl = top[0] && top[0].id ? await fetchPreviewUrl(top[0].id) : null;
-        value = top.map((r, i) => ({
+      const entries: any[] = (data && data.feed && Array.isArray(data.feed.entry) && data.feed.entry) || [];
+      if (entries.length) {
+        value = entries.slice(0, limit).map((e, i) => ({
           rank: i + 1,
-          title: r.name || "",
-          url: r.url || "",
-          artworkUrl: r.artworkUrl100 || "",
-          previewUrl: i === 0 ? previewUrl : null,
+          title: (e["im:name"] && e["im:name"].label) || "",
+          url: findAlternateUrl(e.link),
+          artworkUrl: largestImageUrl(e["im:image"]),
+          previewUrl: findEnclosureUrl(e.link),
         }));
       }
     } else {

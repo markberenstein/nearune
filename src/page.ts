@@ -1321,7 +1321,7 @@ const RAW = String.raw`<!doctype html>
     }, [document.createTextNode("🔊")]);
   }
 
-  function translateBlock(text, target, alt, authorKey, showVoice) {
+  function translateBlock(text, target, alt, authorKey) {
     if (!text || !target || target === alt) return h("div", { class: "translate-inline", hidden: "true" });
     var key = target + "|" + (alt || "") + "::" + text;
     scheduleTranslate(text, target, alt);
@@ -1337,19 +1337,12 @@ const RAW = String.raw`<!doctype html>
       // isn't just comprehension, it's actually hearing your partner's
       // language — then an optional button to hear the translation spoken
       // back in the reader's own language. Both go through authorKey's own
-      // cloned voice when they have one recorded. showVoice defaults to true
-      // (every existing caller keeps its speaker buttons); the puzzle page
-      // passes false to drop them there specifically, since the puzzle's
-      // question/guess/answer text doesn't need a voice option.
-      if (showVoice !== false) {
-        var origBtn = speakButton(text, alt, t("Hear in original language"), authorKey);
-        if (origBtn) row.appendChild(origBtn);
-      }
+      // cloned voice when they have one recorded.
+      var origBtn = speakButton(text, alt, t("Hear in original language"), authorKey);
+      if (origBtn) row.appendChild(origBtn);
       row.appendChild(h("span", { text: val }));
-      if (showVoice !== false) {
-        var ownBtn = speakButton(val, target, t("Hear in your language"), authorKey);
-        if (ownBtn) row.appendChild(ownBtn);
-      }
+      var ownBtn = speakButton(val, target, t("Hear in your language"), authorKey);
+      if (ownBtn) row.appendChild(ownBtn);
       wrap.appendChild(row);
     }
     return wrap;
@@ -1812,13 +1805,13 @@ const RAW = String.raw`<!doctype html>
         : tTemplate("Today's guess: “{guess}” — not quite. Try again tomorrow.", { guess: state.puzzleLastGuessText });
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
       if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
-        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy, false));
+        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy));
       }
       return wrap;
     }
     if (state.puzzleQuestion && state.puzzleSetBy) {
       wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
-      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, false));
+      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
     }
     var input = document.createElement("input");
     input.type = "text"; input.maxLength = 120;
@@ -1868,7 +1861,7 @@ const RAW = String.raw`<!doctype html>
       if (state.puzzleSolved) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
-          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, false));
+          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
         }
         var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? t("Next picture →") : t("Finish batch") });
         nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
@@ -2347,9 +2340,14 @@ const RAW = String.raw`<!doctype html>
     }
     // Moved below the Today/Puzzle content (and "Look back at past days" on
     // the Today tab specifically) per feedback — used to sit right under
-    // the status row at the very top of the page.
-    var voiceBlock = voiceRecorderBlock();
-    if (voiceBlock) app.appendChild(voiceBlock);
+    // the status row at the very top of the page. Shown on the Today tab
+    // only — on the Puzzle tab it read as part of the puzzle itself, which
+    // wasn't the intent (it's an account-level voice setting, unrelated to
+    // any particular puzzle).
+    if (activeTab !== "puzzle") {
+      var voiceBlock = voiceRecorderBlock();
+      if (voiceBlock) app.appendChild(voiceBlock);
+    }
     // The "enable notifications" link — now sits here, under the
     // voice-recording box, instead of up under the traveling button (see
     // that call site above). Only renders while notifications are actually

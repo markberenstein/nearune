@@ -1,12 +1,16 @@
 // Nearune — top songs chart at a free-text location, via Apple's public
 // "most played" marketing feed (no API key required — same no-auth
 // approach as localnews.ts's Google News RSS and weather.ts's Open-Meteo
-// calls), plus a 30-second preview clip for the #1 song from the public
-// iTunes Search API. Billboard doesn't publish city-level charts — its
-// charts are national — so "near you" here really means "popular in your
-// country" the same way weather.ts picks a temperature unit per country
-// rather than per city. See resolveCountryCode in geo.ts for how a
-// free-text location becomes a chart region.
+// calls), plus a 30-second preview clip for every song from the public
+// iTunes Search API (one lookup per song, run in parallel — movies.ts gets
+// these for free from its own feed, but the marketing feed used here
+// doesn't include them, so each song needs its own lookup so every entry
+// in the expanded top-5 list — not just the collapsed #1 — gets a play
+// button). Billboard doesn't publish city-level charts — its charts are
+// national — so "near you" here really means "popular in your country" the
+// same way weather.ts picks a temperature unit per country rather than per
+// city. See resolveCountryCode in geo.ts for how a free-text location
+// becomes a chart region.
 
 import { resolveCountryCode } from "./geo";
 
@@ -16,10 +20,6 @@ export type SongEntry = {
   artist: string;
   url: string;
   artworkUrl: string;
-  // Only populated for rank 1 — fetching a preview is one extra request
-  // per song, and most of a 5-song chart never gets listened to. The #1
-  // slot is the one actually shown collapsed (see page.ts's musicLineBlock),
-  // so it's the only one that needs to be ready immediately.
   previewUrl: string | null;
 };
 export type MusicChart = SongEntry[] | null;
@@ -66,14 +66,14 @@ export async function topSongs(location: string, limit = 5): Promise<MusicChart>
       const results: any[] = (data && data.feed && Array.isArray(data.feed.results) && data.feed.results) || [];
       const top = results.slice(0, limit);
       if (top.length) {
-        const previewUrl = top[0] && top[0].id ? await fetchPreviewUrl(top[0].id) : null;
+        const previewUrls = await Promise.all(top.map((r) => (r && r.id ? fetchPreviewUrl(r.id) : Promise.resolve(null))));
         value = top.map((r, i) => ({
           rank: i + 1,
           title: r.name || "",
           artist: r.artistName || "",
           url: r.url || "",
           artworkUrl: r.artworkUrl100 || "",
-          previewUrl: i === 0 ? previewUrl : null,
+          previewUrl: previewUrls[i],
         }));
       }
     } else {

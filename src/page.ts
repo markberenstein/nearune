@@ -2533,6 +2533,8 @@ const RAW = String.raw`<!doctype html>
   function previewAsPartner(key) {
     previewKey = previewKey === key ? null : key;
     weatherExpanded = false;
+    musicExpanded = false;
+    moviesExpanded = false;
     applyWeatherSky();
     renderApp();
   }

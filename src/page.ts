@@ -895,7 +895,7 @@ const RAW = String.raw`<!doctype html>
   try {
     var storedTab = localStorage.getItem(TAB_LS_KEY);
     if (storedTab === null && !ROOM) storedTab = localStorage.getItem("sameSkyTab");
-    if (storedTab === "puzzle" || storedTab === "today") activeTab = storedTab;
+    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local") activeTab = storedTab;
   } catch (e) {}
   var puzzleFlashMsg = null;
 
@@ -2097,12 +2097,14 @@ const RAW = String.raw`<!doctype html>
     var unlocked = puzzleUnlockedCount();
     var todayBtn = h("button", { class: "tab-btn" + (activeTab === "today" ? " active" : ""), text: t("Today") });
     todayBtn.addEventListener("click", function () { setActiveTab("today"); });
+    var localBtn = h("button", { class: "tab-btn" + (activeTab === "local" ? " active" : ""), text: t("Local Feel") });
+    localBtn.addEventListener("click", function () { setActiveTab("local"); });
     var puzzleBtn = h("button", { class: "tab-btn" + (activeTab === "puzzle" ? " active" : "") }, [
       document.createTextNode(t("Puzzle") + " "),
       h("span", { class: "tab-badge", text: unlocked + "/" + PUZZLE_TOTAL })
     ]);
     puzzleBtn.addEventListener("click", function () { setActiveTab("puzzle"); });
-    return h("div", { class: "tab-bar" }, [todayBtn, puzzleBtn]);
+    return h("div", { class: "tab-bar" }, [todayBtn, localBtn, puzzleBtn]);
   }
 
   function puzzleFlashBanner() {
@@ -2469,11 +2471,12 @@ const RAW = String.raw`<!doctype html>
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     app.appendChild(tabBar());
-    // The fun local-news line, the music/movies chart lines, then the
-    // countdown — all now sit here, above the Today/Puzzle content. Today
-    // tab only, per feedback (the puzzle tab should stay focused on the
-    // puzzle itself).
-    if (activeTab !== "puzzle") {
+    // The fun local-news line, the music/movies chart lines, and the shared
+    // photo card live on their own "Local Feel" tab now (per feedback — the
+    // Today tab was getting cluttered), with nothing else alongside them.
+    // Today and Puzzle stay focused on the question/journal and the puzzle
+    // itself, respectively.
+    if (activeTab === "local") {
       var newsBlock = newsLineBlock();
       if (newsBlock) app.appendChild(newsBlock);
       var musicBlock = musicLineBlock();
@@ -2482,26 +2485,26 @@ const RAW = String.raw`<!doctype html>
       if (moviesBlock) app.appendChild(moviesBlock);
       var photoBlock = photoCardBlock();
       if (photoBlock) app.appendChild(photoBlock);
-    }
-    app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
-    if (activeTab === "puzzle") {
-      var flash = puzzleFlashBanner();
-      if (flash) app.appendChild(flash);
-      app.appendChild(puzzleSection());
     } else {
-      app.appendChild(questionCard());
-      app.appendChild(streakCard());
-      app.appendChild(journalSection());
-    }
-    // Moved below the Today/Puzzle content (and "Look back at past days" on
-    // the Today tab specifically) per feedback — used to sit right under
-    // the status row at the very top of the page. Shown on the Today tab
-    // only — on the Puzzle tab it read as part of the puzzle itself, which
-    // wasn't the intent (it's an account-level voice setting, unrelated to
-    // any particular puzzle).
-    if (activeTab !== "puzzle") {
-      var voiceBlock = voiceRecorderBlock();
-      if (voiceBlock) app.appendChild(voiceBlock);
+      app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
+      if (activeTab === "puzzle") {
+        var flash = puzzleFlashBanner();
+        if (flash) app.appendChild(flash);
+        app.appendChild(puzzleSection());
+      } else {
+        app.appendChild(questionCard());
+        app.appendChild(streakCard());
+        app.appendChild(journalSection());
+      }
+      // Moved below the Today/Puzzle content (and "Look back at past days" on
+      // the Today tab specifically) per feedback — used to sit right under
+      // the status row at the very top of the page. Shown on the Today tab
+      // only — on the Puzzle and Local Feel tabs it read as unrelated
+      // clutter (it's an account-level voice setting, not tied to either).
+      if (activeTab === "today") {
+        var voiceBlock = voiceRecorderBlock();
+        if (voiceBlock) app.appendChild(voiceBlock);
+      }
     }
     // The "enable notifications" link — now sits here, under the
     // voice-recording box, instead of up under the traveling button (see

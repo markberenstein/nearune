@@ -363,6 +363,19 @@ const RAW = String.raw`<!doctype html>
      headline itself underlined as a link out to the source. */
   .news-line { text-align: center; font-size: 0.95rem; color: var(--ink-soft); padding: 2px 8px; margin: 0; text-wrap: balance; }
   .news-link { color: var(--accent); text-decoration: underline; }
+  /* SANDBOX EXPERIMENT: the music/movies chart lines — same muted,
+     centered treatment as .news-line, with a small inline play button for
+     the #1 song/trailer preview clip and an "expand to top 5" toggle. */
+  .music-line, .movie-line { text-align: center; font-size: 0.95rem; color: var(--ink-soft); padding: 2px 8px; margin: 0; text-wrap: balance; }
+  .music-link, .movie-link { color: var(--accent); text-decoration: underline; }
+  .chart-play-btn { background: none; border: none; color: inherit; opacity: 0.7; cursor: pointer; padding: 0 2px; line-height: 1; font-size: 0.92rem; vertical-align: middle; }
+  .chart-play-btn:hover { opacity: 1; }
+  .chart-play-btn:disabled { opacity: 0.3; cursor: default; }
+  .chart-expand-btn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; font-size: 0.85rem; }
+  .chart-list { max-width: 420px; margin: 4px auto 0; padding: 0; list-style: none; text-align: left; }
+  .chart-list li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 0.88rem; color: var(--ink-soft); }
+  .chart-list .chart-rank { font-weight: 700; color: var(--ink); width: 1.2em; flex: none; text-align: right; }
+  .chart-list .chart-title { color: var(--ink); }
   [hidden] { display: none !important; }
 </style>
 <link rel="manifest" id="manifestLink" href="/manifest.json">
@@ -820,6 +833,16 @@ const RAW = String.raw`<!doctype html>
   // location. See currentPartnerNews() — always the OTHER person's story,
   // same "peek into their world" idea as the weather badge.
   var newsByPerson = { mark: null, nikita: null };
+  // SANDBOX EXPERIMENT: top songs/movies chart (country-level — see
+  // music.ts/movies.ts) near each person, as last fetched from
+  // /api/music and /api/movies — same "peek into their world" idea as the
+  // weather badge and news line, and same null-until-loaded shape. Each
+  // fetch already returns the full top 5, so expanding the list is just a
+  // UI toggle (musicExpanded/moviesExpanded below), no extra round trip.
+  var musicByPerson = { mark: null, nikita: null };
+  var moviesByPerson = { mark: null, nikita: null };
+  var musicExpanded = false;
+  var moviesExpanded = false;
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -1243,6 +1266,25 @@ const RAW = String.raw`<!doctype html>
   function personHasVoice(key) {
     var p = state.people && state.people[key];
     return !!(p && p.hasVoice);
+  }
+  // SANDBOX EXPERIMENT: plays a 30s song preview or a movie trailer clip
+  // from the music/movies chart (see chartPlayButton below) — a single
+  // shared <audio> element so starting one preview stops whichever one
+  // was already playing, the same one-at-a-time rule as activeCloneAudio.
+  var activeChartAudio = null;
+  function playChartPreview(url) {
+    if (!url) return;
+    try { if (activeChartAudio) activeChartAudio.pause(); } catch (e) {}
+    var audio = new Audio(url);
+    activeChartAudio = audio;
+    audio.play().catch(function () {});
+  }
+  function chartPlayButton(previewUrl, label) {
+    if (!previewUrl) return null;
+    var btn = h("button", { class: "chart-play-btn", type: "button", "aria-label": label || "Play preview" });
+    btn.textContent = "▶️";
+    btn.addEventListener("click", function () { playChartPreview(previewUrl); });
+    return btn;
   }
   var activeCloneAudio = null;
   // Plays "text" in authorKey's own cloned voice when they've recorded one
@@ -2328,6 +2370,12 @@ const RAW = String.raw`<!doctype html>
     // above the Today/Puzzle content.
     var newsBlock = newsLineBlock();
     if (newsBlock) app.appendChild(newsBlock);
+    // SANDBOX EXPERIMENT: top-songs/top-movies chart lines — same spot,
+    // same idea, as the news line above.
+    var musicBlock = musicLineBlock();
+    if (musicBlock) app.appendChild(musicBlock);
+    var moviesBlock = moviesLineBlock();
+    if (moviesBlock) app.appendChild(moviesBlock);
     app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     if (activeTab === "puzzle") {
       var flash = puzzleFlashBanner();
@@ -2396,6 +2444,8 @@ const RAW = String.raw`<!doctype html>
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
     loadNews();
+    loadMusic();
+    loadMovies();
   }
 
   // Toggles PREVIEWING your partner's weather/background (see
@@ -2451,6 +2501,100 @@ const RAW = String.raw`<!doctype html>
     );
     if (story.source) line.appendChild(document.createTextNode(" (" + story.source + ")"));
     return line;
+  }
+  // SANDBOX EXPERIMENT: same "other person's" rule as currentPartnerNews(),
+  // for the top-songs/top-movies charts.
+  function currentPartnerMusic() {
+    var key = effectiveViewKey();
+    if (!key) return null;
+    return musicByPerson[otherKeyOf(key)] || null;
+  }
+  function currentPartnerMovies() {
+    var key = effectiveViewKey();
+    if (!key) return null;
+    return moviesByPerson[otherKeyOf(key)] || null;
+  }
+  // Renders the ranked top-5 list for either chart — shared by
+  // musicLineBlock/moviesLineBlock's "Show top 5" expansion. labelFor
+  // formats each entry's line (song: "title — artist", movie: just title).
+  function chartExpandList(chart, labelFor) {
+    var list = h("ul", { class: "chart-list" });
+    for (var i = 0; i < chart.length; i++) {
+      var entry = chart[i];
+      var li = h("li");
+      li.appendChild(h("span", { class: "chart-rank", text: String(entry.rank) + "." }));
+      li.appendChild(h("span", { class: "chart-title", text: labelFor(entry) }));
+      if (entry.previewUrl) {
+        var btn = chartPlayButton(entry.previewUrl, "Play " + labelFor(entry));
+        if (btn) li.appendChild(btn);
+      }
+      list.appendChild(li);
+    }
+    return list;
+  }
+  // SANDBOX EXPERIMENT: collapsed line — "🎵 Popular near <name>: <title> —
+  // <artist>" with a play button for the #1 song's 30s preview, plus a
+  // "Show top 5"/"Show less" toggle that expands into the full chart (see
+  // chartExpandList). Same "peek into their world" idea as the weather
+  // badge and news line. Returns null when there's no chart data yet for
+  // the partner's location.
+  function musicLineBlock() {
+    var chart = currentPartnerMusic();
+    if (!chart || !chart.length) return null;
+    var shownKey = otherKeyOf(effectiveViewKey());
+    var shownName = personName(shownKey) + (personIsTraveling(shownKey) ? " (traveling)" : "");
+    var top = chart[0];
+    var wrap = h("div");
+    var line = h("p", { class: "music-line" });
+    line.appendChild(document.createTextNode("🎵 Popular near " + shownName + ": "));
+    line.appendChild(
+      h("a", { class: "music-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
+    );
+    var playBtn = chartPlayButton(top.previewUrl, "Play " + top.title);
+    if (playBtn) line.appendChild(document.createTextNode(" "));
+    if (playBtn) line.appendChild(playBtn);
+    wrap.appendChild(line);
+    if (chart.length > 1) {
+      var toggle = h("button", { class: "chart-expand-btn", type: "button", text: musicExpanded ? t("Show less") : t("Show top 5") });
+      toggle.addEventListener("click", function () { musicExpanded = !musicExpanded; renderApp(); });
+      var toggleRow = h("p", { style: "text-align:center;margin:2px 0 0;" });
+      toggleRow.appendChild(toggle);
+      wrap.appendChild(toggleRow);
+      if (musicExpanded) {
+        wrap.appendChild(chartExpandList(chart, function (e) { return e.title + (e.artist ? " — " + e.artist : ""); }));
+      }
+    }
+    return wrap;
+  }
+  // SANDBOX EXPERIMENT: same idea as musicLineBlock(), for the top-movies
+  // chart.
+  function moviesLineBlock() {
+    var chart = currentPartnerMovies();
+    if (!chart || !chart.length) return null;
+    var shownKey = otherKeyOf(effectiveViewKey());
+    var shownName = personName(shownKey) + (personIsTraveling(shownKey) ? " (traveling)" : "");
+    var top = chart[0];
+    var wrap = h("div");
+    var line = h("p", { class: "movie-line" });
+    line.appendChild(document.createTextNode("🎬 Popular near " + shownName + ": "));
+    line.appendChild(
+      h("a", { class: "movie-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title })
+    );
+    var playBtn = chartPlayButton(top.previewUrl, "Play trailer for " + top.title);
+    if (playBtn) line.appendChild(document.createTextNode(" "));
+    if (playBtn) line.appendChild(playBtn);
+    wrap.appendChild(line);
+    if (chart.length > 1) {
+      var toggle = h("button", { class: "chart-expand-btn", type: "button", text: moviesExpanded ? t("Show less") : t("Show top 5") });
+      toggle.addEventListener("click", function () { moviesExpanded = !moviesExpanded; renderApp(); });
+      var toggleRow = h("p", { style: "text-align:center;margin:2px 0 0;" });
+      toggleRow.appendChild(toggle);
+      wrap.appendChild(toggleRow);
+      if (moviesExpanded) {
+        wrap.appendChild(chartExpandList(chart, function (e) { return e.title; }));
+      }
+    }
+    return wrap;
   }
   // SANDBOX EXPERIMENT: the weather badge (#weather-widget) — built inline
   // as part of renderApp() now (per feedback: moved out of its old fixed
@@ -3450,6 +3594,8 @@ const RAW = String.raw`<!doctype html>
     syncAppBadge();
     loadWeather();
     loadNews();
+    loadMusic();
+    loadMovies();
     // Pre-fetch the VAPID key and pre-register the service worker now,
     // neither of which needs a user gesture, so a later tap on "Enable
     // reminders" has the shortest possible path to the permission-gated
@@ -3495,8 +3641,33 @@ const RAW = String.raw`<!doctype html>
     }
     renderApp();
   }
+  // SANDBOX EXPERIMENT: same shape again, for the top-songs/top-movies
+  // charts — server caches each for 6 hours (see music.ts/movies.ts), so
+  // polling this often costs nothing extra either.
+  async function loadMusic() {
+    if (!viewerKey) return;
+    try {
+      var res = await fetch(RP + "/api/music");
+      var data = await res.json();
+      musicByPerson = (data && data.music) || { mark: null, nikita: null };
+    } catch (e) {
+      return;
+    }
+    renderApp();
+  }
+  async function loadMovies() {
+    if (!viewerKey) return;
+    try {
+      var res = await fetch(RP + "/api/movies");
+      var data = await res.json();
+      moviesByPerson = (data && data.movies) || { mark: null, nikita: null };
+    } catch (e) {
+      return;
+    }
+    renderApp();
+  }
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") { loadWeather(); loadNews(); }
+    if (document.visibilityState === "visible") { loadWeather(); loadNews(); loadMusic(); loadMovies(); }
   });
   function applyWeatherSky() {
     var el = document.getElementById("weather-sky");

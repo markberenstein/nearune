@@ -76,3 +76,14 @@ export async function resolveLocationInfo(location: string): Promise<{ tz: strin
   const language = (countryCode && COUNTRY_TO_LANGUAGE[countryCode]) || null;
   return { tz: tz || null, language };
 }
+
+// Lower-case ISO country code (e.g. "us", "in") for a free-text location —
+// used by music.ts/movies.ts to pick a storefront/chart region. Apple's
+// marketing charts and Billboard alike only publish country-level (or
+// national) charts, not city-level ones, so this is the finest granularity
+// a "what's popular near them" feature can actually use.
+export async function resolveCountryCode(location: string): Promise<string | null> {
+  const first = await geocode(location);
+  const code = first && typeof first.country_code === "string" ? first.country_code.toLowerCase() : "";
+  return code || null;
+}

@@ -24,6 +24,8 @@ import { aiGuessMatches } from "./ai";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
+import { topSongs } from "./music";
+import { topMovies } from "./movies";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
@@ -403,6 +405,32 @@ Bun.serve({
         topLocalStory(effectiveLocation(state.people?.nikita, today)),
       ]);
       return json({ news: { mark: markNews, nikita: nikitaNews } });
+    }
+
+    // Top songs chart (see music.ts) at each person's effective location —
+    // same shape/caching approach as /api/weather and /api/news above, no
+    // API key required. Country-level, not city-level (see music.ts for
+    // why) — `limit` lets the client ask for the full top-5 at once rather
+    // than needing a second round trip when someone expands the list.
+    if (req.method === "GET" && restPath === "/api/music") {
+      const state = await loadState(roomId);
+      const today = todayKeyPT();
+      const [markMusic, nikitaMusic] = await Promise.all([
+        topSongs(effectiveLocation(state.people?.mark, today), 5),
+        topSongs(effectiveLocation(state.people?.nikita, today), 5),
+      ]);
+      return json({ music: { mark: markMusic, nikita: nikitaMusic } });
+    }
+
+    // Top movies chart (see movies.ts) — same shape as /api/music above.
+    if (req.method === "GET" && restPath === "/api/movies") {
+      const state = await loadState(roomId);
+      const today = todayKeyPT();
+      const [markMovies, nikitaMovies] = await Promise.all([
+        topMovies(effectiveLocation(state.people?.mark, today), 5),
+        topMovies(effectiveLocation(state.people?.nikita, today), 5),
+      ]);
+      return json({ movies: { mark: markMovies, nikita: nikitaMovies } });
     }
 
     // Sets or clears a traveling override of where THIS person is shown as

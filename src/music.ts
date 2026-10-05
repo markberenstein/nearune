@@ -1,9 +1,16 @@
 // Nearune — top songs chart at a free-text location, via Apple's public
 // "most played" marketing feed (no API key required — same no-auth
 // approach as localnews.ts's Google News RSS and weather.ts's Open-Meteo
-// calls), plus a 30-second preview clip for every song from the public
-// iTunes Search API (one lookup per song, run in parallel — movies.ts gets
-// these for free from its own feed, but the marketing feed used here
+// calls) for the chart listing itself (title/artist/rank/artwork — just
+// metadata, no account needed to read it), plus a 30-second preview clip
+// for every song from Deezer's public search API instead of Apple's. Apple
+// previews are plain files too, but Deezer's search needs no API key NOR
+// any Apple ID/Apple Music association on the listener's end — one person
+// on this app hit real trouble getting Apple's preview/trailer links to
+// play without Apple Music configured on their phone, so previews now come
+// from a source that works the same for everyone regardless of what
+// they're signed into. One lookup per song, run in parallel (movies.ts
+// gets previews for free from its own feed; this chart's metadata feed
 // doesn't include them, so each song needs its own lookup so every entry
 // in the expanded top-5 list — not just the collapsed #1 — gets a play
 // button). Billboard doesn't publish city-level charts — its charts are
@@ -32,13 +39,22 @@ const CHART_TTL = 6 * 60 * 60 * 1000; // 6 hours — a top-songs chart doesn't m
 // whole 6-hour window once Apple recovers.
 const FAILURE_TTL = 2 * 60 * 1000; // 2 minutes
 
-async function fetchPreviewUrl(appleId: string): Promise<string | null> {
+// Deezer's search API is public, keyless, and returns a direct, DRM-free
+// 30s mp3 — no Apple ID, Apple Music subscription, or region-matched
+// Apple account required to play it, unlike some of Apple's own
+// preview/trailer links. A plain-text "title artist" query (no field
+// quoting — that returned zero results in testing) works better than a
+// structured query for matching Apple's chart titles against Deezer's
+// catalog.
+async function fetchPreviewUrl(title: string, artist: string): Promise<string | null> {
+  if (!title) return null;
   try {
-    const res = await fetch("https://itunes.apple.com/lookup?id=" + encodeURIComponent(appleId));
+    const q = [title, artist].filter(Boolean).join(" ");
+    const res = await fetch("https://api.deezer.com/search?q=" + encodeURIComponent(q) + "&limit=1");
     if (!res.ok) return null;
     const data: any = await res.json();
-    const first = data && Array.isArray(data.results) && data.results[0];
-    return (first && typeof first.previewUrl === "string" && first.previewUrl) || null;
+    const first = data && Array.isArray(data.data) && data.data[0];
+    return (first && typeof first.preview === "string" && first.preview) || null;
   } catch {
     return null;
   }
@@ -66,7 +82,7 @@ export async function topSongs(location: string, limit = 5): Promise<MusicChart>
       const results: any[] = (data && data.feed && Array.isArray(data.feed.results) && data.feed.results) || [];
       const top = results.slice(0, limit);
       if (top.length) {
-        const previewUrls = await Promise.all(top.map((r) => (r && r.id ? fetchPreviewUrl(r.id) : Promise.resolve(null))));
+        const previewUrls = await Promise.all(top.map((r) => (r ? fetchPreviewUrl(r.name || "", r.artistName || "") : Promise.resolve(null))));
         value = top.map((r, i) => ({
           rank: i + 1,
           title: r.name || "",

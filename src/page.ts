@@ -381,13 +381,6 @@ const RAW = String.raw`<!doctype html>
   .chart-list li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 0.88rem; color: var(--ink-soft); }
   .chart-list .chart-rank { font-weight: 700; color: var(--ink); width: 1.2em; flex: none; text-align: right; }
   .chart-list .chart-title { color: var(--ink); }
-  /* SANDBOX EXPERIMENT: the movie-trailer overlay (see openChartVideo) —
-     a simple centered lightbox; tapping the dimmed backdrop or the close
-     button dismisses it, same as tapping outside any other modal. */
-  .chart-video-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .chart-video-box { position: relative; width: 100%; max-width: 420px; }
-  .chart-video { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; display: block; }
-  .chart-video-close { position: absolute; top: -36px; right: 0; background: none; border: none; color: #fff; font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 4px 8px; }
   /* SANDBOX EXPERIMENT: the expanded "share a recent photo" image — sits
      inline below the voice-card's collapsed line, same expand-in-place
      spot as the chart-list above, capped so a tall portrait photo never
@@ -1316,7 +1309,6 @@ const RAW = String.raw`<!doctype html>
   function playChartPreview(url) {
     if (!url) return;
     stopChartAudio();
-    closeChartVideo();
     var audio = new Audio(url);
     activeChartAudio = audio;
     activeChartUrl = url;
@@ -1335,17 +1327,23 @@ const RAW = String.raw`<!doctype html>
     audio.play().catch(onStop);
     renderApp(); // optimistic — flips this button to the stop icon right away, not on the next poll
   }
-  // kind "video" opens the trailer in a small overlay player instead of
-  // playing audio-only — a movie trailer is the point, so you should
-  // actually see it (see openChartVideo below). Plain song previews stay
-  // audio-only, toggled by tapping the same button again.
+  // kind "video" (movie trailers) opens a plain YouTube-search link in a
+  // new tab instead of playing anything inline — movies.ts's previewUrl
+  // used to be Apple's own trailer stream, played in an in-app <video>, but
+  // that stream can be region-gated behind an Apple ID/Apple Music
+  // association and one person on this app hit real trouble with it (the
+  // app itself crashed trying to play it). A plain link needs no account
+  // and can't crash the app the way an in-app native video player can.
+  // Song previews (kind "audio") stay inline, toggled by tapping the same
+  // button again — those come from Deezer now (see music.ts), a plain mp3
+  // with no such gating.
   function chartPlayButton(previewUrl, label, kind) {
     if (!previewUrl) return null;
     var btn = h("button", { class: "chart-play-btn", type: "button" });
     if (kind === "video") {
       btn.textContent = "▶️";
-      btn.setAttribute("aria-label", label || "Play preview");
-      btn.addEventListener("click", function () { openChartVideo(previewUrl); });
+      btn.setAttribute("aria-label", label || "Watch trailer");
+      btn.addEventListener("click", function () { window.open(previewUrl, "_blank", "noopener"); });
       return btn;
     }
     var isPlaying = activeChartUrl === previewUrl && activeChartAudio && !activeChartAudio.paused;
@@ -1359,35 +1357,6 @@ const RAW = String.raw`<!doctype html>
       playChartPreview(previewUrl);
     });
     return btn;
-  }
-  // SANDBOX EXPERIMENT: a small full-screen-ish overlay with a real <video>
-  // element for a movie trailer preview — tapping the ✕, tapping outside
-  // the video, or letting it finish all close it; opening a new one (or
-  // starting a song preview) closes/stops whatever was playing before.
-  function closeChartVideo() {
-    var overlay = document.getElementById("chart-video-overlay");
-    if (overlay) overlay.remove();
-  }
-  function openChartVideo(url) {
-    if (!url) return;
-    closeChartVideo();
-    stopChartAudio();
-    var overlay = h("div", { id: "chart-video-overlay", class: "chart-video-overlay" });
-    var box = h("div", { class: "chart-video-box" });
-    var closeBtn = h("button", { class: "chart-video-close", type: "button", "aria-label": "Close preview", text: "✕" });
-    closeBtn.addEventListener("click", closeChartVideo);
-    var video = document.createElement("video");
-    video.className = "chart-video";
-    video.src = url;
-    video.controls = true;
-    video.autoplay = true;
-    video.playsInline = true;
-    video.addEventListener("ended", closeChartVideo);
-    box.appendChild(closeBtn);
-    box.appendChild(video);
-    overlay.appendChild(box);
-    overlay.addEventListener("click", function (e) { if (e.target === overlay) closeChartVideo(); });
-    document.body.appendChild(overlay);
   }
   var activeCloneAudio = null;
   // Plays "text" in authorKey's own cloned voice when they've recorded one
@@ -2638,7 +2607,7 @@ const RAW = String.raw`<!doctype html>
       li.appendChild(h("span", { class: "chart-rank", text: String(entry.rank) + "." }));
       li.appendChild(h("span", { class: "chart-title", text: labelFor(entry) }));
       if (entry.previewUrl) {
-        var btn = chartPlayButton(entry.previewUrl, "Play " + labelFor(entry), kind);
+        var btn = chartPlayButton(entry.previewUrl, (kind === "video" ? "Watch " : "Play ") + labelFor(entry), kind);
         if (btn) li.appendChild(btn);
       }
       list.appendChild(li);
@@ -2693,7 +2662,7 @@ const RAW = String.raw`<!doctype html>
     line.appendChild(
       h("a", { class: "movie-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title })
     );
-    var playBtn = chartPlayButton(top.previewUrl, "Play trailer for " + top.title, "video");
+    var playBtn = chartPlayButton(top.previewUrl, "Watch trailer for " + top.title, "video");
     if (playBtn) line.appendChild(document.createTextNode(" "));
     if (playBtn) line.appendChild(playBtn);
     wrap.appendChild(line);

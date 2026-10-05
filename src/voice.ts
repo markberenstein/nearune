@@ -33,7 +33,13 @@ export async function cloneVoice(sampleBytes: Uint8Array, mimeType: string, labe
       try {
         const d: any = await res.json();
         if (d && d.detail && d.detail.message) msg = d.detail.message;
-      } catch {}
+        // Logged server-side (not sent to the client) so a failure like a
+        // plan voice-slot limit or a rejected sample format shows up in
+        // Railway's logs instead of just a bare 502 with no context.
+        console.log("[voice] clone failed for " + label + " -> HTTP " + res.status + ": " + JSON.stringify(d));
+      } catch {
+        console.log("[voice] clone failed for " + label + " -> HTTP " + res.status + " (no JSON body)");
+      }
       return { ok: false, error: msg };
     }
     const data: any = await res.json();

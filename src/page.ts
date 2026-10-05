@@ -113,8 +113,9 @@ const RAW = String.raw`<!doctype html>
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
   .weather-widget-trend-label { margin-top: 10px; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
-  .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 44px; margin-top: 6px; }
+  .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 58px; margin-top: 6px; }
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .trend-bar-temp { font-size: 0.62rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
   .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
   /* Sits beside the weather tile, so left-aligned rather than the old
@@ -2782,12 +2783,18 @@ const RAW = String.raw`<!doctype html>
         var span = Math.max(1, hi - lo);
         var bars = w.recentHours.map(function (p) {
           var pct = Math.round(((p.temp - lo) / span) * 100);
+          // The temperature used to only show as a tap-and-hold tooltip
+          // (title attribute), which doesn't work on a phone tap — so the
+          // chart looked like bare bars with no visible numbers. Now the
+          // actual reading sits above each bar, same way a native weather
+          // app's hourly strip does.
           return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.temp + "°" + w.unit }, [
+            h("div", { class: "trend-bar-temp", text: p.temp + "°" }),
             h("div", { class: "trend-bar-fill", style: "height:" + Math.max(pct, 8) + "%" }),
             h("div", { class: "trend-bar-hour", text: p.hour.replace(/\s?[AP]M/i, "") }),
           ]);
         });
-        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Last 6 hours (" + shownName + "'s local time)" }));
+        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Temperature, last 6 hours (" + shownName + "'s local time, °" + w.unit + ")" }));
         detailKids.push(h("div", { class: "trend-bars" }, bars));
       }
       wrap.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));

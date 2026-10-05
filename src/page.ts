@@ -376,6 +376,13 @@ const RAW = String.raw`<!doctype html>
   .chart-list li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 0.88rem; color: var(--ink-soft); }
   .chart-list .chart-rank { font-weight: 700; color: var(--ink); width: 1.2em; flex: none; text-align: right; }
   .chart-list .chart-title { color: var(--ink); }
+  /* SANDBOX EXPERIMENT: the movie-trailer overlay (see openChartVideo) —
+     a simple centered lightbox; tapping the dimmed backdrop or the close
+     button dismisses it, same as tapping outside any other modal. */
+  .chart-video-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .chart-video-box { position: relative; width: 100%; max-width: 420px; }
+  .chart-video { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; display: block; }
+  .chart-video-close { position: absolute; top: -36px; right: 0; background: none; border: none; color: #fff; font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 4px 8px; }
   [hidden] { display: none !important; }
 </style>
 <link rel="manifest" id="manifestLink" href="/manifest.json">
@@ -1267,24 +1274,93 @@ const RAW = String.raw`<!doctype html>
     var p = state.people && state.people[key];
     return !!(p && p.hasVoice);
   }
-  // SANDBOX EXPERIMENT: plays a 30s song preview or a movie trailer clip
-  // from the music/movies chart (see chartPlayButton below) — a single
-  // shared <audio> element so starting one preview stops whichever one
-  // was already playing, the same one-at-a-time rule as activeCloneAudio.
+  // SANDBOX EXPERIMENT: plays a 30s song preview from the music chart (see
+  // chartPlayButton below) — a single shared <audio> element so starting
+  // one preview stops whichever one was already playing, the same
+  // one-at-a-time rule as activeCloneAudio. activeChartBtn is the button
+  // that started it, so the button's own icon can flip back to "play" the
+  // moment playback actually stops, however it stopped (tapped again,
+  // another preview started, a video opened, or the clip just finished) —
+  // that's the "easy to stop" part: the same tap that started it stops it.
   var activeChartAudio = null;
-  function playChartPreview(url) {
+  var activeChartBtn = null;
+  function resetChartBtn(btn) {
+    btn.textContent = "▶️";
+    btn.setAttribute("aria-label", "Play preview");
+  }
+  function stopChartAudio() {
+    if (activeChartAudio) { try { activeChartAudio.pause(); } catch (e) {} }
+  }
+  function playChartPreview(url, btn) {
     if (!url) return;
-    try { if (activeChartAudio) activeChartAudio.pause(); } catch (e) {}
+    stopChartAudio();
+    closeChartVideo();
+    if (activeChartBtn) resetChartBtn(activeChartBtn);
     var audio = new Audio(url);
     activeChartAudio = audio;
-    audio.play().catch(function () {});
+    activeChartBtn = btn;
+    if (btn) { btn.textContent = "⏸️"; btn.setAttribute("aria-label", "Stop preview"); }
+    function onStop() {
+      // Guards against a stale event from an audio/button pair that's
+      // already been superseded by a newer tap (see playChartPreview's own
+      // stopChartAudio() call above) — without this, that older element's
+      // delayed "pause" could reset the WRONG (newer) button's icon.
+      if (activeChartAudio === audio) activeChartAudio = null;
+      if (btn && activeChartBtn === btn) { resetChartBtn(btn); activeChartBtn = null; }
+    }
+    audio.addEventListener("ended", onStop);
+    audio.addEventListener("pause", onStop);
+    audio.play().catch(onStop);
   }
-  function chartPlayButton(previewUrl, label) {
+  // kind "video" opens the trailer in a small overlay player instead of
+  // playing audio-only — a movie trailer is the point, so you should
+  // actually see it (see openChartVideo below). Plain song previews stay
+  // audio-only, toggled by tapping the same button again.
+  function chartPlayButton(previewUrl, label, kind) {
     if (!previewUrl) return null;
     var btn = h("button", { class: "chart-play-btn", type: "button", "aria-label": label || "Play preview" });
     btn.textContent = "▶️";
-    btn.addEventListener("click", function () { playChartPreview(previewUrl); });
+    if (kind === "video") {
+      btn.addEventListener("click", function () { openChartVideo(previewUrl); });
+      return btn;
+    }
+    btn.addEventListener("click", function () {
+      if (activeChartBtn === btn && activeChartAudio && !activeChartAudio.paused) {
+        activeChartAudio.pause();
+        return;
+      }
+      playChartPreview(previewUrl, btn);
+    });
     return btn;
+  }
+  // SANDBOX EXPERIMENT: a small full-screen-ish overlay with a real <video>
+  // element for a movie trailer preview — tapping the ✕, tapping outside
+  // the video, or letting it finish all close it; opening a new one (or
+  // starting a song preview) closes/stops whatever was playing before.
+  function closeChartVideo() {
+    var overlay = document.getElementById("chart-video-overlay");
+    if (overlay) overlay.remove();
+  }
+  function openChartVideo(url) {
+    if (!url) return;
+    closeChartVideo();
+    stopChartAudio();
+    var overlay = h("div", { id: "chart-video-overlay", class: "chart-video-overlay" });
+    var box = h("div", { class: "chart-video-box" });
+    var closeBtn = h("button", { class: "chart-video-close", type: "button", "aria-label": "Close preview", text: "✕" });
+    closeBtn.addEventListener("click", closeChartVideo);
+    var video = document.createElement("video");
+    video.className = "chart-video";
+    video.src = url;
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.addEventListener("ended", closeChartVideo);
+    box.appendChild(closeBtn);
+    box.appendChild(video);
+    overlay.appendChild(box);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) closeChartVideo(); });
+    document.body.appendChild(overlay);
   }
   var activeCloneAudio = null;
   // Plays "text" in authorKey's own cloned voice when they've recorded one
@@ -2519,7 +2595,7 @@ const RAW = String.raw`<!doctype html>
   // Renders the ranked top-5 list for either chart — shared by
   // musicLineBlock/moviesLineBlock's "Show top 5" expansion. labelFor
   // formats each entry's line (song: "title — artist", movie: just title).
-  function chartExpandList(chart, labelFor) {
+  function chartExpandList(chart, labelFor, kind) {
     var list = h("ul", { class: "chart-list" });
     for (var i = 0; i < chart.length; i++) {
       var entry = chart[i];
@@ -2527,7 +2603,7 @@ const RAW = String.raw`<!doctype html>
       li.appendChild(h("span", { class: "chart-rank", text: String(entry.rank) + "." }));
       li.appendChild(h("span", { class: "chart-title", text: labelFor(entry) }));
       if (entry.previewUrl) {
-        var btn = chartPlayButton(entry.previewUrl, "Play " + labelFor(entry));
+        var btn = chartPlayButton(entry.previewUrl, "Play " + labelFor(entry), kind);
         if (btn) li.appendChild(btn);
       }
       list.appendChild(li);
@@ -2552,7 +2628,7 @@ const RAW = String.raw`<!doctype html>
     line.appendChild(
       h("a", { class: "music-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
     );
-    var playBtn = chartPlayButton(top.previewUrl, "Play " + top.title);
+    var playBtn = chartPlayButton(top.previewUrl, "Play " + top.title, "audio");
     if (playBtn) line.appendChild(document.createTextNode(" "));
     if (playBtn) line.appendChild(playBtn);
     wrap.appendChild(line);
@@ -2563,7 +2639,7 @@ const RAW = String.raw`<!doctype html>
       toggleRow.appendChild(toggle);
       wrap.appendChild(toggleRow);
       if (musicExpanded) {
-        wrap.appendChild(chartExpandList(chart, function (e) { return e.title + (e.artist ? " — " + e.artist : ""); }));
+        wrap.appendChild(chartExpandList(chart, function (e) { return e.title + (e.artist ? " — " + e.artist : ""); }, "audio"));
       }
     }
     return wrap;
@@ -2582,7 +2658,7 @@ const RAW = String.raw`<!doctype html>
     line.appendChild(
       h("a", { class: "movie-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title })
     );
-    var playBtn = chartPlayButton(top.previewUrl, "Play trailer for " + top.title);
+    var playBtn = chartPlayButton(top.previewUrl, "Play trailer for " + top.title, "video");
     if (playBtn) line.appendChild(document.createTextNode(" "));
     if (playBtn) line.appendChild(playBtn);
     wrap.appendChild(line);
@@ -2593,7 +2669,7 @@ const RAW = String.raw`<!doctype html>
       toggleRow.appendChild(toggle);
       wrap.appendChild(toggleRow);
       if (moviesExpanded) {
-        wrap.appendChild(chartExpandList(chart, function (e) { return e.title; }));
+        wrap.appendChild(chartExpandList(chart, function (e) { return e.title; }, "video"));
       }
     }
     return wrap;

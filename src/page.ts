@@ -1321,7 +1321,7 @@ const RAW = String.raw`<!doctype html>
     }, [document.createTextNode("🔊")]);
   }
 
-  function translateBlock(text, target, alt, authorKey) {
+  function translateBlock(text, target, alt, authorKey, showVoice) {
     if (!text || !target || target === alt) return h("div", { class: "translate-inline", hidden: "true" });
     var key = target + "|" + (alt || "") + "::" + text;
     scheduleTranslate(text, target, alt);
@@ -1337,12 +1337,19 @@ const RAW = String.raw`<!doctype html>
       // isn't just comprehension, it's actually hearing your partner's
       // language — then an optional button to hear the translation spoken
       // back in the reader's own language. Both go through authorKey's own
-      // cloned voice when they have one recorded.
-      var origBtn = speakButton(text, alt, t("Hear in original language"), authorKey);
-      if (origBtn) row.appendChild(origBtn);
+      // cloned voice when they have one recorded. showVoice defaults to true
+      // (every existing caller keeps its speaker buttons); the puzzle page
+      // passes false to drop them there specifically, since the puzzle's
+      // question/guess/answer text doesn't need a voice option.
+      if (showVoice !== false) {
+        var origBtn = speakButton(text, alt, t("Hear in original language"), authorKey);
+        if (origBtn) row.appendChild(origBtn);
+      }
       row.appendChild(h("span", { text: val }));
-      var ownBtn = speakButton(val, target, t("Hear in your language"), authorKey);
-      if (ownBtn) row.appendChild(ownBtn);
+      if (showVoice !== false) {
+        var ownBtn = speakButton(val, target, t("Hear in your language"), authorKey);
+        if (ownBtn) row.appendChild(ownBtn);
+      }
       wrap.appendChild(row);
     }
     return wrap;
@@ -1805,13 +1812,13 @@ const RAW = String.raw`<!doctype html>
         : tTemplate("Today's guess: “{guess}” — not quite. Try again tomorrow.", { guess: state.puzzleLastGuessText });
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
       if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
-        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy));
+        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy, false));
       }
       return wrap;
     }
     if (state.puzzleQuestion && state.puzzleSetBy) {
       wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
-      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
+      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, false));
     }
     var input = document.createElement("input");
     input.type = "text"; input.maxLength = 120;
@@ -1861,7 +1868,7 @@ const RAW = String.raw`<!doctype html>
       if (state.puzzleSolved) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
-          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
+          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, false));
         }
         var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? t("Next picture →") : t("Finish batch") });
         nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });

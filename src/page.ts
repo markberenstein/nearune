@@ -388,6 +388,11 @@ const RAW = String.raw`<!doctype html>
   .chart-video-box { position: relative; width: 100%; max-width: 420px; }
   .chart-video { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; display: block; }
   .chart-video-close { position: absolute; top: -36px; right: 0; background: none; border: none; color: #fff; font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 4px 8px; }
+  /* SANDBOX EXPERIMENT: the expanded "share a recent photo" image — sits
+     inline below the voice-card's collapsed line, same expand-in-place
+     spot as the chart-list above, capped so a tall portrait photo never
+     dominates the page. */
+  .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
   [hidden] { display: none !important; }
 </style>
 <link rel="manifest" id="manifestLink" href="/manifest.json">
@@ -855,6 +860,13 @@ const RAW = String.raw`<!doctype html>
   var moviesByPerson = { mark: null, nikita: null };
   var musicExpanded = false;
   var moviesExpanded = false;
+  // SANDBOX EXPERIMENT: "share a recent photo" — person.photoAt (see
+  // types.ts) says whether/when a photo is on file; photoExpanded is purely
+  // local UI state, same inline-expand pattern as weatherExpanded/
+  // musicExpanded/moviesExpanded above (tap to reveal the full photo below
+  // the collapsed line, tap again to collapse — not a separate overlay).
+  var photoExpanded = false;
+  var photoUploadState = { uploading: false, error: "" };
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -2468,6 +2480,8 @@ const RAW = String.raw`<!doctype html>
       if (musicBlock) app.appendChild(musicBlock);
       var moviesBlock = moviesLineBlock();
       if (moviesBlock) app.appendChild(moviesBlock);
+      var photoBlock = photoCardBlock();
+      if (photoBlock) app.appendChild(photoBlock);
     }
     app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
     if (activeTab === "puzzle") {
@@ -2550,6 +2564,7 @@ const RAW = String.raw`<!doctype html>
     weatherExpanded = false;
     musicExpanded = false;
     moviesExpanded = false;
+    photoExpanded = false;
     applyWeatherSky();
     renderApp();
   }
@@ -3058,6 +3073,130 @@ const RAW = String.raw`<!doctype html>
     }
     if (voiceRecordState.uploading) {
       wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Uploading your voice sample…") }));
+    }
+    return wrap;
+  }
+
+  // SANDBOX EXPERIMENT: "share a recent photo" — resize-client-side then
+  // POST as base64, same approach as uploadVoiceSample above (and
+  // puzzleBatch's image handling). suppressPollUntil guards the upload the
+  // same way: the background poll() could otherwise round-trip mid-upload
+  // and overwrite the freshly-saved photoAt with pre-upload state.
+  function uploadPhoto(key, file) {
+    photoUploadState.error = "";
+    readAndCompressImage(file, 1600, 0.85, function (dataUrl) {
+      photoUploadState.uploading = true;
+      renderApp();
+      suppressPollUntil = Date.now() + 15000;
+      fetch(RP + "/api/photo-upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ who: key, dataUrl: dataUrl }),
+      })
+        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+        .then(function (result) {
+          photoUploadState.uploading = false;
+          if (!result.ok || result.body.error) {
+            photoUploadState.error = t("Couldn't share that photo — try again.");
+            suppressPollUntil = 0;
+            renderApp();
+            return;
+          }
+          state = result.body;
+          online = true;
+          suppressPollUntil = Date.now() + 3000;
+          renderApp();
+        })
+        .catch(function () {
+          photoUploadState.uploading = false;
+          photoUploadState.error = t("Upload failed — check your connection and try again.");
+          suppressPollUntil = 0;
+          renderApp();
+        });
+    });
+  }
+  function deletePhoto(key) {
+    suppressPollUntil = Date.now() + 8000;
+    fetch(RP + "/api/photo-delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ who: key }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (body) {
+        state = body;
+        online = true;
+        photoExpanded = false;
+        suppressPollUntil = Date.now() + 3000;
+        renderApp();
+      })
+      .catch(function () { suppressPollUntil = 0; });
+  }
+  // Sits under the movies line on the Today tab (per feedback) — same
+  // "peek into their world" + "share something of your own" pairing as the
+  // weather/music/movies widgets and the voice-recorder card: your
+  // partner's most recent shared photo collapses behind a "Show photo"
+  // toggle (same inline-expand pattern as the chart lists above — tap to
+  // reveal it below, tap again to collapse), and your own share/replace
+  // control sits underneath it, always visible.
+  function photoCardBlock() {
+    if (!viewerKey) return null;
+    var key = viewerKey;
+    var otherKey = otherKeyOf(key);
+    var partnerName = personName(otherKey);
+    var myPhotoAt = state.people && state.people[key] && state.people[key].photoAt;
+    var partnerPhotoAt = state.people && state.people[otherKey] && state.people[otherKey].photoAt;
+    var wrap = h("div", { class: "voice-card" });
+    wrap.appendChild(h("div", { class: "voice-card-title", text: "📷 " + tTemplate("Photos with {name}", { name: partnerName }) }));
+    if (partnerPhotoAt) {
+      var line = h("p", { class: "voice-card-desc" });
+      line.appendChild(document.createTextNode(tTemplate("{name} shared a photo. ", { name: partnerName })));
+      var toggle = h("button", { class: "chart-expand-btn", type: "button", text: photoExpanded ? t("Hide photo") : t("Show photo") });
+      toggle.addEventListener("click", function () { photoExpanded = !photoExpanded; renderApp(); });
+      line.appendChild(toggle);
+      wrap.appendChild(line);
+      if (photoExpanded) {
+        wrap.appendChild(h("img", {
+          class: "shared-photo",
+          src: RP + "/api/photo?who=" + otherKey + "&v=" + encodeURIComponent(partnerPhotoAt),
+          alt: partnerName + "'s shared photo",
+        }));
+      }
+    } else {
+      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo yet.", { name: partnerName }) }));
+    }
+    if (photoUploadState.error) {
+      wrap.appendChild(h("p", { class: "voice-card-error", text: photoUploadState.error }));
+    }
+    var fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+    fileInput.addEventListener("change", function () {
+      var file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file) return;
+      uploadPhoto(key, file);
+    });
+    var btnRow = h("div", { class: "voice-card-actions" });
+    var pickBtn = h("button", {
+      class: "mini-btn primary",
+      type: "button",
+      text: myPhotoAt ? t("Share a new photo") : t("Share a photo"),
+    });
+    pickBtn.disabled = photoUploadState.uploading;
+    pickBtn.addEventListener("click", function () { fileInput.click(); });
+    btnRow.appendChild(pickBtn);
+    if (myPhotoAt) {
+      var removeBtn = h("button", { class: "mini-btn ghost", type: "button", text: t("Remove mine") });
+      removeBtn.disabled = photoUploadState.uploading;
+      removeBtn.addEventListener("click", function () { deletePhoto(key); });
+      btnRow.appendChild(removeBtn);
+    }
+    btnRow.appendChild(fileInput);
+    wrap.appendChild(btnRow);
+    if (photoUploadState.uploading) {
+      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Sharing your photo…") }));
     }
     return wrap;
   }

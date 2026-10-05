@@ -29,6 +29,15 @@ export function puzzleImageKey(roomId: string, id: string): string {
 export function localPuzzlePath(roomId: string, id: string): string {
   return roomId ? `./local-puzzle-${roomId}-${id}.jpg` : `./local-puzzle-${id}.jpg`;
 }
+// The "share a recent photo" feature — one photo per person, overwritten on
+// each new share (not one-per-upload like puzzle images), so the key is
+// fixed per person rather than per-upload-id. See PersonProfile.photoAt.
+export function photoKey(roomId: string, who: PersonKey): string {
+  return roomId ? `rooms/${roomId}/photos/${who}.jpg` : `photos/${who}.jpg`;
+}
+export function localPhotoPath(roomId: string, who: PersonKey): string {
+  return roomId ? `./local-photo-${roomId}-${who}.jpg` : `./local-photo-${who}.jpg`;
+}
 
 export const useS3 = !!(Bun.env.S3_BUCKET && Bun.env.S3_ACCESS_KEY_ID);
 
@@ -146,6 +155,12 @@ export async function deleteRoom(roomId: string): Promise<void> {
     try {
       if (useS3 && s3) await s3.file(puzzleImageKey(roomId, state.puzzleCurrentId)).delete();
       else await Bun.file(localPuzzlePath(roomId, state.puzzleCurrentId)).delete();
+    } catch {}
+  }
+  for (const who of ["mark", "nikita"] as PersonKey[]) {
+    try {
+      if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
+      else await Bun.file(localPhotoPath(roomId, who)).delete();
     } catch {}
   }
   try {

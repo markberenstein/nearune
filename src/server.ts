@@ -10,6 +10,8 @@ import {
   deleteRoom,
   puzzleImageKey,
   localPuzzlePath,
+  photoKey,
+  localPhotoPath,
   useS3,
   s3,
   ensurePuzzleMigrated,
@@ -825,6 +827,83 @@ Bun.serve({
       });
       if (oldVoiceId) deleteVoice(oldVoiceId).catch(() => {});
       return json(forClient(state));
+    }
+
+    // SANDBOX EXPERIMENT: "share a recent photo" — one photo per person,
+    // overwritten each time (see storage.ts's photoKey/PersonProfile.photoAt),
+    // same resize-client-side-then-base64-POST approach as /api/voice-sample
+    // and /api/puzzle-batch above.
+    if (req.method === "POST" && restPath === "/api/photo-upload") {
+      if (!rateLimit("photo-upload:" + roomId, 30, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const dataUrl = body && body.dataUrl;
+      if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
+      const match = dataUrl.match(/^data:image\/jpeg;base64,(.+)$/);
+      if (!match) return json({ error: "invalid" }, { status: 400 });
+      let bytes: Uint8Array;
+      try {
+        bytes = Buffer.from(match[1], "base64");
+      } catch {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (bytes.length < 200) return json({ error: "invalid" }, { status: 400 });
+      if (bytes.length > 6 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      if (useS3 && s3) {
+        await s3.file(photoKey(roomId, who)).write(bytes, { type: "image/jpeg" });
+      } else {
+        await Bun.write(localPhotoPath(roomId, who), bytes);
+      }
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
+        s.people[who]!.photoAt = new Date().toISOString();
+      });
+      return json(forClient(state));
+    }
+
+    // Removes a shared photo without replacing it — same idea as
+    // /api/voice-sample-delete above.
+    if (req.method === "POST" && restPath === "/api/photo-delete") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who]) delete s.people[who]!.photoAt;
+      });
+      try {
+        if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
+        else await Bun.file(localPhotoPath(roomId, who)).delete();
+      } catch {}
+      return json(forClient(state));
+    }
+
+    if (req.method === "GET" && restPath === "/api/photo") {
+      const who = url.searchParams.get("who") || "";
+      if (!isPerson(who)) return new Response("Not found", { status: 404 });
+      try {
+        if (useS3 && s3) {
+          const file = s3.file(photoKey(roomId, who));
+          if (!(await file.exists())) return new Response("Not found", { status: 404 });
+          const bytes = await file.arrayBuffer();
+          return new Response(bytes, {
+            headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" },
+          });
+        } else {
+          const f = Bun.file(localPhotoPath(roomId, who));
+          if (!(await f.exists())) return new Response("Not found", { status: 404 });
+          const bytes = await f.arrayBuffer();
+          return new Response(bytes, {
+            headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" },
+          });
+        }
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
     }
 
     if (req.method === "POST" && restPath === "/api/speak") {

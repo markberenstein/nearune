@@ -49,6 +49,12 @@ export type PersonProfile = {
   emailHash?: string;
   voiceId?: string;
   hasVoice?: boolean;
+  // ISO timestamp of the last photo this person shared (see storage.ts's
+  // photoKey) — absence means they haven't shared one. Doubles as a
+  // cache-busting value for the image URL (GET /api/photo?who=...&v=...),
+  // same idea as hasVoice but a timestamp instead of a boolean since the
+  // client needs it to know when to refetch a replaced photo.
+  photoAt?: string;
   travelLocation?: string;
   travelTz?: string;
   travelFrom?: string;

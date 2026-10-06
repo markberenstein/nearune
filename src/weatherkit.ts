@@ -58,7 +58,7 @@ function signedToken(): string | null {
   return token;
 }
 
-export type WeatherKitCurrent = { tempC: number; conditionCode: string; isDay: boolean } | null;
+export type WeatherKitCurrent = { tempC: number; conditionCode: string; isDay: boolean; humidityPct: number | null } | null;
 
 // WeatherKit's conditionCode values (a fixed enum Apple documents), mapped
 // to our own theme buckets — see weather.ts's THEMES. Anything unlisted
@@ -172,7 +172,9 @@ export async function weatherKitCurrentWeather(lat: number, lon: number): Promis
       console.log("[weatherkit] " + lat + "," + lon + " -> unexpected response shape: " + JSON.stringify(data).slice(0, 300));
       return null;
     }
-    return { tempC: cur.temperature, conditionCode: cur.conditionCode, isDay: cur.daylight !== false };
+    // WeatherKit reports humidity as a 0-1 fraction — shown as a percent.
+    const humidityPct = typeof cur.humidity === "number" ? Math.round(cur.humidity * 100) : null;
+    return { tempC: cur.temperature, conditionCode: cur.conditionCode, isDay: cur.daylight !== false, humidityPct };
   } catch (err: any) {
     console.log("[weatherkit] " + lat + "," + lon + " -> threw: " + (err && err.message ? err.message : String(err)));
     return null;

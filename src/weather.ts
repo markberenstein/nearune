@@ -46,7 +46,7 @@ function unitForCountry(countryCode: string): "F" | "C" {
 
 export type WeatherTheme = { key: string; label: string; sky: [string, string]; glow: string; icon: string };
 
-export type HourlyPoint = { hour: string; temp: number };
+export type HourlyPoint = { hour: string; temp: number; humidity: number | null };
 
 export type WeatherNow = {
   location: string;
@@ -61,6 +61,8 @@ export type WeatherNow = {
   tempC: number;
   code: number;
   isDay: boolean;
+  // Relative humidity, percent — null if neither provider reported it.
+  humidity: number | null;
   theme: WeatherTheme;
   // Last ~6 hours of temperature (same unit as `temp`), oldest first,
   // ending at the current hour — for the expanded detail card's trend
@@ -174,7 +176,7 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
       // bars — can be derived from one raw reading rather than guessing.
       const url =
         "https://api.open-meteo.com/v1/forecast?latitude=" + point.lat + "&longitude=" + point.lon +
-        "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m&past_hours=6&forecast_hours=1" +
+        "&current=temperature_2m,relative_humidity_2m,weather_code,is_day&hourly=temperature_2m,relative_humidity_2m&past_hours=6&forecast_hours=1" +
         "&timezone=auto";
       // Fetched in parallel: Open-Meteo (needed either way, for the
       // last-6-hours trend, and as the fallback current reading) and
@@ -212,6 +214,9 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
                 // hourly.temperature_2m is always Celsius now — convert to
                 // the primary display unit for the trend bars.
                 temp: celsiusTo(unit, hourly.temperature_2m[i]),
+                humidity: Array.isArray(hourly.relative_humidity_2m) && typeof hourly.relative_humidity_2m[i] === "number"
+                  ? Math.round(hourly.relative_humidity_2m[i])
+                  : null,
               });
             }
           }
@@ -223,6 +228,14 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
           // is always Celsius now (see the fetch URL above).
           const rawC = weatherKit ? weatherKit.tempC : cur.temperature_2m;
           const temp = celsiusTo(unit, rawC);
+          // Prefer WeatherKit's humidity alongside its other current
+          // readings; fall back to Open-Meteo's.
+          const humidity =
+            weatherKit && weatherKit.humidityPct !== null
+              ? weatherKit.humidityPct
+              : typeof cur.relative_humidity_2m === "number"
+                ? Math.round(cur.relative_humidity_2m)
+                : null;
           // When WeatherKit supplied the reading, show Apple's own condition
           // text ("Mostly Clear", "Scattered T-Storms", ...) instead of our
           // coarser bucket label — cloned rather than mutating the shared
@@ -238,6 +251,7 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
             tempC: celsiusTo("C", rawC),
             code: cur.weather_code,
             isDay,
+            humidity,
             theme,
             recentHours: recentHours.slice(-6),
           };

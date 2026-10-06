@@ -91,7 +91,7 @@ const RAW = String.raw`<!doctype html>
   .weather-widget-row { display: flex; flex-direction: row; align-items: center; gap: 14px; }
   .weather-widget-tile {
     display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
-    flex: none; width: 92px; height: 92px; border-radius: 20px; padding: 10px 12px;
+    flex: none; width: 92px; height: 104px; border-radius: 20px; padding: 10px 12px;
     border: none; cursor: pointer; box-shadow: 0 4px 14px var(--shadow);
     color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   }
@@ -104,6 +104,7 @@ const RAW = String.raw`<!doctype html>
      than anything resembling the real app. */
   .weather-widget-tile-temp { font-size: 1.55rem; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
   .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 0.85; }
+  .weather-widget-tile-humidity { font-size: 0.7rem; font-weight: 500; line-height: 1; opacity: 0.9; margin-top: 2px; }
   .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.9; }
   .weather-widget-detail {
     padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
@@ -113,11 +114,12 @@ const RAW = String.raw`<!doctype html>
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
   .weather-widget-trend-label { margin-top: 10px; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
-  .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 58px; margin-top: 6px; }
+  .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 76px; margin-top: 6px; }
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .trend-bar-temp { font-size: 0.62rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
   .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
+  .trend-bar-hum { font-size: 0.58rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
   /* Sits beside the weather tile, so left-aligned rather than the old
      full-width centered line under the clocks. */
   .sky-line {
@@ -2742,6 +2744,9 @@ const RAW = String.raw`<!doctype html>
             showSecondary
               ? h("span", { class: "weather-widget-tile-temp-secondary", text: secondaryTemp + "°" + secondaryUnit })
               : null,
+            typeof w.humidity === "number"
+              ? h("span", { class: "weather-widget-tile-humidity", text: "💧 " + w.humidity + "%" })
+              : null,
           ].filter(Boolean)
         ),
         h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
@@ -2763,6 +2768,9 @@ const RAW = String.raw`<!doctype html>
         h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
         h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" + (shownTraveling ? " — traveling" : "") }),
       ];
+      if (typeof w.humidity === "number") {
+        detailKids.splice(2, 0, h("div", { text: t("Humidity") + " " + w.humidity + "%" }));
+      }
       if (w.recentHours && w.recentHours.length > 1) {
         var temps = w.recentHours.map(function (p) { return p.temp; });
         var lo = Math.min.apply(null, temps);
@@ -2775,13 +2783,14 @@ const RAW = String.raw`<!doctype html>
           // chart looked like bare bars with no visible numbers. Now the
           // actual reading sits above each bar, same way a native weather
           // app's hourly strip does.
-          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.temp + "°" + w.unit }, [
+          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.temp + "°" + w.unit + (typeof p.humidity === "number" ? ", " + p.humidity + "% humidity" : "") }, [
             h("div", { class: "trend-bar-temp", text: p.temp + "°" }),
             h("div", { class: "trend-bar-fill", style: "height:" + Math.max(pct, 8) + "%" }),
             h("div", { class: "trend-bar-hour", text: p.hour.replace(/\s?[AP]M/i, "") }),
-          ]);
+            typeof p.humidity === "number" ? h("div", { class: "trend-bar-hum", text: "💧" + p.humidity + "%" }) : null,
+          ].filter(Boolean));
         });
-        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Temperature, last 6 hours (" + shownName + "'s local time, °" + w.unit + ")" }));
+        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Temperature (bars) and humidity (💧), last 6 hours (" + shownName + "'s local time, °" + w.unit + ")" }));
         detailKids.push(h("div", { class: "trend-bars" }, bars));
       }
       wrap.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));

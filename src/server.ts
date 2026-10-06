@@ -396,6 +396,40 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    // Report objectionable content from your partner (photo, answer,
+    // comment, puzzle, …). Logged for the app owner — visible in the server
+    // logs and stored (not sent to browsers) on the room.
+    if (req.method === "POST" && restPath === "/api/report") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, kind, note } = body || {};
+      if (!isPerson(who) || typeof kind !== "string") return json({ error: "invalid" }, { status: 400 });
+      const about: PersonKey = who === "mark" ? "nikita" : "mark";
+      const cleanKind = kind.slice(0, 30);
+      const cleanNote = typeof note === "string" ? note.slice(0, 300) : undefined;
+      const state = await saveState(roomId, (s) => {
+        if (!s.reports) s.reports = [];
+        s.reports.push({ by: who, about, kind: cleanKind, note: cleanNote, at: new Date().toISOString() });
+        if (s.reports.length > 50) s.reports = s.reports.slice(-50);
+      });
+      console.log("[report] room=" + (roomId || "legacy") + " by=" + who + " about=" + about + " kind=" + cleanKind + (cleanNote ? " note=" + JSON.stringify(cleanNote) : ""));
+      return json(forClient(state));
+    }
+
+    // Block / unblock your partner: hides their photo, answers, comments and
+    // puzzle from YOUR screen only.
+    if (req.method === "POST" && restPath === "/api/block") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, blocked } = body || {};
+      if (!isPerson(who) || typeof blocked !== "boolean") return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.blocked) s.blocked = {};
+        if (blocked) s.blocked[who] = true; else delete s.blocked[who];
+      });
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/comment") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });

@@ -113,6 +113,12 @@ export type State = {
   pendingInviteAt?: Partial<Record<PersonKey, string>>;
   // ISO time the inviter was last sent the "still waiting" push (persisted).
   inviteNudgeAt?: string;
+  // Safety tools (App Store requirement for user-shared content):
+  // blocked[x] = true means person x has hidden their partner's content from
+  // their own screen. reports is a server-side log for the app owner and is
+  // never sent to browsers (see forClient).
+  blocked?: Partial<Record<PersonKey, boolean>>;
+  reports?: { by: PersonKey; about: PersonKey; kind: string; note?: string; at: string }[];
   puzzleCurrentId?: string;
   // Server-computed on every response (not persisted) — how many pieces of
   // the current picture are unlocked, including the streak speed-up.

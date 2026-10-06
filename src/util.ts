@@ -313,7 +313,7 @@ export function advanceQueue(s: State) {
 // person's cloned-voice provider id (see types.ts's PersonProfile.voiceId)
 // down to a plain hasVoice boolean, same idea.
 export function forClient(state: State): State {
-  const { pendingConfirm, pendingInvite, ...base } = state as any;
+  const { pendingConfirm, pendingInvite, reports, ...base } = state as any;
   const pc: Record<string, boolean> = {};
   if (pendingConfirm) for (const k of Object.keys(pendingConfirm)) pc[k] = true;
   const pi: Record<string, boolean> = {};

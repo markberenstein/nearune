@@ -2421,8 +2421,20 @@ const RAW = String.raw`<!doctype html>
   // "Pending" (with days since the invite) for them, your own weather and Local
   // Feel, and the invite card. Replaced by the full two-person screen the moment
   // they register.
+  // The weather and Local Feel fetches run once when the page opens — before a
+  // brand-new person has registered, so they come back empty. Re-run them once
+  // the person's profile (location) exists, and again after the partner joins.
+  var soloFeedKey = "";
+  function ensureSoloFeed() {
+    var me = state.people && state.people[viewerKey];
+    var k = me ? viewerKey + "|" + (me.location || "") + "|" + (me.travelLocation || "") : "";
+    if (!k || k === soloFeedKey) return;
+    soloFeedKey = k;
+    loadWeather(); loadNews(); loadMusic(); loadMovies();
+  }
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
+    ensureSoloFeed();
     app.appendChild(header());
     var travelRow = travelBlock();
     if (travelRow) app.appendChild(travelRow);
@@ -2499,6 +2511,7 @@ const RAW = String.raw`<!doctype html>
       }
 
       if (!otherConfirmedYet) { renderSoloHome(app, otherKey); return; }
+      if (soloFeedKey) { soloFeedKey = ""; loadWeather(); loadNews(); loadMusic(); loadMovies(); }
     }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }

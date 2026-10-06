@@ -2417,6 +2417,36 @@ const RAW = String.raw`<!doctype html>
     return card;
   }
 
+  // Home screen while your invited partner hasn't joined yet: your own clock,
+  // "Pending" (with days since the invite) for them, your own weather and Local
+  // Feel, and the invite card. Replaced by the full two-person screen the moment
+  // they register.
+  function renderSoloHome(app, otherKey) {
+    if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
+    app.appendChild(header());
+    var travelRow = travelBlock();
+    if (travelRow) app.appendChild(travelRow);
+    app.appendChild(inviteFlow(otherKey));
+    var weatherBlock = weatherWidgetBlock();
+    if (weatherBlock) app.appendChild(weatherBlock);
+    var newsBlock = newsLineBlock();
+    if (newsBlock) app.appendChild(newsBlock);
+    var musicBlock = musicLineBlock();
+    if (musicBlock) app.appendChild(musicBlock);
+    var moviesBlock = moviesLineBlock();
+    if (moviesBlock) app.appendChild(moviesBlock);
+    var pushRow = pushToggleRow();
+    if (pushRow) app.appendChild(pushRow);
+    var foot = h("div", { class: "switch-row" });
+    foot.appendChild(h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") }));
+    foot.appendChild(h("a", { class: "switch-link", href: "/terms", text: t("Terms") }));
+    var del = h("button", { class: "switch-link", text: t("Delete my data") });
+    del.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
+    foot.appendChild(del);
+    app.appendChild(foot);
+    if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
+  }
+
   function renderApp() {
     var app = document.getElementById("app");
     if (!app) return;
@@ -2468,7 +2498,7 @@ const RAW = String.raw`<!doctype html>
         app.appendChild(pushPromptDialog(!otherConfirmedYet)); return;
       }
 
-      if (!otherConfirmedYet) { app.appendChild(inviteFlow(otherKey)); return; }
+      if (!otherConfirmedYet) { renderSoloHome(app, otherKey); return; }
     }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
@@ -2594,6 +2624,23 @@ const RAW = String.raw`<!doctype html>
   // only, so previewing a partner's screen can never make you answer,
   // comment, or edit a status as them.
   function effectiveViewKey() { return previewKey || viewerKey; }
+  // True while YOU are registered but your invited partner hasn't joined yet
+  // (never in the legacy room). The main screen then shows YOUR own weather
+  // and Local Feel, and your partner's slot reads "Pending".
+  function isConfirmedKey(key) {
+    var p = state.people && state.people[key];
+    return !!(p && p.confirmed);
+  }
+  function soloMode() {
+    return !!(ROOM && viewerKey && isConfirmedKey(viewerKey) && !isConfirmedKey(otherKeyOf(viewerKey)));
+  }
+  // Whose world (weather / local story / charts) the main screen shows: your
+  // own while solo, otherwise your partner's (or the previewed person's partner).
+  function worldKey() { return soloMode() ? viewerKey : otherKeyOf(effectiveViewKey()); }
+  function worldLabel(key) {
+    if (soloMode()) return t("you");
+    return personName(key) + (personIsTraveling(key) ? " (traveling)" : "");
+  }
   // The weather that SHOULD be tinting the background right now: whoever's
   // screen is effectively being shown, this is the weather at THEIR
   // partner's location — same rule the real app always applies, just
@@ -2601,14 +2648,14 @@ const RAW = String.raw`<!doctype html>
   function currentSkyWeather() {
     var key = effectiveViewKey();
     if (!key) return null;
-    return weatherByPerson[otherKeyOf(key)] || null;
+    return weatherByPerson[worldKey()] || null;
   }
   // SANDBOX EXPERIMENT: same "other person's" rule as currentSkyWeather(),
   // for the top local news line instead of the weather badge.
   function currentPartnerNews() {
     var key = effectiveViewKey();
     if (!key) return null;
-    return newsByPerson[otherKeyOf(key)] || null;
+    return newsByPerson[worldKey()] || null;
   }
   // SANDBOX EXPERIMENT: a single muted line — "Quirky story near <name>:
   // ..." — sitting between the Today/Puzzle content and the "next
@@ -2620,8 +2667,7 @@ const RAW = String.raw`<!doctype html>
   function newsLineBlock() {
     var story = currentPartnerNews();
     if (!story || !story.headline) return null;
-    var shownKey = otherKeyOf(effectiveViewKey());
-    var shownName = personName(shownKey) + (personIsTraveling(shownKey) ? " (traveling)" : "");
+    var shownName = worldLabel(worldKey());
     var line = h("p", { class: "news-line" });
     line.appendChild(document.createTextNode("🤪 Quirky story near " + shownName + ": "));
     line.appendChild(
@@ -2635,12 +2681,12 @@ const RAW = String.raw`<!doctype html>
   function currentPartnerMusic() {
     var key = effectiveViewKey();
     if (!key) return null;
-    return musicByPerson[otherKeyOf(key)] || null;
+    return musicByPerson[worldKey()] || null;
   }
   function currentPartnerMovies() {
     var key = effectiveViewKey();
     if (!key) return null;
-    return moviesByPerson[otherKeyOf(key)] || null;
+    return moviesByPerson[worldKey()] || null;
   }
   // Renders the ranked top-5 list for either chart — shared by
   // musicLineBlock/moviesLineBlock's "Show top 5" expansion. labelFor
@@ -2669,8 +2715,7 @@ const RAW = String.raw`<!doctype html>
   function musicLineBlock() {
     var chart = currentPartnerMusic();
     if (!chart || !chart.length) return null;
-    var shownKey = otherKeyOf(effectiveViewKey());
-    var shownName = personName(shownKey) + (personIsTraveling(shownKey) ? " (traveling)" : "");
+    var shownName = worldLabel(worldKey());
     var top = chart[0];
     var wrap = h("div");
     var line = h("p", { class: "music-line" });
@@ -2699,8 +2744,7 @@ const RAW = String.raw`<!doctype html>
   function moviesLineBlock() {
     var chart = currentPartnerMovies();
     if (!chart || !chart.length) return null;
-    var shownKey = otherKeyOf(effectiveViewKey());
-    var shownName = personName(shownKey) + (personIsTraveling(shownKey) ? " (traveling)" : "");
+    var shownName = worldLabel(worldKey());
     var top = chart[0];
     var wrap = h("div");
     var line = h("p", { class: "movie-line" });
@@ -2737,8 +2781,9 @@ const RAW = String.raw`<!doctype html>
     var w = currentSkyWeather();
     if (!w || !viewerKey) return null;
     var icon = (w.theme && w.theme.icon) || "";
-    var shownKey = otherKeyOf(effectiveViewKey());
-    var shownName = personName(shownKey);
+    var shownKey = worldKey();
+    var solo = soloMode();
+    var shownName = solo ? t("you") : personName(shownKey);
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
@@ -2803,14 +2848,14 @@ const RAW = String.raw`<!doctype html>
       document.createTextNode(
         "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. "
       ),
-      h("strong", { text: "The sky over " + (shownTraveling ? "✈️ " : "") + shownName + "'s head right now." }),
+      h("strong", { text: solo ? "The sky over your head right now." : "The sky over " + (shownTraveling ? "✈️ " : "") + shownName + "'s head right now." }),
     ]);
     wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
         h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
-        h("div", { class: "weather-widget-detail-sub", text: shownName + "'s sky right now" + (shownTraveling ? " — traveling" : "") }),
+        h("div", { class: "weather-widget-detail-sub", text: (solo ? "Your sky right now" : shownName + "'s sky right now") + (shownTraveling ? " — traveling" : "") }),
       ];
       if (typeof w.humidity === "number") {
         detailKids.splice(2, 0, h("div", { text: t("Humidity") + " " + w.humidity + "%" }));
@@ -2834,7 +2879,7 @@ const RAW = String.raw`<!doctype html>
             typeof p.humidity === "number" ? h("div", { class: "trend-bar-hum", text: "💧" + p.humidity + "%" }) : null,
           ].filter(Boolean));
         });
-        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Temperature (bars) and humidity (💧), last 6 hours (" + shownName + "'s local time, °" + w.unit + ")" }));
+        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Temperature (bars) and humidity (💧), last 6 hours (" + (solo ? "your" : shownName + "'s") + " local time, °" + w.unit + ")" }));
         detailKids.push(h("div", { class: "trend-bars" }, bars));
       }
       wrap.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));
@@ -2846,13 +2891,26 @@ const RAW = String.raw`<!doctype html>
     var cityLabel = personIsTraveling(key) ? ("✈️ " + cityText) : cityText;
     return h("div", { class: "clock-block" }, [
       h("div", { class: "clock-city", text: cityLabel }),
-      h("div", { class: "clock-time", text: clockFor(effectiveClockTz(key)) }),
+      h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
+    ]);
+  }
+  // Stand-in for a partner who hasn't registered yet: "Pending" plus how long
+  // ago the invite went out (a placeholder city/time would be misleading).
+  function pendingClockBlock(key) {
+    var at = state.pendingInviteAt && state.pendingInviteAt[key];
+    var days = at ? Math.floor((Date.now() - Date.parse(at)) / 86400000) : 0;
+    var sub = !at ? t("Not invited yet") : days < 1 ? t("Invited today") : days === 1 ? t("Invited 1 day ago") : tTemplate("Invited {n} days ago", { n: String(days) });
+    return h("div", { class: "clock-block" }, [
+      h("div", { class: "clock-city", text: t("Pending") }),
+      h("div", { class: "clock-time", text: "—" }),
+      h("div", { class: "puzzle-guess-note", style: "margin: 2px 0 0;", text: sub }),
     ]);
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
-    var markClock = clockBlock("mark");
-    var nikitaClock = clockBlock("nikita");
+    var solo = soloMode();
+    var markClock = solo && !isConfirmedKey("mark") ? pendingClockBlock("mark") : clockBlock("mark");
+    var nikitaClock = solo && !isConfirmedKey("nikita") ? pendingClockBlock("nikita") : clockBlock("nikita");
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
     return h("div", {}, [wordmark, clocks]);
@@ -3816,8 +3874,8 @@ const RAW = String.raw`<!doctype html>
   }
 
   function tickClocks() {
-    document.querySelectorAll(".clock-time").forEach(function (el, i) {
-      el.textContent = i === 0 ? clockFor(effectiveClockTz("mark")) : clockFor(effectiveClockTz("nikita"));
+    document.querySelectorAll(".clock-time[data-key]").forEach(function (el) {
+      el.textContent = clockFor(effectiveClockTz(el.getAttribute("data-key")));
     });
     var cd = document.getElementById("cd-note");
     if (cd) cd.textContent = countdownText();

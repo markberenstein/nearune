@@ -75,6 +75,7 @@ const RAW = String.raw`<!doctype html>
     padding: 14px 18px; box-shadow: 0 1px 2px var(--shadow); flex-wrap: wrap;
   }
   .clock-block { text-align: center; min-width: 108px; }
+  .clock-block.clock-me { border: 2px solid #8C6FA8; border-radius: 6px; padding: 6px 10px; }
   .clock-city { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
@@ -2917,7 +2918,8 @@ const RAW = String.raw`<!doctype html>
   function clockBlock(key) {
     var cityText = effectiveClockLocation(key);
     var cityLabel = personIsTraveling(key) ? ("✈️ " + cityText) : cityText;
-    return h("div", { class: "clock-block" }, [
+    var isMe = key === effectiveViewKey();
+    return h("div", { class: "clock-block" + (isMe ? " clock-me" : "") }, [
       h("div", { class: "clock-city", text: cityLabel }),
       h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
     ]);

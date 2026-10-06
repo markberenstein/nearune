@@ -541,6 +541,19 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    if (req.method === "POST" && restPath === "/api/set-avatar") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, avatar } = body || {};
+      if (!isPerson(who) || typeof avatar !== "string" || !/^a[1-5]$/.test(avatar)) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who]) s.people[who]!.avatar = avatar;
+      });
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/register") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
@@ -556,6 +569,7 @@ Bun.serve({
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      const avatar = typeof body?.avatar === "string" && /^a[1-5]$/.test(body.avatar) ? body.avatar : undefined;
       const relationship =
         body?.relationship === "significant_other" ||
         body?.relationship === "family" ||
@@ -582,7 +596,7 @@ Bun.serve({
         const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
         const stateH = await saveState(roomId, (s) => {
           if (!s.people) s.people = {};
-          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, instagram: handle };
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, instagram: handle, ...(avatar ? { avatar } : {}) };
           if (s.pendingConfirm) delete s.pendingConfirm[who];
           if (relationship && !s.relationship) s.relationship = relationship;
         });
@@ -611,7 +625,7 @@ Bun.serve({
       const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false, emailHash };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false, emailHash, ...(avatar ? { avatar } : {}) };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
         // Only whoever registers first sets this for the room — the second
@@ -741,6 +755,7 @@ Bun.serve({
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      const avatar = typeof body?.avatar === "string" && /^a[1-5]$/.test(body.avatar) ? body.avatar : undefined;
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
@@ -753,7 +768,7 @@ Bun.serve({
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
         const invitedHandle = s.pendingInvite && s.pendingInvite[who!] && s.pendingInvite[who!]!.instagram;
-        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}) };
+        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}), ...(avatar ? { avatar } : {}) };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
       // Let the person who sent the invite know their partner is in —

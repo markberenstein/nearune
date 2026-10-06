@@ -2335,9 +2335,9 @@ const RAW = String.raw`<!doctype html>
       .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
 
-  function copyLinkButton(url, label) {
+  function copyLinkButton(url, label, cls) {
     var labelText = label || t("Copy invite link");
-    var btn = h("button", { class: "switch-link", text: labelText });
+    var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
@@ -2349,9 +2349,9 @@ const RAW = String.raw`<!doctype html>
   // Opens the phone's share sheet (so the link can go out as an Instagram DM,
   // text, etc.) where the browser supports it; otherwise falls back to
   // copying the link.
-  function shareLinkButton(url, label) {
+  function shareLinkButton(url, label, cls) {
     var labelText = label || t("Share invite link");
-    var btn = h("button", { class: "switch-link", text: labelText });
+    var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       if (navigator.share) {
         navigator.share({ title: "Nearune", url: url }).catch(function () {});
@@ -2375,8 +2375,17 @@ const RAW = String.raw`<!doctype html>
         // the invite, and the inviter delivers it themselves.
         card.appendChild(h("p", { class: "question", text: tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
         if (!lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Tap below to get a fresh link to send.") }));
+        if (lastInviteUrl) {
+          // Show the link itself, with real buttons and a next-step hint.
+          card.appendChild(h("p", { class: "puzzle-guess-note", style: "word-break: break-all; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0 0 12px;", text: lastInviteUrl }));
+          card.appendChild(h("div", { class: "puzzle-setup-row", style: "margin-bottom: 10px;" }, [
+            shareLinkButton(lastInviteUrl, t("Share link"), "puzzle-upload-btn"),
+            copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
+          ]));
+          card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Paste it into an Instagram message to {name}. They tap it and set up their side.", { name: "@" + pendingHandle }) }));
+        }
       } else {
-        card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: otherLabel }) }));
+        card.appendChild(h("p", { class: "question", text: tTemplate("Invite emailed — waiting for {name} to accept.", { name: otherLabel }) }));
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
         if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
       }
@@ -2390,9 +2399,8 @@ const RAW = String.raw`<!doctype html>
         again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
         row.push(again);
       }
-      if (lastInviteUrl && pendingHandle) row.unshift(shareLinkButton(lastInviteUrl));
-      if (lastInviteUrl) row.push(copyLinkButton(lastInviteUrl));
-      card.appendChild(h("div", { class: "switch-row" }, row));
+      if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
+      if (row.length) card.appendChild(h("div", { class: "switch-row" }, row));
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
       var form = h("div", { class: "puzzle-setup" });

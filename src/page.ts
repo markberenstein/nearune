@@ -1084,7 +1084,7 @@ const RAW = String.raw`<!doctype html>
   var translationCache = {}; // "src>tgt::text" -> translated string, or null on failure
   var translationPending = {};
   var translationAttempts = {};
-  var TRANSLATE_MAX_ATTEMPTS = 3;
+  var TRANSLATE_MAX_ATTEMPTS = 5;
 
   function safeRerender() {
     var active = document.activeElement;
@@ -1103,7 +1103,11 @@ const RAW = String.raw`<!doctype html>
         return res.json();
       })
       .then(function (data) {
-        translationCache[key] = (data && data.translated) || null;
+        // An empty translation means the server's translator was refused
+        // for a moment — treat it like a failure and try again shortly,
+        // rather than caching "no translation" for the whole session.
+        if (!data || !data.translated) throw new Error("empty");
+        translationCache[key] = data.translated;
         delete translationPending[key];
         delete translationAttempts[key];
         safeRerender();
@@ -1116,7 +1120,10 @@ const RAW = String.raw`<!doctype html>
           setTimeout(function () { scheduleTranslate(text, target, alt); }, attempts * 1500);
         } else {
           translationCache[key] = null;
+          delete translationAttempts[key];
           safeRerender();
+          // Give up for now, but try again in a minute instead of never.
+          setTimeout(function () { delete translationCache[key]; safeRerender(); }, 60000);
         }
       });
   }
@@ -2703,7 +2710,7 @@ const RAW = String.raw`<!doctype html>
     // language underneath, same as exchanged answers do.
     var ul = otherUiLang();
     if (!ul) return line;
-    return h("div", {}, [line, translateBlock(story.headline, ul, "en", null)]);
+    return h("div", {}, [line, translateBlock(story.headline, ul, "en", soloMode() ? null : otherKeyOf(viewerKey))]);
   }
   // SANDBOX EXPERIMENT: same "other person's" rule as currentPartnerNews(),
   // for the top-songs/top-movies charts.

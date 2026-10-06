@@ -2698,7 +2698,11 @@ const RAW = String.raw`<!doctype html>
       h("a", { class: "news-link", href: story.url || "#", target: "_blank", rel: "noopener noreferrer", text: story.headline })
     );
     if (story.source) line.appendChild(document.createTextNode(" (" + story.source + ")"));
-    return line;
+    // Headlines come from English-language news; show the reader's own
+    // language underneath, same as exchanged answers do.
+    var ul = otherUiLang();
+    if (!ul) return line;
+    return h("div", {}, [line, translateBlock(story.headline, ul, "en", null)]);
   }
   // SANDBOX EXPERIMENT: same "other person's" rule as currentPartnerNews(),
   // for the top-songs/top-movies charts.

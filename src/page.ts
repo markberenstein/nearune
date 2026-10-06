@@ -2694,7 +2694,7 @@ const RAW = String.raw`<!doctype html>
     if (!story || !story.headline) return null;
     var shownName = worldLabel(worldKey());
     var line = h("p", { class: "news-line" });
-    line.appendChild(document.createTextNode("🤪 Quirky story near " + shownName + ": "));
+    line.appendChild(document.createTextNode(tTemplate("🤪 Quirky story near {name}: ", { name: shownName })));
     line.appendChild(
       h("a", { class: "news-link", href: story.url || "#", target: "_blank", rel: "noopener noreferrer", text: story.headline })
     );
@@ -2748,7 +2748,7 @@ const RAW = String.raw`<!doctype html>
     var top = chart[0];
     var wrap = h("div");
     var line = h("p", { class: "music-line" });
-    line.appendChild(document.createTextNode("🎵 Popular near " + shownName + ": "));
+    line.appendChild(document.createTextNode(tTemplate("🎵 Popular near {name}: ", { name: shownName })));
     line.appendChild(
       h("a", { class: "music-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
     );
@@ -2777,7 +2777,7 @@ const RAW = String.raw`<!doctype html>
     var top = chart[0];
     var wrap = h("div");
     var line = h("p", { class: "movie-line" });
-    line.appendChild(document.createTextNode("🎬 Popular near " + shownName + ": "));
+    line.appendChild(document.createTextNode(tTemplate("🎬 Popular near {name}: ", { name: shownName })));
     line.appendChild(
       h("a", { class: "movie-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title })
     );
@@ -2867,7 +2867,7 @@ const RAW = String.raw`<!doctype html>
               : null,
           ].filter(Boolean)
         ),
-        h("span", { class: "weather-widget-tile-label", text: w.theme.label }),
+        h("span", { class: "weather-widget-tile-label", text: t(w.theme.label) }),
       ]
     );
     // The why-is-the-background-doing-this blurb — next to the tile, always
@@ -2875,16 +2875,16 @@ const RAW = String.raw`<!doctype html>
     // whose sky" part is bolded so it stands out from the whimsical lead-in.
     var blurb = h("p", { class: "sky-line" }, [
       document.createTextNode(
-        "Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not. "
+        t("Whether the weather be hot, or whether the weather be cold — we'll be together whatever the weather, whether you like it or not.") + " "
       ),
-      h("strong", { text: solo ? "The sky over your head right now." : "The sky over " + (shownTraveling ? "✈️ " : "") + shownName + "'s head right now." }),
+      h("strong", { text: solo ? t("The sky over your head right now.") : tTemplate("The sky over {name}'s head right now.", { name: (shownTraveling ? "✈️ " : "") + shownName }) }),
     ]);
     wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
-        h("div", { text: w.theme.label + " · " + (w.isDay ? "daytime" : "nighttime") }),
-        h("div", { class: "weather-widget-detail-sub", text: (solo ? "Your sky right now" : shownName + "'s sky right now") + (shownTraveling ? " — traveling" : "") }),
+        h("div", { text: t(w.theme.label) + " · " + (w.isDay ? t("daytime") : t("nighttime")) }),
+        h("div", { class: "weather-widget-detail-sub", text: (solo ? t("Your sky right now") : tTemplate("{name}'s sky right now", { name: shownName })) + (shownTraveling ? " — " + t("traveling") : "") }),
       ];
       if (typeof w.humidity === "number") {
         detailKids.splice(2, 0, h("div", { text: t("Humidity") + " " + w.humidity + "%" }));
@@ -2908,7 +2908,7 @@ const RAW = String.raw`<!doctype html>
             typeof p.humidity === "number" ? h("div", { class: "trend-bar-hum", text: "💧" + p.humidity + "%" }) : null,
           ].filter(Boolean));
         });
-        detailKids.push(h("div", { class: "weather-widget-trend-label", text: "Temperature (bars) and humidity (💧), last 6 hours (" + (solo ? "your" : shownName + "'s") + " local time, °" + w.unit + ")" }));
+        detailKids.push(h("div", { class: "weather-widget-trend-label", text: tTemplate("Temperature (bars) and humidity (💧), last 6 hours ({who} local time, °{unit})", { who: solo ? t("your") : shownName + "'s", unit: w.unit }) }));
         detailKids.push(h("div", { class: "trend-bars" }, bars));
       }
       wrap.appendChild(h("div", { class: "weather-widget-detail" }, detailKids));
@@ -3295,7 +3295,7 @@ const RAW = String.raw`<!doctype html>
     if (partnerIg) {
       var igLine = h("p", { class: "voice-card-desc" });
       igLine.appendChild(document.createTextNode("📸 "));
-      igLine.appendChild(h("a", { href: "https://instagram.com/" + encodeURIComponent(partnerIg), target: "_blank", rel: "noopener noreferrer", text: "@" + partnerIg + " on Instagram" }));
+      igLine.appendChild(h("a", { href: "https://instagram.com/" + encodeURIComponent(partnerIg), target: "_blank", rel: "noopener noreferrer", text: "@" + partnerIg + " " + t("on Instagram") }));
       wrap.appendChild(igLine);
     }
     if (photoUploadState.error) {

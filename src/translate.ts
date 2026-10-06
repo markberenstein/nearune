@@ -177,7 +177,7 @@ export function scriptGuessSource(text: string, target: string, alt: string): st
 // target language, and only falls through to MyMemory (at the correct
 // effective target) when the intended translation truly failed — never
 // shows an untranslated "identity" result back as if it were a translation.
-export async function resolveTranslation(text: string, target: string, alt: string): Promise<{ translated: string; via: string; eff: string }> {
+async function resolveTranslationOnce(text: string, target: string, alt: string): Promise<{ translated: string; via: string; eff: string }> {
   if (target === "gib" || alt === "gib") {
     return { translated: translateToGibberish(text), via: "gibberish", eff: "gib" };
   }
@@ -214,4 +214,51 @@ export async function resolveTranslation(text: string, target: string, alt: stri
     }
   }
   return { translated: translated || "", via, eff };
+}
+
+// Google's free endpoint starts refusing when a page load fires dozens of
+// translations at once (every label on the screen) — which is what blanked
+// out the translated questions and voices. So: successful translations are
+// remembered (same text never re-asked), identical in-flight requests share
+// one call, only a few run at a time, and a failure is retried once.
+type TResult = { translated: string; via: string; eff: string };
+const tCache = new Map<string, TResult>();
+const tInflight = new Map<string, Promise<TResult>>();
+const T_MAX_CONCURRENT = 3;
+let tActive = 0;
+const tWaiters: (() => void)[] = [];
+async function tAcquire(): Promise<void> {
+  if (tActive < T_MAX_CONCURRENT) { tActive++; return; }
+  await new Promise<void>((resolve) => tWaiters.push(resolve));
+}
+function tRelease(): void {
+  const next = tWaiters.shift();
+  if (next) next(); else tActive--;
+}
+export async function resolveTranslation(text: string, target: string, alt: string): Promise<TResult> {
+  const key = target + "|" + alt + "::" + text;
+  const hit = tCache.get(key);
+  if (hit) return hit;
+  const running = tInflight.get(key);
+  if (running) return running;
+  const p = (async () => {
+    await tAcquire();
+    try {
+      let r = await resolveTranslationOnce(text, target, alt);
+      if (!r.translated) {
+        await new Promise((res) => setTimeout(res, 500));
+        r = await resolveTranslationOnce(text, target, alt);
+      }
+      if (r.translated) {
+        if (tCache.size > 5000) tCache.clear();
+        tCache.set(key, r);
+      }
+      return r;
+    } finally {
+      tRelease();
+      tInflight.delete(key);
+    }
+  })();
+  tInflight.set(key, p);
+  return p;
 }

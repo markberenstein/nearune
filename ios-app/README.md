@@ -25,7 +25,7 @@ root.
    - Note the **Key ID**, **Issuer ID**, and keep the `.p8` file safe
 
 3. **Codemagic account** — sign up free at codemagic.io, connect your GitHub
-   account, and add this repository (`markberenstein/same-sky`) as an app.
+   account, and add this repository (`markberenstein/nearune`) as an app.
 
 4. **Wire up the App Store Connect integration in Codemagic**:
    - In Codemagic: Teams → Integrations → App Store Connect → add the Key

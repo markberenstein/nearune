@@ -1084,7 +1084,7 @@ Bun.serve({
           "&lon=" +
           encodeURIComponent(lon) +
           "&zoom=14&addressdetails=1";
-        const res = await fetch(gUrl, { headers: { "User-Agent": "SameSkyApp/1.0 (personal use)" } });
+        const res = await fetch(gUrl, { headers: { "User-Agent": "NearuneApp/1.0 (personal use)" } });
         if (!res.ok) return json({ place: "" });
         const data: any = await res.json();
         const addr = data.address || {};

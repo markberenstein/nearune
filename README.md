@@ -1,4 +1,4 @@
-# Same Sky
+# Nearune
 
 A private daily-question ritual app for two people, deployed on Railway (Bun).
 

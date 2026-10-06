@@ -2381,9 +2381,15 @@ const RAW = String.raw`<!doctype html>
         if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
       }
       if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-      var again = h("button", { class: "switch-link", text: pendingHandle ? t("Get a new invite link") : t("Resend invite") });
-      again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
-      var row = [again];
+      var row = [];
+      // With a handle invite and the link already on screen, Share/Copy are
+      // all that's needed. The regenerate button only appears when the link
+      // is gone (e.g. after a reload), since that's the only way to get it back.
+      if (!(pendingHandle && lastInviteUrl)) {
+        var again = h("button", { class: "switch-link", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
+        again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
+        row.push(again);
+      }
       if (lastInviteUrl && pendingHandle) row.unshift(shareLinkButton(lastInviteUrl));
       if (lastInviteUrl) row.push(copyLinkButton(lastInviteUrl));
       card.appendChild(h("div", { class: "switch-row" }, row));

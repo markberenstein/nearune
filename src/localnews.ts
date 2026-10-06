@@ -38,7 +38,7 @@ const THEMES: { name: string; terms: string }[] = [
   { name: "bizarre but true", terms: "(bizarre OR baffled OR \"you won't believe\" OR stunned OR \"left speechless\")" },
   { name: "world record", terms: "(\"world record\" OR \"guinness world records\" OR \"record attempt\" OR \"largest ever\")" },
   { name: "wacky contest", terms: "(\"wacky contest\" OR \"pie-eating\" OR \"costume contest\" OR \"weirdest\" OR \"silly olympics\")" },
-  { name: "unusual find", terms: "(\"time capsule\" OR \"buried treasure\" OR \"mysteriously appeared\" OR \"unearthed\" OR \"hidden message found\")" },
+  { name: "lost and found", terms: "(\"message in a bottle\" OR \"time capsule\" OR \"returned after\" OR \"lost wallet\" OR \"found after\" OR \"reunited with\")" },
   { name: "mix-up", terms: "(\"mistaken for\" OR \"wrong address\" OR \"accidentally delivered\" OR \"case of mistaken identity\" OR mix-up)" },
   { name: "oddly specific", terms: "(\"world's smallest\" OR \"world's largest\" OR \"only one of its kind\" OR \"unlike anything\")" },
   { name: "unlikely friendship", terms: "(\"unlikely friendship\" OR \"best friends\" OR adopted OR reunited) (dog OR cat OR goat OR duck OR animal)" },
@@ -105,7 +105,8 @@ const EXCLUDE_TERMS =
   "-crime -shooting -shot -killed -dead -death -died -murder -stabbing " +
   "-robbery -arrest -arrested -crash -accident -fire -explosion -war " +
   "-attack -assault -abuse -scandal -lawsuit -controversy -protest " +
-  "-flood -disaster -storm -outage -layoffs -bankruptcy -indicted -trial";
+  "-flood -disaster -storm -outage -layoffs -bankruptcy -indicted -trial " +
+  "-fossil -fossils -archaeolog* -archeolog* -dinosaur -excavat* -unearthed -ancient -skeleton -bones -remains -discovery -discovered -scientists -researchers -paleontolog*";
 
 // Top local story for a free-text location, biased toward genuinely odd
 // or funny stories using today's single rotating TONE theme (see

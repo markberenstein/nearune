@@ -1960,6 +1960,7 @@ const RAW = String.raw`<!doctype html>
   }
 
   function puzzleSection() {
+    if (isBlocked()) return blockedNote();
     var inBatch = !!state.puzzleCurrentId;
     var unlocked = puzzleUnlockedCount();
     var card = h("div", { class: "puzzle-card" }, [
@@ -2034,16 +2035,48 @@ const RAW = String.raw`<!doctype html>
     commentDrafts[dateKeyVal] = "";
     renderApp();
   }
+  // Safety tools: report your partner's content, or block them (hides their
+  // photo, answers, comments and puzzle from YOUR screen only).
+  function isBlocked() { return !!(state.blocked && viewerKey && state.blocked[viewerKey]); }
+  function reportContent(kind) {
+    if (!viewerKey) return;
+    if (!window.confirm(t("Report this to Nearune?"))) return;
+    fetch(RP + "/api/report", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, kind: kind }) })
+      .then(function (r) { if (!r.ok) throw new Error("bad"); try { window.alert(t("Thanks — we'll review it.")); } catch (e) {} })
+      .catch(function () { try { window.alert(t("Couldn't send the report — try again.")); } catch (e) {} });
+  }
+  function reportLink(kind) {
+    var b = h("button", { class: "switch-link", type: "button", text: t("Report") });
+    b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); reportContent(kind); });
+    return b;
+  }
+  function setBlocked(blocked) {
+    if (blocked && !window.confirm(tTemplate("Block {name}? You won't see their photo, answers or comments. You can unblock any time.", { name: personName(otherKeyOf(viewerKey)) }))) return;
+    fetch(RP + "/api/block", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, blocked: blocked }) })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) state = d; renderApp(); })
+      .catch(function () {});
+  }
+  function blockedNote() {
+    var wrap = h("div", { class: "card" }, [h("p", { class: "puzzle-guess-note", text: tTemplate("You've blocked {name}.", { name: personName(otherKeyOf(viewerKey)) }) })]);
+    var ub = h("button", { class: "switch-link", type: "button", text: t("Unblock") });
+    ub.addEventListener("click", function () { setBlocked(false); });
+    wrap.appendChild(ub);
+    return wrap;
+  }
+
   function commentsBlock(dateKeyVal) {
     var wrap = h("div", { class: "comments" });
     var list = (state.comments && state.comments[dateKeyVal]) || [];
     list.forEach(function (c) {
+      if (c.who !== viewerKey && isBlocked()) return;
       var person = PEOPLE[c.who] ? { name: personName(c.who), color: PEOPLE[c.who].color } : { name: t("Someone"), color: "var(--ink-soft)" };
       var cDiv = h("div", { class: "comment" }, [
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
       cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
+      if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
       wrap.appendChild(cDiv);
     });
     var form = h("div", { class: "comment-form" });
@@ -3278,7 +3311,9 @@ const RAW = String.raw`<!doctype html>
     var partnerPhotoAt = state.people && state.people[otherKey] && state.people[otherKey].photoAt;
     var wrap = h("div", { class: "voice-card" });
     wrap.appendChild(h("div", { class: "voice-card-title", text: "📷 " + tTemplate("Photos with {name}", { name: partnerName }) }));
-    if (partnerPhotoAt) {
+    if (partnerPhotoAt && isBlocked()) {
+      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("You've blocked {name}.", { name: partnerName }) }));
+    } else if (partnerPhotoAt) {
       var line = h("p", { class: "voice-card-desc" });
       line.appendChild(document.createTextNode(tTemplate("{name} shared a photo. ", { name: partnerName })));
       var toggle = h("button", { class: "chart-expand-btn", type: "button", text: photoExpanded ? t("Hide photo") : t("Show photo") });
@@ -3291,6 +3326,7 @@ const RAW = String.raw`<!doctype html>
           src: RP + "/api/photo?who=" + otherKey + "&v=" + encodeURIComponent(partnerPhotoAt),
           alt: partnerName + "'s shared photo",
         }));
+        wrap.appendChild(reportLink("photo"));
       }
     } else {
       wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo yet.", { name: partnerName }) }));
@@ -3346,6 +3382,7 @@ const RAW = String.raw`<!doctype html>
     ["mark", "nikita"].forEach(function (key) {
       var person = PEOPLE[key];
       var current = (state.status[key] && state.status[key].text) || "";
+      if (key !== viewerKey && isBlocked()) current = "";
       var isSelf = viewerKey === key;
       var chipClass = "status-chip" + (!isSelf ? " status-chip-preview" : "");
       var chipKids = [h("span", { class: "status-dot", style: "background:" + person.color })];
@@ -3412,9 +3449,12 @@ const RAW = String.raw`<!doctype html>
         bubble.appendChild(headRow);
         if (key === viewerKey && editingEntry === today) {
           bubble.appendChild(ownAnswerEditor(today));
+        } else if (key !== viewerKey && isBlocked()) {
+          bubble.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You've blocked {name}.", { name: personName(key) }) }));
         } else {
           bubble.appendChild(h("p", { class: "answer-text", text: entry[key].text }));
           bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key));
+          if (key !== viewerKey) bubble.appendChild(reportLink("answer"));
         }
         reveal.appendChild(bubble);
       });
@@ -3884,6 +3924,11 @@ const RAW = String.raw`<!doctype html>
     var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
     deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
     row.appendChild(deleteLink);
+    if (ROOM && viewerKey) {
+      var blockLink = h("button", { class: "switch-link", type: "button", text: isBlocked() ? tTemplate("Unblock {name}", { name: personName(otherKeyOf(viewerKey)) }) : tTemplate("Block {name}", { name: personName(otherKeyOf(viewerKey)) }) });
+      blockLink.addEventListener("click", function () { setBlocked(!isBlocked()); });
+      row.appendChild(blockLink);
+    }
     return row;
   }
 

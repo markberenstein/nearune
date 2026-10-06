@@ -41,6 +41,29 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   RO: "Romanian",
   CZ: "Czech",
   KE: "Swahili", TZ: "Swahili",
+  // More countries (same conservative rule: only where one language clearly dominates).
+  ZA: "English", SG: "English", NG: "English", GH: "English", JM: "English",
+  VE: "Spanish", EC: "Spanish", UY: "Spanish", BO: "Spanish", PY: "Spanish", CR: "Spanish",
+  PA: "Spanish", DO: "Spanish", GT: "Spanish", CU: "Spanish", HN: "Spanish", SV: "Spanish", NI: "Spanish", PR: "Spanish",
+  IQ: "Arabic", JO: "Arabic", LB: "Arabic", MA: "Arabic", DZ: "Arabic", TN: "Arabic", LY: "Arabic",
+  OM: "Arabic", BH: "Arabic", SY: "Arabic", YE: "Arabic", SD: "Arabic",
+  AO: "Portuguese", MZ: "Portuguese",
+  LU: "French", SN: "French", CI: "French", CM: "French", CD: "French", HT: "French", MG: "French",
+  HK: "Mandarin Chinese",
+  AF: "Farsi (Persian)",
+  UG: "Swahili",
+  BY: "Russian", KZ: "Russian",
+};
+
+// India's states mostly have their own dominant language, so when the
+// geocoder reports the state (admin1) it beats the country-level "Hindi".
+const INDIA_STATE_LANGUAGE: Record<string, string> = {
+  "tamil nadu": "Tamil", "puducherry": "Tamil",
+  "telangana": "Telugu", "andhra pradesh": "Telugu",
+  "maharashtra": "Marathi",
+  "gujarat": "Gujarati",
+  "west bengal": "Bengali", "tripura": "Bengali",
+  "punjab": "Punjabi",
 };
 
 async function geocodeRaw(q: string): Promise<any | null> {
@@ -121,7 +144,10 @@ export async function resolveLocationInfo(location: string): Promise<{ tz: strin
   const { first, corrected } = await geocodeFull(location);
   const tz = first && typeof first.timezone === "string" ? first.timezone : null;
   const countryCode = first && typeof first.country_code === "string" ? first.country_code.toUpperCase() : "";
-  const language = (countryCode && COUNTRY_TO_LANGUAGE[countryCode]) || null;
+  const admin1 = first && typeof first.admin1 === "string" ? first.admin1.toLowerCase() : "";
+  const language =
+    (countryCode === "IN" && INDIA_STATE_LANGUAGE[admin1]) ||
+    (countryCode && COUNTRY_TO_LANGUAGE[countryCode]) || null;
   return { tz: tz || null, language, corrected };
 }
 

@@ -2189,7 +2189,7 @@ const RAW = String.raw`<!doctype html>
     placeholder.value = ""; placeholder.textContent = t("Choose a language"); placeholder.disabled = true;
     if (!value) placeholder.selected = true;
     sel.appendChild(placeholder);
-    LANGUAGES.forEach(function (pair) {
+    LANGUAGES.slice().sort(function (a, b) { return a[0].localeCompare(b[0]); }).forEach(function (pair) {
       var opt = document.createElement("option");
       opt.value = pair[0]; opt.textContent = pair[0];
       if (value === pair[0]) opt.selected = true;

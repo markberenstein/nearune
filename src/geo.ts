@@ -43,9 +43,7 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   KE: "Swahili", TZ: "Swahili",
 };
 
-async function geocode(location: string): Promise<any | null> {
-  const q = (location || "").trim();
-  if (!q) return null;
+async function geocodeRaw(q: string): Promise<any | null> {
   try {
     const url =
       "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" +
@@ -59,6 +57,56 @@ async function geocode(location: string): Promise<any | null> {
   }
 }
 
+// When the geocoder finds nothing (usually a misspelling like "Mumbay" or
+// "San Fransisco"), ask Claude Haiku for the most likely intended place.
+// Returns null with no API key, on any failure, or when Claude isn't
+// confident — the caller then behaves exactly as before.
+const fixCache = new Map<string, string | null>();
+async function aiFixLocation(q: string): Promise<string | null> {
+  if (fixCache.has(q)) return fixCache.get(q)!;
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  let out: string | null = null;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 30,
+        system:
+          "The user typed a city or place name that may be misspelled or in another language/script. " +
+          "Reply with only the corrected place in English as \"City, Country\" (or \"City, State\" for the US), " +
+          "nothing else. If the text is not plausibly a real place, reply with exactly NONE.",
+        messages: [{ role: "user", content: q.slice(0, 80) }],
+      }),
+    });
+    if (res.ok) {
+      const data: any = await res.json();
+      const text = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().split("\n")[0];
+      if (text && !/^none\b/i.test(text) && text.length <= 60) out = text;
+    }
+  } catch {}
+  if (fixCache.size > 500) fixCache.clear();
+  fixCache.set(q, out);
+  return out;
+}
+
+async function geocodeFull(location: string): Promise<{ first: any | null; corrected: string | null }> {
+  const q = (location || "").trim();
+  if (!q) return { first: null, corrected: null };
+  const first = await geocodeRaw(q);
+  if (first) return { first, corrected: null };
+  const fixed = await aiFixLocation(q);
+  if (!fixed || fixed.toLowerCase() === q.toLowerCase()) return { first: null, corrected: null };
+  const again = await geocodeRaw(fixed) || (await geocodeRaw(fixed.split(",")[0].trim()));
+  return again ? { first: again, corrected: fixed } : { first: null, corrected: null };
+}
+
+async function geocode(location: string): Promise<any | null> {
+  return (await geocodeFull(location)).first;
+}
+
 export async function resolveTimezoneFromLocation(location: string): Promise<string | null> {
   const first = await geocode(location);
   const tz = first && typeof first.timezone === "string" ? first.timezone : null;
@@ -69,12 +117,12 @@ export async function resolveTimezoneFromLocation(location: string): Promise<str
 // freely changeable) — one geocoding lookup answers both the timezone and
 // the language suggestion, so the "where you're based" field only needs to
 // be resolved once.
-export async function resolveLocationInfo(location: string): Promise<{ tz: string | null; language: string | null }> {
-  const first = await geocode(location);
+export async function resolveLocationInfo(location: string): Promise<{ tz: string | null; language: string | null; corrected: string | null }> {
+  const { first, corrected } = await geocodeFull(location);
   const tz = first && typeof first.timezone === "string" ? first.timezone : null;
   const countryCode = first && typeof first.country_code === "string" ? first.country_code.toUpperCase() : "";
   const language = (countryCode && COUNTRY_TO_LANGUAGE[countryCode]) || null;
-  return { tz: tz || null, language };
+  return { tz: tz || null, language, corrected };
 }
 
 // Lower-case ISO country code (e.g. "us", "in") for a free-text location —

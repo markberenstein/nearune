@@ -72,31 +72,45 @@ export async function topSongs(location: string, limit = 5): Promise<MusicChart>
     if (Date.now() - cached.at < ttl) return cached.value;
   }
   let value: MusicChart = null;
-  try {
-    // Apple's feed only serves a few fixed sizes (10/25/50/100) — always
-    // pull 10 and slice down to what was actually asked for.
-    const url = "https://rss.applemarketingtools.com/api/v2/" + country + "/music/most-played/10/songs.json";
-    const res = await fetch(url);
-    if (res.ok) {
-      const data: any = await res.json();
-      const results: any[] = (data && data.feed && Array.isArray(data.feed.results) && data.feed.results) || [];
-      const top = results.slice(0, limit);
-      if (top.length) {
-        const previewUrls = await Promise.all(top.map((r) => (r ? fetchPreviewUrl(r.name || "", r.artistName || "") : Promise.resolve(null))));
-        value = top.map((r, i) => ({
-          rank: i + 1,
-          title: r.name || "",
-          artist: r.artistName || "",
-          url: r.url || "",
-          artworkUrl: r.artworkUrl100 || "",
-          previewUrl: previewUrls[i],
-        }));
+  // Apple's feed often answers 504 for a few seconds at a time, so try up to
+  // 3 times before giving up. Apple's feed only serves a few fixed sizes
+  // (10/25/50/100) — always pull 10 and slice down to what was asked for.
+  const url = "https://rss.applemarketingtools.com/api/v2/" + country + "/music/most-played/10/songs.json";
+  for (let attempt = 1; attempt <= 3 && !value; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const data: any = await res.json();
+        const results: any[] = (data && data.feed && Array.isArray(data.feed.results) && data.feed.results) || [];
+        const top = results.slice(0, limit);
+        if (top.length) {
+          const previewUrls = await Promise.all(top.map((r) => (r ? fetchPreviewUrl(r.name || "", r.artistName || "") : Promise.resolve(null))));
+          value = top.map((r, i) => ({
+            rank: i + 1,
+            title: r.name || "",
+            artist: r.artistName || "",
+            url: r.url || "",
+            artworkUrl: r.artworkUrl100 || "",
+            previewUrl: previewUrls[i],
+          }));
+        } else {
+          console.log("[music] fetch " + country + " -> HTTP 200 but no results");
+          break; // an empty chart won't improve on retry
+        }
+      } else {
+        console.log("[music] fetch " + country + " -> HTTP " + res.status + " (attempt " + attempt + ")");
+        if (res.status < 500) break; // 4xx won't improve on retry
       }
-    } else {
-      console.log("[music] fetch " + country + " -> HTTP " + res.status);
+    } catch (err: any) {
+      console.log("[music] fetch " + country + " -> threw: " + (err && err.message ? err.message : String(err)) + " (attempt " + attempt + ")");
     }
-  } catch (err: any) {
-    console.log("[music] fetch " + country + " -> threw: " + (err && err.message ? err.message : String(err)));
+    if (!value && attempt < 3) await new Promise((r) => setTimeout(r, 700 * attempt));
+  }
+  // If Apple is down right now but we had a good chart before, keep showing
+  // it rather than blanking the Local Feel tab.
+  if (!value && cached && cached.value) {
+    chartCache.set(cacheKey, { at: Date.now() - CHART_TTL + FAILURE_TTL, value: cached.value });
+    return cached.value;
   }
   chartCache.set(cacheKey, { at: Date.now(), value });
   return value;

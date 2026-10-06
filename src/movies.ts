@@ -66,7 +66,7 @@ export async function topMovies(location: string, limit = 5): Promise<MovieChart
   let value: MovieChart = null;
   try {
     const url = "https://itunes.apple.com/" + country + "/rss/topmovies/limit=" + limit + "/json";
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const data: any = await res.json();
       const entries: any[] = (data && data.feed && Array.isArray(data.feed.entry) && data.feed.entry) || [];
@@ -87,6 +87,12 @@ export async function topMovies(location: string, limit = 5): Promise<MovieChart
     }
   } catch (err: any) {
     console.log("[movies] fetch " + country + " -> threw: " + (err && err.message ? err.message : String(err)));
+  }
+  if (!value) console.log("[movies] no chart for " + country + " (feed empty, down, or not offered in that country)");
+  // Keep the last good chart if Apple's feed is failing right now.
+  if (!value && cached && cached.value) {
+    chartCache.set(cacheKey, { at: Date.now() - CHART_TTL + FAILURE_TTL, value: cached.value });
+    return cached.value;
   }
   chartCache.set(cacheKey, { at: Date.now(), value });
   return value;

@@ -1268,17 +1268,11 @@ const RAW = String.raw`<!doctype html>
     try {
       window.speechSynthesis.cancel(); // stop anything already playing first
       var u = new SpeechSynthesisUtterance(text);
-      var pinned = authorKey && personVoice(authorKey);
-      if (pinned) {
-        // Keep voice and lang paired as a matched set — some engines
-        // silently ignore the voice setting when it doesn't match lang,
-        // falling back to their own default for that lang instead, which
-        // would quietly undo the whole point of pinning one voice.
-        u.voice = pinned.voice;
-        u.lang = pinned.locale;
-      } else {
-        u.lang = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
-      }
+      // Until someone records a voice sample, always use the device's own
+      // default voice for the language. A hand-picked "gendered" voice from the
+      // name heuristic above could land on iOS novelty voices (Fred, Albert)
+      // that sound harsh, so personVoice() is intentionally not used here.
+      u.lang = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }

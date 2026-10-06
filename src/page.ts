@@ -2142,13 +2142,18 @@ const RAW = String.raw`<!doctype html>
   // person is still typing in the location field (it stays focused on
   // mobile until they tap away), which left the dropdown looking stuck.
   var lastLangSelectEl = null;
+  var lastLocInputEl = null;
   function suggestLanguageFromLocation(draft, locationText) {
     if (geoSuggestTimer) clearTimeout(geoSuggestTimer);
-    if (draft.languageTouched || !locationText.trim()) return;
+    if (!locationText.trim()) return;
     geoSuggestTimer = setTimeout(function () {
       fetch(RP + "/api/geo?location=" + encodeURIComponent(locationText.trim()))
         .then(function (r) { return r.json(); })
         .then(function (info) {
+          if (info && info.corrected && draft.location.trim() === locationText.trim()) {
+            draft.location = info.corrected;
+            if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = info.corrected;
+          }
           if (draft.languageTouched) return; // they picked one while we were waiting
           if (info && info.language && draft.location.trim() === locationText.trim()) {
             draft.language = info.language;
@@ -2220,7 +2225,8 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: t("Finish setting up your Nearune.") })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); }));
+    lastLocInputEl = textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
+    form.appendChild(lastLocInputEl);
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
@@ -2321,7 +2327,8 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: subtitle })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); }));
+    lastLocInputEl = textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
+    form.appendChild(lastLocInputEl);
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your email or Instagram handle", function (v) { registerDraft.email = v; }));
     form.appendChild(h("p", { class: "puzzle-guess-note", text: t("An Instagram handle works too — it just can't be used to recover a lost link, so keep your Nearune link handy.") }));

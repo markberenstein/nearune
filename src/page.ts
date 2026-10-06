@@ -75,13 +75,6 @@ const RAW = String.raw`<!doctype html>
     padding: 14px 18px; box-shadow: 0 1px 2px var(--shadow); flex-wrap: wrap;
   }
   .clock-block { text-align: center; min-width: 108px; }
-  .avatar { width: 46px; height: 46px; margin: 0 auto 2px; }
-  .avatar svg { width: 100%; height: 100%; display: block; }
-  .clock-name { font-size: 0.82rem; color: var(--ink); margin-bottom: 4px; }
-  .avatar-pick { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
-  .avatar-pick button { width: 52px; height: 52px; padding: 2px; border-radius: 50%; border: 2px solid transparent; background: none; cursor: pointer; }
-  .avatar-pick button.sel { border-color: #8C6FA8; }
-  .avatar-pick button svg { width: 100%; height: 100%; display: block; }
   .clock-city { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
@@ -2095,8 +2088,8 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
     return null;
   })();
-  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "", avatar: "a1" };
-  var acceptDraft = { name: "", location: "", language: "", languageTouched: false, avatar: "a1" };
+  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
+  var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Looks up the typed location and, unless the person has already picked
   // a language themselves, pre-selects the language most likely spoken
   // there — still just a starting point, freely changeable via the
@@ -2189,7 +2182,6 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); }));
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
-    form.appendChild(avatarPickerField(acceptDraft.avatar, function (id) { acceptDraft.avatar = id; renderApp(); }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Nearune") });
     btn.disabled = regBusy;
@@ -2198,7 +2190,7 @@ const RAW = String.raw`<!doctype html>
       regBusy = true; regError = ""; renderApp();
       fetch(RP + "/api/accept-invite", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: inviteParams.token, name: acceptDraft.name.trim(), location: acceptDraft.location.trim(), language: acceptDraft.language.trim(), tz: browserTz(), avatar: acceptDraft.avatar })
+        body: JSON.stringify({ token: inviteParams.token, name: acceptDraft.name.trim(), location: acceptDraft.location.trim(), language: acceptDraft.language.trim(), tz: browserTz() })
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
@@ -2239,7 +2231,7 @@ const RAW = String.raw`<!doctype html>
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined, avatar: registerDraft.avatar })
+      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -2297,7 +2289,6 @@ const RAW = String.raw`<!doctype html>
     // (questionPoolFor() uses it for both people's daily question), so
     // asking again on the second person's own registration would just be
     // a choice that silently gets thrown away.
-    form.appendChild(avatarPickerField(registerDraft.avatar, function (id) { registerDraft.avatar = id; renderApp(); }));
     if (soloRegistration) {
       form.appendChild(relationshipSelectField(registerDraft.relationship, function (v) { registerDraft.relationship = v; }));
     }
@@ -2451,7 +2442,11 @@ const RAW = String.raw`<!doctype html>
     app.appendChild(header());
     var travelRow = travelBlock();
     if (travelRow) app.appendChild(travelRow);
-    app.appendChild(inviteFlow(otherKey));
+    // Registered by email but not yet confirmed: show your own sky right
+    // away, with the "check your email" card where the invite card will go
+    // (the server only lets confirmed people send invites).
+    if (!isConfirmedKey(viewerKey)) app.appendChild(registrationFlow());
+    else app.appendChild(inviteFlow(otherKey));
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     var newsBlock = newsLineBlock();
@@ -2468,9 +2463,6 @@ const RAW = String.raw`<!doctype html>
     var del = h("button", { class: "switch-link", text: t("Delete my data") });
     del.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
     foot.appendChild(del);
-    var av = avatarEditor();
-    foot.appendChild(av.link);
-    if (av.card) app.appendChild(av.card);
     app.appendChild(foot);
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
@@ -2506,9 +2498,12 @@ const RAW = String.raw`<!doctype html>
     // (created via /new) is registration-required from the start.
     if (ROOM) {
       var mine = state.people && state.people[viewerKey];
+      var otherKey = viewerKey === "mark" ? "nikita" : "mark";
+      if (mine && !mine.confirmed && state.pendingConfirm && state.pendingConfirm[viewerKey] && !showRegisterForm && !isConfirmedKey(otherKey)) {
+        renderSoloHome(app, otherKey); return;
+      }
       if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }
 
-      var otherKey = viewerKey === "mark" ? "nikita" : "mark";
       var other = state.people && state.people[otherKey];
       var otherConfirmedYet = !!(other && other.confirmed);
 
@@ -2661,7 +2656,7 @@ const RAW = String.raw`<!doctype html>
     return !!(p && p.confirmed);
   }
   function soloMode() {
-    return !!(ROOM && viewerKey && isConfirmedKey(viewerKey) && !isConfirmedKey(otherKeyOf(viewerKey)));
+    return !!(ROOM && viewerKey && state.people && state.people[viewerKey] && !isConfirmedKey(otherKeyOf(viewerKey)));
   }
   // Whose world (weather / local story / charts) the main screen shows: your
   // own while solo, otherwise your partner's (or the previewed person's partner).
@@ -2915,79 +2910,13 @@ const RAW = String.raw`<!doctype html>
     }
     return wrap;
   }
-  var AVATARS = {
-    a1: { bg: "#CFE3F3", skin: "#E8B88A", hair: "#3B2A20", style: "short" },
-    a2: { bg: "#F3D9E3", skin: "#F5D0B0", hair: "#7A4B2A", style: "long" },
-    a3: { bg: "#DDEBD0", skin: "#9A6A48", hair: "#1E1612", style: "curly" },
-    a4: { bg: "#F1E3C4", skin: "#D9A57A", hair: "#5A4636", style: "beard" },
-    a5: { bg: "#E0D6F0", skin: "#C58E66", hair: "#2A1D2E", style: "bun" },
-    a0: { bg: "#E4E0DA", skin: "#BDB6AC", hair: "", style: "none" }
-  };
-  var AVATAR_IDS = ["a1", "a2", "a3", "a4", "a5"];
-  function avatarSvg(id) {
-    var a = AVATARS[id] || AVATARS.a0;
-    var o = '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="' + a.bg + '"/>';
-    o += '<path d="M10 64 Q12 46 32 46 Q52 46 54 64Z" fill="' + (a.style === "none" ? "#CFC9BF" : "#8C6FA8") + '"/>';
-    if (a.style === "long") o += '<path d="M18 32 Q16 12 32 12 Q48 12 46 32 L47 48 L38 48 L26 48 L17 48Z" fill="' + a.hair + '"/>';
-    o += '<circle cx="32" cy="30" r="13" fill="' + a.skin + '"/>';
-    if (a.style === "short") o += '<path d="M19 28 Q18 14 32 14 Q46 14 45 28 Q40 20 32 20 Q24 20 19 28Z" fill="' + a.hair + '"/>';
-    if (a.style === "long") o += '<path d="M19 29 Q20 15 32 15 Q44 15 45 29 Q38 21 32 21 Q26 21 19 29Z" fill="' + a.hair + '"/>';
-    if (a.style === "curly") [[22,22],[28,17],[36,17],[42,22],[19,29],[45,29],[32,16]].forEach(function (c) { o += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="6.5" fill="' + a.hair + '"/>'; });
-    if (a.style === "bun") o += '<circle cx="32" cy="11" r="6" fill="' + a.hair + '"/><path d="M19 28 Q18 14 32 14 Q46 14 45 28 Q40 20 32 20 Q24 20 19 28Z" fill="' + a.hair + '"/>';
-    if (a.style === "beard") o += '<path d="M19 32 Q32 58 45 32 Q45 45 32 48 Q19 45 19 32Z" fill="' + a.hair + '"/>';
-    if (a.style !== "none") {
-      o += '<circle cx="27" cy="30" r="1.6" fill="#2A1D1A"/><circle cx="37" cy="30" r="1.6" fill="#2A1D1A"/>';
-      o += '<path d="M27.5 37 Q32 41 36.5 37" fill="none" stroke="#2A1D1A" stroke-width="1.6" stroke-linecap="round"/>';
-      if (a.style === "beard") o += '<g fill="none" stroke="#2A1D1A" stroke-width="1.3"><circle cx="27" cy="30" r="4"/><circle cx="37" cy="30" r="4"/><path d="M31 30 L33 30"/></g>';
-    }
-    return o + '</svg>';
-  }
-  function avatarOf(key) {
-    var p = state.people && state.people[key];
-    return (p && p.avatar && AVATARS[p.avatar]) ? p.avatar : "a0";
-  }
-  function avatarNameBlock(key, pending) {
-    return [
-      h("div", { class: "avatar", html: avatarSvg(pending ? "a0" : avatarOf(key)) }),
-      h("div", { class: "clock-name", text: pending ? "" : personName(key) })
-    ];
-  }
-  function avatarPickerField(current, onPick) {
-    var wrap = h("div", {}, [h("p", { class: "puzzle-guess-note", style: "text-align:center;", text: t("Pick your character") })]);
-    var row = h("div", { class: "avatar-pick" });
-    AVATAR_IDS.forEach(function (id) {
-      var b = h("button", { type: "button", class: id === current ? "sel" : "", html: avatarSvg(id) });
-      b.addEventListener("click", function () { onPick(id); });
-      row.appendChild(b);
-    });
-    wrap.appendChild(row);
-    return wrap;
-  }
-  var showAvatarPicker = false;
-  function avatarEditor() {
-    var link = h("button", { class: "switch-link", text: t("Change my character") });
-    link.addEventListener("click", function () { showAvatarPicker = !showAvatarPicker; renderApp(); });
-    var card = null;
-    if (showAvatarPicker) {
-      card = h("div", { class: "card" }, [avatarPickerField(avatarOf(viewerKey), function (id) {
-        showAvatarPicker = false;
-        fetch(RP + "/api/set-avatar", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, avatar: id }) })
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (d) { if (d) state = d; renderApp(); })
-          .catch(function () { renderApp(); });
-        if (state.people && state.people[viewerKey]) state.people[viewerKey].avatar = id;
-        renderApp();
-      })]);
-    }
-    return { link: link, card: card };
-  }
   function clockBlock(key) {
     var cityText = effectiveClockLocation(key);
     var cityLabel = personIsTraveling(key) ? ("✈️ " + cityText) : cityText;
-    return h("div", { class: "clock-block" }, avatarNameBlock(key, false).concat([
+    return h("div", { class: "clock-block" }, [
       h("div", { class: "clock-city", text: cityLabel }),
       h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
-    ]));
+    ]);
   }
   // Stand-in for a partner who hasn't registered yet: "Pending" plus how long
   // ago the invite went out (a placeholder city/time would be misleading).
@@ -2995,11 +2924,11 @@ const RAW = String.raw`<!doctype html>
     var at = state.pendingInviteAt && state.pendingInviteAt[key];
     var days = at ? Math.floor((Date.now() - Date.parse(at)) / 86400000) : 0;
     var sub = !at ? t("Not invited yet") : days < 1 ? t("Invited today") : days === 1 ? t("Invited 1 day ago") : tTemplate("Invited {n} days ago", { n: String(days) });
-    return h("div", { class: "clock-block" }, avatarNameBlock(key, true).concat([
+    return h("div", { class: "clock-block" }, [
       h("div", { class: "clock-city", text: t("Pending") }),
       h("div", { class: "clock-time", text: "—" }),
       h("div", { class: "puzzle-guess-note", style: "margin: 2px 0 0;", text: sub }),
-    ]));
+    ]);
   }
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
@@ -3932,11 +3861,6 @@ const RAW = String.raw`<!doctype html>
     var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
     deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
     row.appendChild(deleteLink);
-    if (ROOM) {
-      var av = avatarEditor();
-      row.appendChild(av.link);
-      if (av.card) return h("div", {}, [av.card, row]);
-    }
     return row;
   }
 

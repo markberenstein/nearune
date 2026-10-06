@@ -53,8 +53,6 @@ export type PersonProfile = {
   // never proof of identity (a handle sign-up has no email, hence no email
   // recovery either).
   instagram?: string;
-  // One of the built-in characters ("a1".."a5"), picked at registration.
-  avatar?: string;
   voiceId?: string;
   hasVoice?: boolean;
   // ISO timestamp of the last photo this person shared (see storage.ts's

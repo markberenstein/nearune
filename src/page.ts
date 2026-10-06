@@ -3924,7 +3924,7 @@ const RAW = String.raw`<!doctype html>
     var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
     deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
     row.appendChild(deleteLink);
-    if (ROOM && viewerKey) {
+    if (viewerKey) {
       var blockLink = h("button", { class: "switch-link", type: "button", text: isBlocked() ? tTemplate("Unblock {name}", { name: personName(otherKeyOf(viewerKey)) }) : tTemplate("Block {name}", { name: personName(otherKeyOf(viewerKey)) }) });
       blockLink.addEventListener("click", function () { setBlocked(!isBlocked()); });
       row.appendChild(blockLink);

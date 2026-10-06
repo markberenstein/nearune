@@ -2207,6 +2207,10 @@ const RAW = String.raw`<!doctype html>
           inviteParams = null;
           online = true;
           renderApp();
+          // Their weather / Local Feel were never fetched while the invite
+          // screen was showing — load them now instead of waiting for the
+          // next scheduled refresh.
+          loadWeather(); loadNews(); loadMusic(); loadMovies();
         })
         .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
     });

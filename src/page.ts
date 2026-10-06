@@ -4372,7 +4372,7 @@ export function buildPrivacyPage() {
   return legalPageShell(
     "Privacy Policy",
     `<h1>Privacy Policy</h1>
-    <p class="updated">Last updated September 2026</p>
+    <p class="updated">Last updated October 2026</p>
     <p>Nearune is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
 
     <h2>How access works</h2>
@@ -4384,6 +4384,11 @@ export function buildPrivacyPage() {
       <li>A timezone, resolved from that location text (or your browser's reported timezone if that fails) — used only to schedule the daily question rollover.</li>
       <li>Your daily answers, comments, and short status line.</li>
       <li>Photos you upload for the puzzle feature, and the questions/answers attached to them.</li>
+      <li>A photo you choose to share with your partner.</li>
+      <li>If you choose to record one, a voice sample, and the voice identifier created from it (see below).</li>
+      <li>If you sign up with an Instagram handle, that handle (unverified text you typed).</li>
+      <li>If you turn on reminders, the notification token for your device.</li>
+      <li>A private record of any report you make about your partner's content, kept only so the app's owner can review it.</li>
     </ul>
 
     <h2>What we do with your email</h2>
@@ -4391,6 +4396,21 @@ export function buildPrivacyPage() {
 
     <h2>Where data lives</h2>
     <p>Room data and uploaded photos are stored in a cloud object-storage bucket. Outgoing emails (confirmations, invites, recovery links) are sent through a transactional email provider (Resend or SendGrid) — the email content passes through that provider but isn't retained by us beyond what's needed to send it. Location text you enter is sent to a free geocoding service (Open-Meteo) solely to resolve a timezone and language default; it isn't stored by us beyond the fields above.</p>
+
+    <h2>Other services that process your data</h2>
+    <p>To provide specific features, text or data you enter is sent to these services. We use them only for the feature named, not for advertising.</p>
+    <ul>
+      <li><strong>Translation (Google Translate):</strong> the text of questions, answers, comments and headlines is sent to be translated into your partner's language.</li>
+      <li><strong>Voice (ElevenLabs):</strong> if you record a voice sample, it is sent to ElevenLabs to create a voice that reads your messages aloud to your partner; the text being read is sent to them too. The sample is yours: you can stop using it or delete the room at any time.</li>
+      <li><strong>Weather (Apple WeatherKit):</strong> your registered or travel city is used to look up local weather.</li>
+      <li><strong>Local stories (Google News):</strong> your city name is used to find a light local news story.</li>
+      <li><strong>Popular songs and movies (Deezer and Apple charts):</strong> only the country is used.</li>
+      <li><strong>Hosting (Railway):</strong> the service runs on Railway's cloud infrastructure, where room data is stored.</li>
+      <li><strong>Notifications (Apple Push Notification service):</strong> a device token is used to deliver reminders if you turn them on.</li>
+    </ul>
+
+    <h2>Reporting and blocking</h2>
+    <p>Each person in a room can report their partner's photo, answer or comment, and can block their partner to hide that content from their own screen. Reports are logged for the app's owner to review.</p>
 
     <h2>What we don't do</h2>
     <p>We don't run ads, use ad trackers or analytics pixels, or sell or share your data with third parties for marketing. We don't read your answers except as needed to operate or debug the service.</p>

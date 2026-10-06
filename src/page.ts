@@ -4096,7 +4096,6 @@ export function buildNewRoomPage(): string {
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Already registered? Recover your link</a></p>
-  <p class="note"><a href="/?legacy=1" style="color:var(--ink-soft)">Mark or Nikita, on a new device? Tap here</a></p>
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>
 </div>
 <script>

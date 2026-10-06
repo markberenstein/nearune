@@ -46,7 +46,25 @@ Bun.serve({
   idleTimeout: 60,
   async fetch(req, server) {
     const url = new URL(req.url);
+    // Behind Railway's proxy req.url is plain http; links we hand out (invite,
+    // confirm, etc.) must use the public https origin instead.
+    const fwdProto = (req.headers.get("x-forwarded-proto") || "").split(",")[0].trim();
+    const publicOrigin = fwdProto ? fwdProto + "://" + url.host : url.origin;
     const { roomId, restPath } = parseRoom(url.pathname);
+
+    // Short invite links: /j/<room>/<token> redirects to the full
+    // /r/<room>/?invite=<who>&token=<token> form the app already understands.
+    const shortInvite = url.pathname.match(/^\/j\/([a-zA-Z0-9]{1,40})\/([a-zA-Z0-9-]{6,64})\/?$/);
+    if (req.method === "GET" && shortInvite) {
+      const [, sRoom, sToken] = shortInvite;
+      const sState = await loadState(sRoom);
+      let sWho = "";
+      for (const k of ["mark", "nikita"] as const) {
+        if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken) sWho = k;
+      }
+      const dest = "/r/" + sRoom + "/" + (sWho ? "?invite=" + sWho + "&token=" + sToken : "");
+      return new Response(null, { status: 302, headers: { location: dest } });
+    }
     const roomPrefix = roomId ? "/r/" + roomId : "";
     const HOUR = 60 * 60 * 1000;
 
@@ -85,7 +103,7 @@ Bun.serve({
       const entries = await lookupEmailIndex(await hashEmail(email));
       if (entries.length > 0) {
         const links = entries
-          .map((e) => url.origin + (e.roomId ? "/r/" + e.roomId : ""))
+          .map((e) => publicOrigin + (e.roomId ? "/r/" + e.roomId : ""))
           .filter((v, i, arr) => arr.indexOf(v) === i);
         const list = links.map((l) => "<li><a href=\"" + l + "\">" + l + "</a></li>").join("");
         await sendEmail(
@@ -577,7 +595,7 @@ Bun.serve({
         // confirm) never overwrites an already-chosen relationship.
         if (relationship && !s.relationship) s.relationship = relationship;
       });
-      const confirmUrl = url.origin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
+      const confirmUrl = publicOrigin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
       // Sent in whichever language this person just picked on the
       // registration form (translateEmailStrings falls back to English,
       // string-by-string, if that language is unset/unrecognized or a
@@ -633,7 +651,7 @@ Bun.serve({
       // that doesn't share localStorage with wherever they registered (e.g.
       // an email app's in-app browser) drops them on the "who's here?"
       // picker instead of straight into their next step.
-      const backUrl = url.origin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
+      const backUrl = publicOrigin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
       const html = ok
         ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Nearune</a></p></body></html>"
         : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";
@@ -663,14 +681,17 @@ Bun.serve({
       if (cur.people[other] && cur.people[other]!.confirmed) {
         return json({ error: "already_registered" }, { status: 409 });
       }
-      const token = crypto.randomUUID();
+      // 12 hex chars keeps the shareable link short; invites are rate-limited.
+      const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
         s.pendingInvite[other] = handle
           ? { token, at: new Date().toISOString(), instagram: handle }
           : { token, at: new Date().toISOString() };
       });
-      const inviteUrl = url.origin + roomPrefix + "/?invite=" + other + "&token=" + token;
+      const inviteUrl = roomId
+        ? publicOrigin + "/j/" + roomId + "/" + token
+        : publicOrigin + roomPrefix + "/?invite=" + other + "&token=" + token;
       if (handle) {
         // Nothing to email — the link goes back to this browser and the
         // inviter sends it themselves (e.g. as an Instagram DM).

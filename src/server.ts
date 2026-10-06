@@ -198,6 +198,30 @@ Bun.serve({
         try {
           const state = await loadState(id);
           if (!state.pushSubs) continue;
+          // "Still waiting" nudge: an invite unanswered for 2+ days, at most
+          // once every 3 days, pushed to whoever sent it.
+          const DAY_MS = 24 * 60 * 60 * 1000;
+          for (const other of ["mark", "nikita"] as PersonKey[]) {
+            const inv = state.pendingInvite && state.pendingInvite[other];
+            const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
+            const inviterSub = state.pushSubs[inviterKey];
+            if (!inv || !inviterSub) continue;
+            if (state.people && state.people[other] && state.people[other]!.confirmed) continue;
+            const lastNudge = state.inviteNudgeAt ? Date.parse(state.inviteNudgeAt) : 0;
+            if (Date.now() - Date.parse(inv.at) < 2 * DAY_MS || Date.now() - lastNudge < 3 * DAY_MS) continue;
+            const nres = await sendPush(inviterSub, {
+              title: "Still waiting for your Nearune partner",
+              body: "Open Nearune to get a fresh invite link and send it to them yourself — text, Instagram or email.",
+              tag: "invite-nudge",
+            });
+            if (nres.ok) {
+              sent++;
+              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); });
+            }
+            if (nres.gone) {
+              await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+            }
+          }
           if (state.pushLastMorningKey === today) continue;
           const count = unansweredCount(state, today);
           if (count > 0) {

@@ -321,16 +321,20 @@ export function forClient(state: State): State {
   // what the inviter typed, not a secret, and the client needs it to word
   // the "send them this link yourself" note correctly after a reload.
   const piHandle: Record<string, string> = {};
+  // When each pending invite was sent (a timestamp, not a secret) — lets the
+  // client nudge the inviter after a couple of days with no sign-up.
+  const piAt: Record<string, string> = {};
   if (pendingInvite) {
     for (const k of Object.keys(pendingInvite)) {
       pi[k] = true;
+      if (pendingInvite[k] && pendingInvite[k].at) piAt[k] = pendingInvite[k].at;
       if (pendingInvite[k] && pendingInvite[k].instagram) piHandle[k] = pendingInvite[k].instagram;
     }
   }
   // Computed fresh on every response — the client displays this number
   // as-is rather than recomputing it, so both devices always agree.
   const puzzleUnlocked = puzzleUnlockedCount(state);
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, puzzleUnlocked } as State;
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteAt: piAt, puzzleUnlocked } as State;
   if (withFlags.people) {
     const strippedPeople: any = {};
     for (const k of Object.keys(withFlags.people)) {

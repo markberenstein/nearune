@@ -108,6 +108,11 @@ export type State = {
   // the Instagram handle an invite was addressed to, if it went to a handle
   // rather than an email.
   pendingInviteHandle?: Partial<Record<PersonKey, string>>;
+  // Server-computed on every response (not persisted) — ISO time each
+  // pending invite was sent, for the "still waiting" nudge.
+  pendingInviteAt?: Partial<Record<PersonKey, string>>;
+  // ISO time the inviter was last sent the "still waiting" push (persisted).
+  inviteNudgeAt?: string;
   puzzleCurrentId?: string;
   // Server-computed on every response (not persisted) — how many pieces of
   // the current picture are unlocked, including the streak speed-up.

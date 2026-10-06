@@ -2383,6 +2383,13 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
         if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
       }
+      // After two days with no sign-up, nudge the inviter to send the link
+      // themselves (text, Instagram or email) — emails can sit in spam.
+      var invAt = state.pendingInviteAt && state.pendingInviteAt[otherKey];
+      var invDays = invAt ? Math.floor((Date.now() - Date.parse(invAt)) / 86400000) : 0;
+      if (invDays >= 2) {
+        card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: tTemplate("It's been {days} days and {name} hasn't joined yet. Tap below for a fresh link, then send it yourself by text, Instagram or email.", { days: String(invDays), name: otherLabel }) }));
+      }
       if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var row = [];
       // With a handle invite and the link already on screen, Share/Copy are

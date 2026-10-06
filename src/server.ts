@@ -28,7 +28,7 @@ import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs } from "./music";
 import { topMovies } from "./movies";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
@@ -504,7 +504,13 @@ Bun.serve({
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const who = body && body.who;
       const name = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
-      const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      // "contact" is either an email or an Instagram handle (older cached
+      // clients still send "email", which keeps working).
+      const contact =
+        typeof body?.contact === "string" ? body.contact.trim().slice(0, 200)
+        : typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      const email = isValidEmail(contact) ? contact : "";
+      const handle = email ? null : normalizeInstagramHandle(contact);
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
@@ -515,8 +521,30 @@ Bun.serve({
         body?.relationship === "its_complicated"
           ? body.relationship
           : undefined;
-      if (!isPerson(who) || !name || !isValidEmail(email)) {
+      if (!isPerson(who) || !name || (!email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
+      }
+      if (handle) {
+        // Instagram-handle sign-up: nothing is emailed (there's no address),
+        // so there's nothing to confirm and nothing that could be used to
+        // spam anyone — an IP limit is enough. The handle is just a label
+        // shown to the partner; it can't be verified, which is why this
+        // path has no email recovery (see types.ts's PersonProfile.instagram).
+        if (!rateLimit("register-ip:" + clientIp(req, server), 10, HOUR)) {
+          return json({ error: "rate_limited" }, { status: 429 });
+        }
+        const curH = await loadState(roomId);
+        if (curH.people && curH.people[who] && curH.people[who]!.confirmed) {
+          return json({ error: "already_registered" }, { status: 409 });
+        }
+        const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
+        const stateH = await saveState(roomId, (s) => {
+          if (!s.people) s.people = {};
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, instagram: handle };
+          if (s.pendingConfirm) delete s.pendingConfirm[who];
+          if (relationship && !s.relationship) s.relationship = relationship;
+        });
+        return json({ ...forClient(stateH), _viaHandle: true });
       }
       // Two limits: how many confirm emails this visitor can trigger, and
       // how many any single inbox can be sent regardless of who's asking —
@@ -616,11 +644,15 @@ Bun.serve({
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const who = body && body.who;
-      const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
-      if (!isPerson(who) || !isValidEmail(email)) {
+      const contact =
+        typeof body?.contact === "string" ? body.contact.trim().slice(0, 200)
+        : typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      const email = isValidEmail(contact) ? contact : "";
+      const handle = email ? null : normalizeInstagramHandle(contact);
+      if (!isPerson(who) || (!email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
-      if (!rateLimit("invite-ip:" + clientIp(req, server), 10, HOUR) || !rateLimit("invite-email:" + email.toLowerCase(), 3, HOUR)) {
+      if (!rateLimit("invite-ip:" + clientIp(req, server), 10, HOUR) || (email && !rateLimit("invite-email:" + email.toLowerCase(), 3, HOUR))) {
         return json({ error: "rate_limited" }, { status: 429 });
       }
       const cur = await loadState(roomId);
@@ -634,9 +666,16 @@ Bun.serve({
       const token = crypto.randomUUID();
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
-        s.pendingInvite[other] = { token, at: new Date().toISOString() };
+        s.pendingInvite[other] = handle
+          ? { token, at: new Date().toISOString(), instagram: handle }
+          : { token, at: new Date().toISOString() };
       });
       const inviteUrl = url.origin + roomPrefix + "/?invite=" + other + "&token=" + token;
+      if (handle) {
+        // Nothing to email — the link goes back to this browser and the
+        // inviter sends it themselves (e.g. as an Instagram DM).
+        return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl });
+      }
       const inviterName = cur.people[who]!.name;
       const r = await sendEmail(
         email,
@@ -668,7 +707,8 @@ Bun.serve({
       const tz = resolvedTz || browserTz;
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true };
+        const invitedHandle = s.pendingInvite && s.pendingInvite[who!] && s.pendingInvite[who!]!.instagram;
+        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}) };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
       // Let the person who sent the invite know their partner is in —

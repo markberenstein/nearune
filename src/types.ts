@@ -47,6 +47,12 @@ export type PersonProfile = {
   tz?: string;
   confirmed: boolean;
   emailHash?: string;
+  // Instagram username (no "@"), set when this person signed up with a
+  // handle instead of an email, shown to their partner as a tappable link.
+  // UNVERIFIED — anyone can type any handle, so it's only ever a label,
+  // never proof of identity (a handle sign-up has no email, hence no email
+  // recovery either).
+  instagram?: string;
   voiceId?: string;
   hasVoice?: boolean;
   // ISO timestamp of the last photo this person shared (see storage.ts's
@@ -97,7 +103,11 @@ export type State = {
   comments: Record<string, Comment[]>;
   people?: Partial<Record<PersonKey, PersonProfile>>;
   pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string }>>;
-  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string }>>;
+  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string }>>;
+  // Server-computed on every response (never persisted, see forClient) —
+  // the Instagram handle an invite was addressed to, if it went to a handle
+  // rather than an email.
+  pendingInviteHandle?: Partial<Record<PersonKey, string>>;
   puzzleCurrentId?: string;
   // Server-computed on every response (not persisted) — how many pieces of
   // the current picture are unlocked, including the streak speed-up.

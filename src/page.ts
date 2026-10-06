@@ -2224,7 +2224,7 @@ const RAW = String.raw`<!doctype html>
   var lastConfirmUrl = "";
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
-    if (!name || !email) { regError = t("Name and email required."); renderApp(); return; }
+    if (!name || !email) { regError = t("Name and email or Instagram handle required."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
@@ -2233,7 +2233,7 @@ const RAW = String.raw`<!doctype html>
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, email: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined })
+      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -2284,7 +2284,8 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     form.appendChild(textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); }));
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
-    form.appendChild(textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; }));
+    form.appendChild(textField(registerDraft.email, "Your email or Instagram handle", function (v) { registerDraft.email = v; }));
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("An Instagram handle works too — it just can't be used to recover a lost link, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
     // (questionPoolFor() uses it for both people's daily question), so
@@ -2312,10 +2313,10 @@ const RAW = String.raw`<!doctype html>
   var lastInviteUrl = "";
   function submitInvite() {
     var email = inviteEmailDraft.trim();
-    if (!email) { regError = t("Enter an email first."); renderApp(); return; }
+    if (!email) { regError = t("Enter an email or Instagram handle first."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, email: email })
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, contact: email })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -2345,24 +2346,52 @@ const RAW = String.raw`<!doctype html>
     return btn;
   }
 
+  // Opens the phone's share sheet (so the link can go out as an Instagram DM,
+  // text, etc.) where the browser supports it; otherwise falls back to
+  // copying the link.
+  function shareLinkButton(url, label) {
+    var labelText = label || t("Share invite link");
+    var btn = h("button", { class: "switch-link", text: labelText });
+    btn.addEventListener("click", function () {
+      if (navigator.share) {
+        navigator.share({ title: "Nearune", url: url }).catch(function () {});
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+      } else {
+        window.prompt(t("Copy this link:"), url);
+      }
+    });
+    return btn;
+  }
+
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
+    var pendingHandle = state.pendingInviteHandle && state.pendingInviteHandle[otherKey];
     var otherLabel = inviteeLabel(otherKey);
     var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: otherLabel }) })])]);
     if (pending && !showInviteForm) {
-      card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: otherLabel }) }));
-      card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
-      if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
+      if (pendingHandle) {
+        // Instagram-handle invite: nothing was sent anywhere — the link is
+        // the invite, and the inviter delivers it themselves.
+        card.appendChild(h("p", { class: "question", text: tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
+        if (!lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Tap below to get a fresh link to send.") }));
+      } else {
+        card.appendChild(h("p", { class: "question", text: tTemplate("Invite sent — waiting for {name} to accept.", { name: otherLabel }) }));
+        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
+        if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
+      }
       if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-      var again = h("button", { class: "switch-link", text: t("Resend invite") });
+      var again = h("button", { class: "switch-link", text: pendingHandle ? t("Get a new invite link") : t("Resend invite") });
       again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
       var row = [again];
+      if (lastInviteUrl && pendingHandle) row.unshift(shareLinkButton(lastInviteUrl));
       if (lastInviteUrl) row.push(copyLinkButton(lastInviteUrl));
       card.appendChild(h("div", { class: "switch-row" }, row));
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
       var form = h("div", { class: "puzzle-setup" });
-      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s email", function (v) { inviteEmailDraft = v; }));
+      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s email or Instagram handle", function (v) { inviteEmailDraft = v; }));
+      form.appendChild(h("p", { class: "puzzle-guess-note", text: t("With an Instagram handle, you'll get a link to send them yourself.") }));
       if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
       btn.disabled = regBusy;
@@ -3145,6 +3174,16 @@ const RAW = String.raw`<!doctype html>
       }
     } else {
       wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo yet.", { name: partnerName }) }));
+    }
+    // If your partner signed up with (or was invited by) an Instagram
+    // handle, link to it — a plain https link, opens in the browser/app.
+    // The handle is unverified text they entered, so it's only a label.
+    var partnerIg = state.people && state.people[otherKey] && state.people[otherKey].instagram;
+    if (partnerIg) {
+      var igLine = h("p", { class: "voice-card-desc" });
+      igLine.appendChild(document.createTextNode("📸 "));
+      igLine.appendChild(h("a", { href: "https://instagram.com/" + encodeURIComponent(partnerIg), target: "_blank", rel: "noopener noreferrer", text: "@" + partnerIg + " on Instagram" }));
+      wrap.appendChild(igLine);
     }
     if (photoUploadState.error) {
       wrap.appendChild(h("p", { class: "voice-card-error", text: photoUploadState.error }));
@@ -4100,7 +4139,7 @@ export function buildRecoverPage(): string {
 <body>
 <div class="card">
   <h1>Lost your link?</h1>
-  <p>Enter the email you used when you registered, and if it matches, we'll send you your Nearune room link.</p>
+  <p>Enter the email you used when you registered, and if it matches, we'll send you your Nearune room link. (Signed up with an Instagram handle instead? We have no email on file for you, so ask your partner to send you the room link again.)</p>
   <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
   <button id="go">Send my link</button>
   <p class="note" id="msg"></p>

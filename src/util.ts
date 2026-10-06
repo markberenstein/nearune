@@ -31,6 +31,20 @@ export function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
+// Accepts what people actually type for an Instagram username — "@mark.b",
+// "mark.b", or a pasted profile link like "https://instagram.com/mark.b/?hl=en"
+// — and returns the bare lowercase handle, or null if it isn't a valid
+// Instagram username (1-30 chars of letters, digits, "." and "_"). Nothing
+// here can PROVE the person owns that account; see /api/register for how
+// that limits what a handle sign-up is allowed to do.
+export function normalizeInstagramHandle(raw: string): string | null {
+  let s = (raw || "").trim();
+  s = s.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^(www\.)?instagram\.com\//i, "");
+  s = s.split(/[/?#]/)[0];
+  s = s.replace(/^@+/, "").toLowerCase();
+  return /^[a-z0-9._]{1,30}$/.test(s) ? s : null;
+}
+
 export async function readJson(req: Request): Promise<any> {
   try {
     return await req.json();
@@ -303,11 +317,20 @@ export function forClient(state: State): State {
   const pc: Record<string, boolean> = {};
   if (pendingConfirm) for (const k of Object.keys(pendingConfirm)) pc[k] = true;
   const pi: Record<string, boolean> = {};
-  if (pendingInvite) for (const k of Object.keys(pendingInvite)) pi[k] = true;
+  // Invites sent to an Instagram handle (no email involved) — the handle is
+  // what the inviter typed, not a secret, and the client needs it to word
+  // the "send them this link yourself" note correctly after a reload.
+  const piHandle: Record<string, string> = {};
+  if (pendingInvite) {
+    for (const k of Object.keys(pendingInvite)) {
+      pi[k] = true;
+      if (pendingInvite[k] && pendingInvite[k].instagram) piHandle[k] = pendingInvite[k].instagram;
+    }
+  }
   // Computed fresh on every response — the client displays this number
   // as-is rather than recomputing it, so both devices always agree.
   const puzzleUnlocked = puzzleUnlockedCount(state);
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, puzzleUnlocked } as State;
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, puzzleUnlocked } as State;
   if (withFlags.people) {
     const strippedPeople: any = {};
     for (const k of Object.keys(withFlags.people)) {

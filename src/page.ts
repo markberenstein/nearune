@@ -2919,10 +2919,20 @@ const RAW = String.raw`<!doctype html>
     var cityText = effectiveClockLocation(key);
     var cityLabel = personIsTraveling(key) ? ("✈️ " + cityText) : cityText;
     var isMe = key === effectiveViewKey();
-    return h("div", { class: "clock-block" + (isMe ? " clock-me" : "") }, [
+    var block = h("div", { class: "clock-block" + (isMe ? " clock-me" : "") }, [
       h("div", { class: "clock-city", text: cityLabel }),
       h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
     ]);
+    // Tapping a clock switches the view the same way tapping that person's
+    // status chip does (preview only — never changes who you are).
+    if (!soloMode() && viewerKey && !inviteParams) {
+      block.style.cursor = "pointer";
+      block.addEventListener("click", function () {
+        if (key === viewerKey) { if (previewKey) previewAsPartner(previewKey); }
+        else previewAsPartner(key);
+      });
+    }
+    return block;
   }
   // Stand-in for a partner who hasn't registered yet: "Pending" plus how long
   // ago the invite went out (a placeholder city/time would be misleading).

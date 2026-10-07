@@ -239,7 +239,8 @@ const RAW = String.raw`<!doctype html>
   .voice-card-error { font-size: 0.8rem; color: var(--bad, #B3261E); margin: 0; }
   .voice-card-prompt { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); margin: 2px 0 0; }
   .voice-card-status-text { font-size: 0.8rem; color: var(--ink-soft); margin: 0; }
-  .voice-card-actions { display: flex; gap: 8px; }
+  .voice-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .voice-card-actions .mini-btn { border-radius: 16px; line-height: 1.25; padding: 9px 14px; }
   .voice-card-howto { margin: 2px 0 0; }
   .voice-card-howto summary {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -3392,7 +3393,7 @@ const RAW = String.raw`<!doctype html>
     commentInput.type = "text";
     commentInput.maxLength = 200;
     commentInput.className = "photo-comment";
-    commentInput.placeholder = t("Add a comment under your photo (optional)");
+    commentInput.placeholder = t("Add a comment (optional)");
     commentInput.value = photoCaptionDraft !== null ? photoCaptionDraft : ((myPhotoAt && state.people[key].photoCaption) || "");
     commentInput.addEventListener("input", function () { photoCaptionDraft = commentInput.value; });
     wrap.appendChild(commentInput);

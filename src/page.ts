@@ -25,11 +25,12 @@ const RAW = String.raw`<!doctype html>
     --surface: #FFFFFF;
     --surface-2: #F3E4D6;
     --ink: #2B211B;
-    --ink-soft: #8B7A6C;
+    --ink-soft: #6F6054;
     --line: #E8D9C8;
-    --accent: #C1673B;
+    --accent: #A9532B;
     --accent-ink: #8A4A2B;
     --accent-2: #B98A52;
+    --on-accent: #FFF8F1;
     --good: #7C8F63;
     --shadow: rgba(43,33,25,.10);
     --radius: 18px;
@@ -46,6 +47,7 @@ const RAW = String.raw`<!doctype html>
       --accent: #E8B75A;
       --accent-ink: #E8B75A;
       --accent-2: #9576BE;
+      --on-accent: #1D2130;
       --good: #9FB77E;
       --shadow: rgba(0,0,0,.45);
     }
@@ -92,11 +94,11 @@ const RAW = String.raw`<!doctype html>
   .weather-widget-row { display: flex; flex-direction: row; align-items: center; gap: 14px; }
   .weather-widget-tile {
     display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
-    flex: none; width: 92px; height: 104px; border-radius: 20px; padding: 10px 12px;
-    border: none; cursor: pointer; box-shadow: 0 4px 14px var(--shadow);
-    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    flex: none; width: 104px; min-height: 104px; height: auto; gap: 6px; border-radius: 20px; padding: 10px 12px;
+    border: none; cursor: pointer; box-shadow: inset 0 0 0 200px rgba(0,0,0,0.32), 0 4px 14px var(--shadow);
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.55); text-align: left; overflow-wrap: anywhere;
   }
-  .weather-widget-open { box-shadow: 0 4px 14px var(--shadow), 0 0 0 2px var(--accent); }
+  .weather-widget-open { box-shadow: inset 0 0 0 200px rgba(0,0,0,0.32), 0 4px 14px var(--shadow), 0 0 0 2px var(--accent); }
   .weather-widget-tile-icon { line-height: 1; }
   .weather-widget-tile-icon svg { width: 22px; height: 22px; display: block; }
   .weather-widget-tile-temp-wrap { display: flex; flex-direction: column; gap: 1px; }
@@ -104,9 +106,9 @@ const RAW = String.raw`<!doctype html>
      weight, not bold — bold read as a generic weather-widget look rather
      than anything resembling the real app. */
   .weather-widget-tile-temp { font-size: 1.55rem; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
-  .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 0.85; }
-  .weather-widget-tile-humidity { font-size: 0.7rem; font-weight: 500; line-height: 1; opacity: 0.9; margin-top: 2px; }
-  .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.9; }
+  .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 1; }
+  .weather-widget-tile-humidity { font-size: 0.7rem; font-weight: 500; line-height: 1; opacity: 1; margin-top: 2px; }
+  .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2; opacity: 1; }
   .weather-widget-detail {
     padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
     border-radius: 12px; font-size: 0.78rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
@@ -157,6 +159,7 @@ const RAW = String.raw`<!doctype html>
      a night sky's near-black gradient. switch-row links inside
      .top-action-row are excluded — those sit on a card surface and already
      get good contrast from var(--ink). */
+  body.weather-active .translate-inline,
   body.weather-active .sky-line,
   body.weather-active .sky-line strong,
   body.weather-active .cdt,
@@ -169,6 +172,8 @@ const RAW = String.raw`<!doctype html>
     color: var(--weather-ink, #2B211B);
   }
 
+  body.weather-active .translate-inline { border-left-color: var(--weather-ink, #2B211B); }
+  body.weather-active .eyebrow, body.weather-active .voice-card-prompt { color: var(--weather-ink, #2B211B); }
   .status-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .status-chip {
     flex: 1 1 220px; display: flex; align-items: center; gap: 8px;
@@ -178,7 +183,8 @@ const RAW = String.raw`<!doctype html>
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .status-travel-flag { font-size: 0.75rem; line-height: 1; flex: none; }
   .status-chip input { border: none; background: transparent; color: var(--ink); font: inherit; flex: 1; min-width: 0; outline: none; }
-  .status-chip input::placeholder { color: var(--ink-soft); }
+  .status-chip input { text-overflow: ellipsis; }
+  .status-chip input::placeholder { color: var(--ink-soft); text-overflow: ellipsis; }
   /* SANDBOX EXPERIMENT: the partner's chip is tappable to preview their
      home screen's background — a subtle affordance, not a full button. */
   .status-chip-preview:hover { border-color: var(--accent); }
@@ -196,7 +202,7 @@ const RAW = String.raw`<!doctype html>
   }
   textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .send-btn {
-    align-self: flex-end; background: var(--accent); color: #FFF8F1; border: none;
+    align-self: flex-end; background: var(--accent); color: var(--on-accent); border: none;
     border-radius: 999px; padding: 10px 22px; font: inherit; font-weight: 700; font-size: 0.9rem; cursor: pointer;
   }
   .send-btn:hover { filter: brightness(1.05); }
@@ -259,7 +265,7 @@ const RAW = String.raw`<!doctype html>
   .edit-form textarea { min-height: 64px; }
   .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
   .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
-  .mini-btn.primary { background: var(--accent); color: #FFF8F1; }
+  .mini-btn.primary { background: var(--accent); color: var(--on-accent); }
   .mini-btn.ghost { background: var(--surface-2); color: var(--ink); }
   .own-answer-visible { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 2px; }
 
@@ -294,7 +300,7 @@ const RAW = String.raw`<!doctype html>
   .puzzle-cell.locked { background-image: none !important; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .puzzle-cell.locked svg { width: 16px; height: 16px; opacity: 0.28; }
   .puzzle-empty { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; padding: 20px 10px; color: var(--ink-soft); font-size: 0.88rem; }
-  .puzzle-upload-btn { background: var(--accent); color: #FFF8F1; border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+  .puzzle-upload-btn { background: var(--accent); color: var(--on-accent); border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .puzzle-upload-btn:disabled { opacity: 0.6; cursor: default; }
   .puzzle-replace { text-align: center; }
   .puzzle-replace-btn { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.76rem; text-decoration: underline; cursor: pointer; padding: 4px; }
@@ -328,9 +334,9 @@ const RAW = String.raw`<!doctype html>
 
   .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
   .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .tab-btn.active { background: var(--accent); color: #FFF8F1; }
+  .tab-btn.active { background: var(--accent); color: var(--on-accent); }
   .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.68rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
-  .tab-btn.active .tab-badge { background: #FFF8F1; color: var(--accent); }
+  .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
   .journal-toggle { background: none; border: none; color: var(--accent-ink); font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; padding: 6px 2px; text-align: left; display: flex; align-items: center; gap: 6px; }
@@ -4232,16 +4238,16 @@ export function buildNewRoomPage(): string {
 <title>Start Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; }
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
   .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 26px; max-width:420px; width:100%; text-align:center; }
   h1 { font-family:'Manrope',sans-serif; font-weight:800; font-size:1.6rem; margin:0 0 10px; }
   p { color:var(--ink-soft); font-size:0.95rem; line-height:1.5; margin:0 0 24px; }
-  button { background:var(--accent); color:#FFF8F1; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
+  button { background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
   button:disabled { opacity:0.6; }
   .note { margin-top:16px; font-size:0.8rem; }
 </style>
@@ -4292,9 +4298,9 @@ export function buildRecoverPage(): string {
 <title>Recover your Nearune link</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; }
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
@@ -4302,7 +4308,7 @@ export function buildRecoverPage(): string {
   h1 { font-family:'Manrope',sans-serif; font-weight:800; font-size:1.6rem; margin:0 0 10px; }
   p { color:var(--ink-soft); font-size:0.95rem; line-height:1.5; margin:0 0 20px; }
   input { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); font:inherit; font-size:0.95rem; margin-bottom:14px; }
-  button { background:var(--accent); color:#FFF8F1; border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
+  button { background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
   button:disabled { opacity:0.6; }
   .note { margin-top:16px; font-size:0.8rem; }
 </style>
@@ -4347,9 +4353,9 @@ function legalPageShell(title, bodyHtml) {
 <title>${title} — Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; }
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:50px 16px 80px; }

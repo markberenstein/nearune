@@ -2397,6 +2397,7 @@ const RAW = String.raw`<!doctype html>
   }
 
   var lastInviteUrl = "";
+  var lastAppStoreUrl = "";
   function submitInvite() {
     var email = inviteEmailDraft.trim();
     if (!email) { regError = t("Enter an Instagram handle (or email) first."); renderApp(); return; }
@@ -2413,6 +2414,7 @@ const RAW = String.raw`<!doctype html>
           renderApp(); return;
         }
         lastInviteUrl = res.data._inviteUrl || "";
+        lastAppStoreUrl = res.data._appStoreUrl || "";
         state = res.data;
         showInviteForm = false;
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
@@ -2426,7 +2428,8 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
+      var copyText = lastAppStoreUrl && url === lastInviteUrl ? "Join me on Nearune. Get the app: " + lastAppStoreUrl + "\nThen open this link: " + url : url;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
     return btn;
@@ -2440,7 +2443,9 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       if (navigator.share) {
-        navigator.share({ title: "Nearune", url: url }).catch(function () {});
+        var shareObj = { title: "Nearune", url: url };
+        if (lastAppStoreUrl) shareObj.text = "Join me on Nearune. Get the app: " + lastAppStoreUrl + " — then open this link:";
+        navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
@@ -4399,9 +4404,11 @@ document.getElementById("go").addEventListener("click", function () {
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
       if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
-      var msg = res.data && res.data.error === "rate_limited"
-        ? "Too many rooms created from here recently — wait a bit and try again."
-        : "Something went wrong — try again.";
+      var msg = res.data && res.data.error === "registrations_paused"
+        ? (res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.")
+        : (res.data && res.data.error === "rate_limited"
+          ? "Too many rooms created from here recently — wait a bit and try again."
+          : "Something went wrong — try again.");
       btn.disabled = false;
       btn.textContent = "Create my room";
       document.getElementById("msg").textContent = msg;

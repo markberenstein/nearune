@@ -33,6 +33,30 @@ import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, bu
 import { rateLimit, clientIp } from "./rate-limit";
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
 
+// Counts rooms created today (Pacific time). Scanned once per day / process
+// start, then incremented as rooms are created.
+const regToday = { day: "", n: 0 };
+function pacificDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+async function roomsCreatedToday(): Promise<number> {
+  const day = pacificDay(new Date());
+  if (regToday.day !== day) {
+    let n = 0;
+    try {
+      for (const id of await listRoomIds()) {
+        if (!id) continue;
+        const st = await loadState(id);
+        if (st.createdAt && pacificDay(new Date(st.createdAt)) === day) n++;
+      }
+    } catch {}
+    regToday.day = day;
+    regToday.n = n;
+  }
+  return regToday.n;
+}
+
+
 const PORT = Number(Bun.env.PORT) || 3000;
 
 function parseRoom(pathname: string): { roomId: string; restPath: string } {
@@ -74,7 +98,20 @@ Bun.serve({
       if (!rateLimit("create-room:" + clientIp(req, server), 5, HOUR)) {
         return json({ error: "rate_limited" }, { status: 429 });
       }
+      // Guardrails: a manual kill switch (REGISTRATIONS_PAUSED=1) and a daily
+      // cap (REGISTRATION_DAILY_CAP, default 50 new rooms per Pacific day).
+      // Only creating a NEW room is gated — existing rooms and invited
+      // partners joining them are never blocked.
+      const waitMsg = "Nearune is getting a lot of love today, and we're working to catch up before welcoming more new rooms. Please check back tomorrow — we'd love to have you!";
+      if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
+        return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
+      }
+      const cap = parseInt(Bun.env.REGISTRATION_DAILY_CAP || "50", 10) || 50;
+      if ((await roomsCreatedToday()) >= cap) {
+        return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
+      }
       const id = await createRoom();
+      regToday.n++;
       return json({ roomId: id });
     }
 
@@ -753,7 +790,7 @@ Bun.serve({
       if (handle) {
         // Nothing to email — the link goes back to this browser and the
         // inviter sends it themselves (e.g. as an Instagram DM).
-        return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl });
+        return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
       }
       const inviterName = cur.people[who]!.name;
       const r = await sendEmail(
@@ -762,9 +799,10 @@ Bun.serve({
         "<p>" + inviterName + " invited you to Nearune.</p>" +
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
           "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
+          (Bun.env.APP_STORE_URL ? "<p>Get the Nearune app: <a href=\"" + Bun.env.APP_STORE_URL + "\">Download on the App Store</a></p>" : "") +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
-      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl });
+      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
     }
 
     if (req.method === "POST" && restPath === "/api/accept-invite") {

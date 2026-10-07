@@ -980,6 +980,23 @@ Bun.serve({
         if (!s.people) s.people = {};
         if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
         s.people[who]!.photoAt = new Date().toISOString();
+        const cap = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
+        if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+      });
+      return json(forClient(state));
+    }
+
+    // Edit the comment under an already-shared photo.
+    if (req.method === "POST" && restPath === "/api/photo-caption") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who) || typeof body.caption !== "string") return json({ error: "invalid" }, { status: 400 });
+      const cap = body.caption.trim().slice(0, 200);
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who] && s.people[who]!.photoAt) {
+          if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+        }
       });
       return json(forClient(state));
     }
@@ -992,7 +1009,7 @@ Bun.serve({
       const who = body && body.who;
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (s.people && s.people[who]) delete s.people[who]!.photoAt;
+        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; }
       });
       try {
         if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();

@@ -61,6 +61,8 @@ export type PersonProfile = {
   // same idea as hasVoice but a timestamp instead of a boolean since the
   // client needs it to know when to refetch a replaced photo.
   photoAt?: string;
+  // Optional short comment the sharer wrote under their photo.
+  photoCaption?: string;
   travelLocation?: string;
   travelTz?: string;
   travelFrom?: string;

@@ -395,6 +395,13 @@ const RAW = String.raw`<!doctype html>
      inline below the voice-card's collapsed line, same expand-in-place
      spot as the chart-list above, capped so a tall portrait photo never
      dominates the page. */
+  .photo-row { display: flex; gap: 12px; align-items: flex-start; margin-top: 10px; }
+  .photo-thumb { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 2px solid var(--accent); cursor: pointer; background: var(--surface-2); flex: none; }
+  .photo-meta { flex: 1; min-width: 0; font-size: 14px; color: var(--ink); }
+  .photo-meta .photo-who { font-weight: 600; }
+  .photo-caption { margin: 4px 0 0; overflow-wrap: anywhere; }
+  .photo-hint { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; }
+  .photo-comment { width: 100%; box-sizing: border-box; margin-top: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line, #ccc); background: var(--surface); color: var(--ink); font: inherit; }
   .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
   [hidden] { display: none !important; }
 </style>
@@ -869,6 +876,8 @@ const RAW = String.raw`<!doctype html>
   // musicExpanded/moviesExpanded above (tap to reveal the full photo below
   // the collapsed line, tap again to collapse — not a separate overlay).
   var photoExpanded = false;
+  var myPhotoExpanded = false;
+  var photoCaptionDraft = null;
   var photoUploadState = { uploading: false, error: "" };
   var viewerKey = null;
   var soloRegistration = false;
@@ -3260,7 +3269,7 @@ const RAW = String.raw`<!doctype html>
   // puzzleBatch's image handling). suppressPollUntil guards the upload the
   // same way: the background poll() could otherwise round-trip mid-upload
   // and overwrite the freshly-saved photoAt with pre-upload state.
-  function uploadPhoto(key, file) {
+  function uploadPhoto(key, file, caption) {
     photoUploadState.error = "";
     readAndCompressImage(file, 1600, 0.85, function (dataUrl) {
       photoUploadState.uploading = true;
@@ -3269,11 +3278,12 @@ const RAW = String.raw`<!doctype html>
       fetch(RP + "/api/photo-upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ who: key, dataUrl: dataUrl }),
+        body: JSON.stringify({ who: key, dataUrl: dataUrl, caption: caption || "" }),
       })
         .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
           photoUploadState.uploading = false;
+          photoCaptionDraft = null;
           if (!result.ok || result.body.error) {
             photoUploadState.error = t("Couldn't share that photo — try again.");
             suppressPollUntil = 0;
@@ -3304,7 +3314,8 @@ const RAW = String.raw`<!doctype html>
       .then(function (body) {
         state = body;
         online = true;
-        photoExpanded = false;
+        myPhotoExpanded = false;
+        photoCaptionDraft = null;
         suppressPollUntil = Date.now() + 3000;
         renderApp();
       })
@@ -3317,6 +3328,24 @@ const RAW = String.raw`<!doctype html>
   // toggle (same inline-expand pattern as the chart lists above — tap to
   // reveal it below, tap again to collapse), and your own share/replace
   // control sits underneath it, always visible.
+  // A micro thumbnail (tap to enlarge) with the sharer's comment beside it.
+  // Shown for BOTH people so each can see what the other sees.
+  function photoRow(personKey, label, photoAt, caption, expanded, onToggle, canReport) {
+    var box = h("div", {});
+    var row = h("div", { class: "photo-row" });
+    var img = h("img", { class: "photo-thumb", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label });
+    img.addEventListener("click", onToggle);
+    row.appendChild(img);
+    var meta = h("div", { class: "photo-meta" });
+    meta.appendChild(h("div", { class: "photo-who", text: "📷 " + label }));
+    if (caption) meta.appendChild(h("p", { class: "photo-caption", text: caption }));
+    meta.appendChild(h("p", { class: "photo-hint", text: expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it") }));
+    if (canReport) meta.appendChild(reportLink("photo"));
+    row.appendChild(meta);
+    box.appendChild(row);
+    if (expanded) box.appendChild(h("img", { class: "shared-photo", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label }));
+    return box;
+  }
   function photoCardBlock() {
     if (!viewerKey) return null;
     var key = viewerKey;
@@ -3329,20 +3358,7 @@ const RAW = String.raw`<!doctype html>
     if (partnerPhotoAt && isBlocked()) {
       wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("You've blocked {name}.", { name: partnerName }) }));
     } else if (partnerPhotoAt) {
-      var line = h("p", { class: "voice-card-desc" });
-      line.appendChild(document.createTextNode(tTemplate("{name} shared a photo. ", { name: partnerName })));
-      var toggle = h("button", { class: "chart-expand-btn", type: "button", text: photoExpanded ? t("Hide photo") : t("Show photo") });
-      toggle.addEventListener("click", function () { photoExpanded = !photoExpanded; renderApp(); });
-      line.appendChild(toggle);
-      wrap.appendChild(line);
-      if (photoExpanded) {
-        wrap.appendChild(h("img", {
-          class: "shared-photo",
-          src: RP + "/api/photo?who=" + otherKey + "&v=" + encodeURIComponent(partnerPhotoAt),
-          alt: partnerName + "'s shared photo",
-        }));
-        wrap.appendChild(reportLink("photo"));
-      }
+      wrap.appendChild(photoRow(otherKey, partnerName, partnerPhotoAt, state.people[otherKey].photoCaption || "", photoExpanded, function () { photoExpanded = !photoExpanded; renderApp(); }, true));
     } else {
       wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo yet.", { name: partnerName }) }));
     }
@@ -3359,6 +3375,17 @@ const RAW = String.raw`<!doctype html>
     if (photoUploadState.error) {
       wrap.appendChild(h("p", { class: "voice-card-error", text: photoUploadState.error }));
     }
+    if (myPhotoAt) {
+      wrap.appendChild(photoRow(key, t("Your photo"), myPhotoAt, state.people[key].photoCaption || "", myPhotoExpanded, function () { myPhotoExpanded = !myPhotoExpanded; renderApp(); }, false));
+    }
+    var commentInput = document.createElement("input");
+    commentInput.type = "text";
+    commentInput.maxLength = 200;
+    commentInput.className = "photo-comment";
+    commentInput.placeholder = t("Add a comment under your photo (optional)");
+    commentInput.value = photoCaptionDraft !== null ? photoCaptionDraft : ((myPhotoAt && state.people[key].photoCaption) || "");
+    commentInput.addEventListener("input", function () { photoCaptionDraft = commentInput.value; });
+    wrap.appendChild(commentInput);
     var fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = "image/*";
@@ -3367,7 +3394,7 @@ const RAW = String.raw`<!doctype html>
       var file = fileInput.files && fileInput.files[0];
       fileInput.value = "";
       if (!file) return;
-      uploadPhoto(key, file);
+      uploadPhoto(key, file, commentInput.value);
     });
     var btnRow = h("div", { class: "voice-card-actions" });
     var pickBtn = h("button", {
@@ -3379,6 +3406,15 @@ const RAW = String.raw`<!doctype html>
     pickBtn.addEventListener("click", function () { fileInput.click(); });
     btnRow.appendChild(pickBtn);
     if (myPhotoAt) {
+      var saveCmt = h("button", { class: "mini-btn ghost", type: "button", text: t("Save comment") });
+      saveCmt.addEventListener("click", function () {
+        suppressPollUntil = Date.now() + 5000;
+        fetch(RP + "/api/photo-caption", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: key, caption: commentInput.value }) })
+          .then(function (r) { return r.json(); })
+          .then(function (b) { if (b && !b.error) { state = b; photoCaptionDraft = null; } renderApp(); })
+          .catch(function () {});
+      });
+      btnRow.appendChild(saveCmt);
       var removeBtn = h("button", { class: "mini-btn ghost", type: "button", text: t("Remove mine") });
       removeBtn.disabled = photoUploadState.uploading;
       removeBtn.addEventListener("click", function () { deletePhoto(key); });

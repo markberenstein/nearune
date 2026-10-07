@@ -2685,8 +2685,12 @@ const RAW = String.raw`<!doctype html>
   // effectiveViewKey below) without touching viewerKey — tapping their
   // status chip again, or your own, clears it. Purely cosmetic: it never
   // changes who you answer, comment, or edit your status as.
+  // Picks WHOSE world (weather, Local Feel, quirky story, charts) the main
+  // screen shows: tap your own chip/clock for your own world, or your
+  // partner's for theirs (the default). previewKey holds your own key only
+  // while your own world is selected; null means your partner's.
   function previewAsPartner(key) {
-    previewKey = previewKey === key ? null : key;
+    previewKey = key === viewerKey ? (previewKey === viewerKey ? null : viewerKey) : null;
     weatherExpanded = false;
     musicExpanded = false;
     moviesExpanded = false;
@@ -2714,7 +2718,7 @@ const RAW = String.raw`<!doctype html>
   }
   // Whose world (weather / local story / charts) the main screen shows: your
   // own while solo, otherwise your partner's (or the previewed person's partner).
-  function worldKey() { return soloMode() ? viewerKey : otherKeyOf(effectiveViewKey()); }
+  function worldKey() { return soloMode() ? viewerKey : (previewKey || otherKeyOf(viewerKey)); }
   function worldLabel(key) {
     if (soloMode()) return t("you");
     return personName(key) + (personIsTraveling(key) ? " (traveling)" : "");
@@ -2971,7 +2975,7 @@ const RAW = String.raw`<!doctype html>
   function clockBlock(key) {
     var cityText = effectiveClockLocation(key);
     var cityLabel = personIsTraveling(key) ? ("✈️ " + cityText) : cityText;
-    var isMe = key === effectiveViewKey();
+    var isMe = key === (soloMode() ? viewerKey : (previewKey || otherKeyOf(viewerKey)));
     var block = h("div", { class: "clock-block" + (isMe ? " clock-me" : "") }, [
       h("div", { class: "clock-city", text: cityLabel }),
       h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
@@ -2980,10 +2984,7 @@ const RAW = String.raw`<!doctype html>
     // status chip does (preview only — never changes who you are).
     if (!soloMode() && viewerKey && !inviteParams) {
       block.style.cursor = "pointer";
-      block.addEventListener("click", function () {
-        if (key === viewerKey) { if (previewKey) previewAsPartner(previewKey); }
-        else previewAsPartner(key);
-      });
+      block.addEventListener("click", function () { previewAsPartner(key); });
     }
     return block;
   }
@@ -3397,7 +3398,8 @@ const RAW = String.raw`<!doctype html>
       var current = (state.status[key] && state.status[key].text) || "";
       if (key !== viewerKey && isBlocked()) current = "";
       var isSelf = viewerKey === key;
-      var chipClass = "status-chip" + (!isSelf ? " status-chip-preview" : "");
+      var shownWorld = soloMode() ? viewerKey : (previewKey || otherKeyOf(viewerKey));
+      var chipClass = "status-chip status-chip-preview" + (viewerKey && shownWorld === key ? " status-chip-active" : "");
       var chipKids = [h("span", { class: "status-dot", style: "background:" + person.color })];
       if (personIsTraveling(key)) chipKids.unshift(h("span", { class: "status-travel-flag", text: "✈️", title: t("Traveling") }));
       var chip = h("div", { class: chipClass }, chipKids);
@@ -3409,6 +3411,12 @@ const RAW = String.raw`<!doctype html>
         input.addEventListener("change", function () {
           api("/api/status", { who: key, text: input.value }).catch(function () { online = false; renderApp(); });
         });
+        // Tapping anywhere on your own chip except the text box switches
+        // the screen to YOUR world (your weather and Local Feel).
+        if (!soloMode()) {
+          chip.style.cursor = "pointer";
+          chip.addEventListener("click", function (e) { if (e.target !== input) previewAsPartner(key); });
+        }
       } else {
         // Tapping your partner's chip previews the background/weather
         // their home screen would show (see previewAsPartner) — NOT a

@@ -174,6 +174,14 @@ const RAW = String.raw`<!doctype html>
 
   body.weather-active .translate-inline { border-left-color: var(--weather-ink, #2B211B); }
   body.weather-active .eyebrow, body.weather-active .voice-card-prompt { color: var(--weather-ink, #2B211B); }
+  /* Inside a card surface (white in light mode) the sky ink can be pale at
+     night, which made Hindi translations and eyebrows near-invisible. Use the
+     normal soft ink on card surfaces. */
+  body.weather-active .card .translate-inline,
+  body.weather-active .streak-card .translate-inline,
+  body.weather-active .status-chip .translate-inline { color: var(--ink-soft); border-left-color: var(--line); }
+  body.weather-active .card .eyebrow,
+  body.weather-active .streak-card .eyebrow { color: var(--ink-soft); }
   .status-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .status-chip {
     flex: 1 1 220px; display: flex; align-items: center; gap: 8px;
@@ -4076,13 +4084,6 @@ const RAW = String.raw`<!doctype html>
     // the app was deleted and reinstalled) — there's nothing left on the
     // device to recognize automatically, so this has to be a deliberate,
     // explicit click rather than something auto-detected.
-    var params = null;
-    try { params = new URLSearchParams(location.search); } catch (e) {}
-    if (params && params.get("legacy") === "1") {
-      try { localStorage.setItem(MY_ROOM_LS_KEY, ""); } catch (e) {}
-      try { history.replaceState(null, "", location.pathname); } catch (e) {}
-      return false;
-    }
     location.href = "/new";
     return true;
   }
@@ -4328,7 +4329,6 @@ export function buildNewRoomPage(): string {
   <p class="note" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
   <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room link or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
-  <p class="note"><a href="/?legacy=1" style="color:var(--ink-soft)">I'm in the original room (Mark &amp; Nikita)</a></p>
   <p class="note" id="roomMsg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Lost your link? Email it to me</a></p>
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>

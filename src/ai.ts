@@ -103,3 +103,38 @@ export async function moderateContent(opts: { image?: Uint8Array; text?: string 
     return "unavailable";
   }
 }
+
+// Best-effort "where is this?" for a puzzle picture that has no GPS data.
+// Returns a short place name, or null when unsure / no key / on any failure.
+export async function guessPlaceFromImage(image: Uint8Array): Promise<string | null> {
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key || image.length > 4 * 1024 * 1024) return null;
+  try {
+    const res = await fetch(ANTHROPIC_BASE, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 30,
+        system:
+          "You name the place shown in a photo. If a specific landmark, venue, park, or city is clearly identifiable, " +
+          "reply with just its short name (e.g. \"Golden Gate Bridge\" or \"Central Park, New York\"). " +
+          "If it is not clearly identifiable, or the photo mainly shows people, reply with exactly UNKNOWN.",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: Buffer.from(image).toString("base64") } },
+            { type: "text", text: "Where is this?" },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const out = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().replace(/^["']|["'.]$/g, "");
+    if (!out || /unknown/i.test(out) || out.length > 80) return null;
+    return out;
+  } catch {
+    return null;
+  }
+}

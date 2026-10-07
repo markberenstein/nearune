@@ -1815,7 +1815,7 @@ const RAW = String.raw`<!doctype html>
     var submitBtn = h("button", { class: "puzzle-upload-btn", text: t("Load pictures") });
 
     function refreshSubmit() {
-      submitBtn.disabled = puzzleBatchItems.length === 0 || puzzleBatchItems.some(function (it) { return !it.answer.trim(); });
+      submitBtn.disabled = puzzleBatchItems.length === 0;
     }
     function renderList() {
       list.innerHTML = "";
@@ -1833,7 +1833,7 @@ const RAW = String.raw`<!doctype html>
         q.addEventListener("input", function () { item.question = q.value; });
         row.appendChild(q);
         var ans = document.createElement("input");
-        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer");
+        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer (optional — defaults to \"Somewhere special\")");
         ans.value = item.answer;
         ans.addEventListener("input", function () { item.answer = ans.value; refreshSubmit(); });
         row.appendChild(ans);
@@ -1848,7 +1848,16 @@ const RAW = String.raw`<!doctype html>
         var item = { file: f, answer: "", question: "" };
         puzzleBatchItems.push(item);
         readGPSFromJPEG(f, function (coords) {
-          if (!coords) return;
+          if (!coords) {
+            // No GPS in the photo: ask the server to recognise the place.
+            readAndCompressImage(f, 700, 0.7, function (small) {
+              fetch(RP + "/api/puzzle-place", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dataUrl: small }) })
+                .then(function (r) { return r.json(); })
+                .then(function (b) { if (b && b.place && !item.answer.trim()) { item.answer = b.place; renderList(); refreshSubmit(); } })
+                .catch(function () {});
+            });
+            return;
+          }
           lookupPlaceName(coords.lat, coords.lon, function (place) {
             if (place && !item.answer) {
               item.answer = place;
@@ -1870,7 +1879,7 @@ const RAW = String.raw`<!doctype html>
       submitBtn.textContent = "Loading…";
       Promise.all(puzzleBatchItems.map(function (it) {
         return new Promise(function (resolve) {
-          readAndCompressImage(it.file, 900, 0.82, function (dataUrl) { resolve({ dataUrl: dataUrl, answer: it.answer.trim(), question: (it.question || "").trim() }); });
+          readAndCompressImage(it.file, 900, 0.82, function (dataUrl) { resolve({ dataUrl: dataUrl, answer: it.answer.trim() || "Somewhere special", question: (it.question || "").trim() }); });
         });
       })).then(function (items) {
         return fetch(RP + "/api/puzzle-batch", {

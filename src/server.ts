@@ -22,7 +22,7 @@ import {
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
-import { aiGuessMatches, moderateContent } from "./ai";
+import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
@@ -877,6 +877,17 @@ Bun.serve({
         delete s.puzzleLastGuessCorrect;
       });
       return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-place") {
+      if (!rateLimit("puzzle-place:" + roomId, 40, HOUR)) return json({ place: null });
+      const body = await readJson(req);
+      const m = body && typeof body.dataUrl === "string" ? body.dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
+      if (!m) return json({ place: null });
+      let bytes: Uint8Array;
+      try { bytes = Buffer.from(m[1], "base64"); } catch { return json({ place: null }); }
+      if (bytes.length < 200) return json({ place: null });
+      return json({ place: await guessPlaceFromImage(bytes) });
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-advance") {

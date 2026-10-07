@@ -4336,7 +4336,7 @@ export function buildNewRoomPage(): string {
 <script>
 document.getElementById("openRoom").addEventListener("click", function () {
   var v = (document.getElementById("roomLink").value || "").trim();
-  var m = v.match(/\/r\/([a-z0-9]{4,20})/i) || v.match(/^([a-z0-9]{4,20})$/i);
+  var m = v.match(new RegExp("/r/([a-z0-9]{4,20})", "i")) || v.match(new RegExp("^([a-z0-9]{4,20})$", "i"));
   if (!m) { document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent."; return; }
   location.href = "/r/" + m[1].toLowerCase() + "/";
 });

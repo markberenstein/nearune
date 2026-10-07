@@ -2275,7 +2275,7 @@ const RAW = String.raw`<!doctype html>
   var lastConfirmUrl = "";
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
-    if (!name || !email) { regError = t("Name and email or Instagram handle required."); renderApp(); return; }
+    if (!name || !email) { regError = t("Name and Instagram handle (or email) required."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
@@ -2336,8 +2336,8 @@ const RAW = String.raw`<!doctype html>
     lastLocInputEl = textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
-    form.appendChild(textField(registerDraft.email, "Your email or Instagram handle", function (v) { registerDraft.email = v; }));
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("An Instagram handle works too — it just can't be used to recover a lost link, so keep your Nearune link handy.") }));
+    form.appendChild(textField(registerDraft.email, "Your Instagram handle (or email if you don't use Instagram)", function (v) { registerDraft.email = v; }));
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No Instagram? Use your email instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
     // (questionPoolFor() uses it for both people's daily question), so
@@ -2365,7 +2365,7 @@ const RAW = String.raw`<!doctype html>
   var lastInviteUrl = "";
   function submitInvite() {
     var email = inviteEmailDraft.trim();
-    if (!email) { regError = t("Enter an email or Instagram handle first."); renderApp(); return; }
+    if (!email) { regError = t("Enter an Instagram handle (or email) first."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, contact: email })
@@ -2463,7 +2463,7 @@ const RAW = String.raw`<!doctype html>
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
       var form = h("div", { class: "puzzle-setup" });
-      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s email or Instagram handle", function (v) { inviteEmailDraft = v; }));
+      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s Instagram handle (or email if they don't use Instagram)", function (v) { inviteEmailDraft = v; }));
       form.appendChild(h("p", { class: "puzzle-guess-note", text: t("With an Instagram handle, you'll get a link to send them yourself.") }));
       if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });

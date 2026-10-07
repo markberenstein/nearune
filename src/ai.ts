@@ -55,3 +55,51 @@ export async function aiGuessMatches(guess: string, answer: string): Promise<boo
     return null;
   }
 }
+
+// Content screening for user-shared photos and short text (photo comments,
+// puzzle answers/questions). Fails CLOSED: anything other than a clear "OK"
+// verdict (no key, API error, unparsable reply) means "unavailable", and the
+// caller refuses the upload rather than letting unchecked content through.
+export type ModerationResult = "ok" | "blocked" | "unavailable";
+
+export async function moderateContent(opts: { image?: Uint8Array; text?: string }): Promise<ModerationResult> {
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key) return "unavailable";
+  const text = (opts.text || "").trim();
+  if (!opts.image && !text) return "ok";
+  if (opts.image && opts.image.length > 4 * 1024 * 1024) return "unavailable";
+  try {
+    const content: any[] = [];
+    if (opts.image) {
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: Buffer.from(opts.image).toString("base64") },
+      });
+    }
+    content.push({ type: "text", text: text ? "Accompanying text: " + text : "(no text)" });
+    const res = await fetch(ANTHROPIC_BASE, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 5,
+        system:
+          "You are a content-safety screen for a private two-person app where people share everyday photos and short notes. " +
+          "Reply BLOCK if the image or text contains: nudity or sexually explicit/suggestive content, " +
+          "any sexualized depiction of a minor, graphic violence or gore, self-harm, hate symbols or hate speech, " +
+          "harassment or threats, illegal drugs being used or sold, or weapons shown in a threatening way. " +
+          "Ordinary photos (people, pets, food, places, swimwear or beach photos that are not sexualized, family snaps) are fine. " +
+          "Reply with exactly one word: OK or BLOCK.",
+        messages: [{ role: "user", content }],
+      }),
+    });
+    if (!res.ok) return "unavailable";
+    const data: any = await res.json();
+    const verdict = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().toUpperCase();
+    if (verdict.indexOf("BLOCK") === 0) return "blocked";
+    if (verdict.indexOf("OK") === 0) return "ok";
+    return "unavailable";
+  } catch {
+    return "unavailable";
+  }
+}

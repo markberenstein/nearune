@@ -22,7 +22,7 @@ import {
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
-import { aiGuessMatches } from "./ai";
+import { aiGuessMatches, moderateContent } from "./ai";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
@@ -845,6 +845,9 @@ Bun.serve({
       if (current.puzzleCurrentId || (current.puzzleQueue && current.puzzleQueue.length > 0)) {
         return json({ error: "in_progress" }, { status: 409 });
       }
+      const verdicts = await Promise.all(parsed.map((p) => moderateContent({ image: p.bytes, text: p.question + " " + p.answer })));
+      if (verdicts.indexOf("blocked") >= 0) return json({ error: "inappropriate" }, { status: 422 });
+      if (verdicts.indexOf("unavailable") >= 0) return json({ error: "moderation_unavailable" }, { status: 503 });
       for (const p of parsed) {
         if (useS3 && s3) {
           await s3.file(puzzleImageKey(roomId, p.id)).write(p.bytes, { type: "image/jpeg" });
@@ -971,6 +974,12 @@ Bun.serve({
       }
       if (bytes.length < 200) return json({ error: "invalid" }, { status: 400 });
       if (bytes.length > 6 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      {
+        const capText = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
+        const verdict = await moderateContent({ image: bytes, text: capText });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
       if (useS3 && s3) {
         await s3.file(photoKey(roomId, who)).write(bytes, { type: "image/jpeg" });
       } else {
@@ -993,6 +1002,11 @@ Bun.serve({
       const who = body.who;
       if (!isPerson(who) || typeof body.caption !== "string") return json({ error: "invalid" }, { status: 400 });
       const cap = body.caption.trim().slice(0, 200);
+      if (cap) {
+        const verdict = await moderateContent({ text: cap });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
       const state = await saveState(roomId, (s) => {
         if (s.people && s.people[who] && s.people[who]!.photoAt) {
           if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;

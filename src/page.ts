@@ -1890,7 +1890,11 @@ const RAW = String.raw`<!doctype html>
             submitBtn.textContent = t("Load pictures");
             var msg = result.body && result.body.error === "in_progress"
               ? t("There's already a puzzle in progress — solve it (or ask your partner to) before loading a new one.")
-              : t("Couldn't load those pictures — try again.");
+              : (result.body && result.body.error === "inappropriate"
+                ? t("One of those pictures or answers can't be used here. Please choose something else.")
+                : (result.body && result.body.error === "moderation_unavailable"
+                  ? t("Couldn't check those pictures right now — please try again in a minute.")
+                  : t("Couldn't load those pictures — try again.")));
             setActiveTab("puzzle", msg);
             return;
           }
@@ -3296,7 +3300,11 @@ const RAW = String.raw`<!doctype html>
           photoUploadState.uploading = false;
           photoCaptionDraft = null;
           if (!result.ok || result.body.error) {
-            photoUploadState.error = t("Couldn't share that photo — try again.");
+            photoUploadState.error = result.body && result.body.error === "inappropriate"
+              ? t("That photo or comment can't be shared here. Please choose something else.")
+              : (result.body && result.body.error === "moderation_unavailable"
+                ? t("Couldn't check that photo right now — please try again in a minute.")
+                : t("Couldn't share that photo — try again."));
             suppressPollUntil = 0;
             renderApp();
             return;
@@ -3453,7 +3461,7 @@ const RAW = String.raw`<!doctype html>
         suppressPollUntil = Date.now() + 5000;
         fetch(RP + "/api/photo-caption", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: key, caption: commentInput.value }) })
           .then(function (r) { return r.json(); })
-          .then(function (b) { if (b && !b.error) { state = b; photoCaptionDraft = null; } renderApp(); })
+          .then(function (b) { if (b && !b.error) { state = b; photoCaptionDraft = null; } else if (b && b.error === "inappropriate") { photoUploadState.error = t("That comment can't be shared here."); } renderApp(); })
           .catch(function () {});
       });
       btnRow.appendChild(saveCmt);

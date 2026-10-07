@@ -886,6 +886,8 @@ const RAW = String.raw`<!doctype html>
   var photoExpanded = false;
   var myPhotoExpanded = false;
   var photoCaptionDraft = null;
+  var pendingPhotoFile = null;
+  var pendingPhotoUrl = "";
   var photoUploadState = { uploading: false, error: "" };
   var viewerKey = null;
   var soloRegistration = false;
@@ -3402,17 +3404,48 @@ const RAW = String.raw`<!doctype html>
       var file = fileInput.files && fileInput.files[0];
       fileInput.value = "";
       if (!file) return;
-      uploadPhoto(key, file, commentInput.value);
+      if (pendingPhotoUrl) { try { URL.revokeObjectURL(pendingPhotoUrl); } catch (e) {} }
+      pendingPhotoFile = file;
+      try { pendingPhotoUrl = URL.createObjectURL(file); } catch (e) { pendingPhotoUrl = ""; }
+      photoCaptionDraft = commentInput.value;
+      renderApp();
     });
     var btnRow = h("div", { class: "voice-card-actions" });
+    if (pendingPhotoFile && pendingPhotoUrl) {
+      var prev = h("img", { src: pendingPhotoUrl, alt: "" });
+      prev.style.cssText = "display:block;max-width:100%;max-height:220px;border-radius:12px;margin:10px 0;";
+      wrap.insertBefore(prev, commentInput);
+    }
     var pickBtn = h("button", {
-      class: "mini-btn primary",
+      class: pendingPhotoFile ? "mini-btn ghost" : "mini-btn primary",
       type: "button",
-      text: myPhotoAt ? t("Share a new photo") : t("Share a photo"),
+      text: pendingPhotoFile ? t("Choose a different photo") : (myPhotoAt ? t("Share a new photo") : t("Share a photo")),
     });
     pickBtn.disabled = photoUploadState.uploading;
     pickBtn.addEventListener("click", function () { fileInput.click(); });
-    btnRow.appendChild(pickBtn);
+    if (pendingPhotoFile) {
+      var sendBtn = h("button", { class: "mini-btn primary", type: "button", text: t("Send photo") });
+      sendBtn.disabled = photoUploadState.uploading;
+      sendBtn.addEventListener("click", function () {
+        var f = pendingPhotoFile;
+        pendingPhotoFile = null;
+        if (pendingPhotoUrl) { try { URL.revokeObjectURL(pendingPhotoUrl); } catch (e) {} }
+        pendingPhotoUrl = "";
+        uploadPhoto(key, f, commentInput.value);
+      });
+      btnRow.appendChild(sendBtn);
+      var cancelBtn = h("button", { class: "mini-btn ghost", type: "button", text: t("Cancel") });
+      cancelBtn.addEventListener("click", function () {
+        pendingPhotoFile = null;
+        if (pendingPhotoUrl) { try { URL.revokeObjectURL(pendingPhotoUrl); } catch (e) {} }
+        pendingPhotoUrl = "";
+        renderApp();
+      });
+      btnRow.appendChild(pickBtn);
+      btnRow.appendChild(cancelBtn);
+    } else {
+      btnRow.appendChild(pickBtn);
+    }
     if (myPhotoAt) {
       var saveCmt = h("button", { class: "mini-btn ghost", type: "button", text: t("Save comment") });
       saveCmt.addEventListener("click", function () {

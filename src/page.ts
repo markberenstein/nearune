@@ -3342,7 +3342,7 @@ const RAW = String.raw`<!doctype html>
     // handle, link to it — a plain https link, opens in the browser/app.
     // The handle is unverified text they entered, so it's only a label.
     var partnerIg = state.people && state.people[otherKey] && state.people[otherKey].instagram;
-    if (partnerIg) {
+    if (partnerIg && /^[a-z0-9._]{1,30}$/i.test(partnerIg) && !/\.(com|net|org|edu|gov|io|co|me|us|uk|in|info)$/i.test(partnerIg)) {
       var igLine = h("p", { class: "voice-card-desc" });
       igLine.appendChild(document.createTextNode("📸 "));
       igLine.appendChild(h("a", { href: "https://instagram.com/" + encodeURIComponent(partnerIg), target: "_blank", rel: "noopener noreferrer", text: "@" + partnerIg + " " + t("on Instagram") }));

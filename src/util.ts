@@ -42,7 +42,11 @@ export function normalizeInstagramHandle(raw: string): string | null {
   s = s.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^(www\.)?instagram\.com\//i, "");
   s = s.split(/[/?#]/)[0];
   s = s.replace(/^@+/, "").toLowerCase();
-  return /^[a-z0-9._]{1,30}$/.test(s) ? s : null;
+  if (!/^[a-z0-9._]{1,30}$/.test(s)) return null;
+  // An email (or website) typed into the handle box often loses its "@" and
+  // ends up looking like "steve.gmail.com" — not a real handle, so refuse it.
+  if (/\.(com|net|org|edu|gov|io|co|me|us|uk|in|info)$/.test(s)) return null;
+  return s;
 }
 
 export async function readJson(req: Request): Promise<any> {

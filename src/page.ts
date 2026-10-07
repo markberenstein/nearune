@@ -4325,10 +4325,21 @@ export function buildNewRoomPage(): string {
   <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your Nearune partner; when you each open it, you'll register your own name, language, and location, then you're set.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
-  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Already registered? Recover your link</a></p>
+  <p class="note" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
+  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room link or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
+  <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
+  <p class="note"><a href="/?legacy=1" style="color:var(--ink-soft)">I'm in the original room (Mark &amp; Nikita)</a></p>
+  <p class="note" id="roomMsg"></p>
+  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Lost your link? Email it to me</a></p>
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>
 </div>
 <script>
+document.getElementById("openRoom").addEventListener("click", function () {
+  var v = (document.getElementById("roomLink").value || "").trim();
+  var m = v.match(/\/r\/([a-z0-9]{4,20})/i) || v.match(/^([a-z0-9]{4,20})$/i);
+  if (!m) { document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent."; return; }
+  location.href = "/r/" + m[1].toLowerCase() + "/";
+});
 document.getElementById("go").addEventListener("click", function () {
   var btn = document.getElementById("go");
   btn.disabled = true;

@@ -31,6 +31,12 @@
 	     this situation. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nearune uses the microphone to record your voice sample, so your partner can hear your messages in your own voice.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Nearune accesses your photos so you can share one with your partner.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Nearune uses the camera so you can take a photo to share with your partner.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

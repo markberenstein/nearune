@@ -4553,6 +4553,7 @@ export function buildPrivacyPage() {
       <li><strong>Weather (Apple WeatherKit):</strong> your registered or travel city is used to look up local weather.</li>
       <li><strong>Local stories (Google News):</strong> your city name is used to find a light local news story.</li>
       <li><strong>Popular songs and movies (Deezer and Apple charts):</strong> only the country is used.</li>
+      <li><strong>Safety screening and place recognition (Anthropic, maker of Claude):</strong> photos and comments you share, and puzzle pictures with their questions and answers, are sent to Anthropic's API to be checked automatically for inappropriate content before they are saved. A puzzle picture with no location may also be sent to suggest where it was taken. Anthropic processes this to return a result; we don't use it for advertising.</li>
       <li><strong>Hosting (Railway):</strong> the service runs on Railway's cloud infrastructure, where room data is stored.</li>
       <li><strong>Notifications (Apple Push Notification service):</strong> a device token is used to deliver reminders if you turn them on.</li>
     </ul>

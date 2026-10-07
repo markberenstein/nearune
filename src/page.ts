@@ -188,7 +188,8 @@ const RAW = String.raw`<!doctype html>
   /* SANDBOX EXPERIMENT: the partner's chip is tappable to preview their
      home screen's background — a subtle affordance, not a full button. */
   .status-chip-preview:hover { border-color: var(--accent); }
-  .status-chip-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .status-chip-active { border: 4px double var(--accent); padding: 6px 12px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .status-edit-btn { flex: none; background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 2px 4px; }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 24px; box-shadow: 0 2px 10px var(--shadow); }
   .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
@@ -3411,11 +3412,31 @@ const RAW = String.raw`<!doctype html>
         input.addEventListener("change", function () {
           api("/api/status", { who: key, text: input.value }).catch(function () { online = false; renderApp(); });
         });
-        // Tapping anywhere on your own chip except the text box switches
-        // the screen to YOUR world (your weather and Local Feel).
+        // Tapping your own chip switches the screen to YOUR world (your
+        // weather and Local Feel). The text box is read-only until you tap
+        // the pencil, so a tap on the chip never gets swallowed by it.
         if (!soloMode()) {
+          input.readOnly = true;
+          input.style.pointerEvents = "none";
           chip.style.cursor = "pointer";
-          chip.addEventListener("click", function (e) { if (e.target !== input) previewAsPartner(key); });
+          chip.addEventListener("click", function (e) {
+            if (e.target && e.target.className === "status-edit-btn") return;
+            previewAsPartner(key);
+          });
+          var pencil = h("button", { class: "status-edit-btn", type: "button", title: t("Edit your status"), text: "✎" });
+          pencil.addEventListener("click", function (e) {
+            e.stopPropagation();
+            input.readOnly = false;
+            input.style.pointerEvents = "auto";
+            chip.style.cursor = "text";
+            input.focus();
+          });
+          input.addEventListener("blur", function () {
+            input.readOnly = true;
+            input.style.pointerEvents = "none";
+            chip.style.cursor = "pointer";
+          });
+          chip.__pencil = pencil;
         }
       } else {
         // Tapping your partner's chip previews the background/weather
@@ -3432,6 +3453,7 @@ const RAW = String.raw`<!doctype html>
         });
       }
       chip.appendChild(input);
+      if (chip.__pencil) chip.appendChild(chip.__pencil);
       row.appendChild(chip);
     });
     return row;

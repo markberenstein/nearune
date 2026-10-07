@@ -13,29 +13,44 @@ import { todayKeyPT } from "./util";
 
 const MAX_HISTORY = 400;
 
+// Alternate room ids that point at an existing room's data. "q7mvx3ke" is a
+// normal-looking /r/<id> link for the original (legacy) room, so Mark and
+// Nikita can reach it the same way as every other room, while the legacy
+// "/" URL and its stored data keep working untouched.
+const ROOM_ALIASES: Record<string, string> = { q7mvx3ke: "" };
+export function canonRoom(roomId: string): string {
+  return Object.prototype.hasOwnProperty.call(ROOM_ALIASES, roomId) ? ROOM_ALIASES[roomId] : roomId;
+}
+
 export function defaultState(): State {
   return { version: 1, answers: {}, status: {}, comments: {} };
 }
 
 function stateKey(roomId: string): string {
+  roomId = canonRoom(roomId);
   return roomId ? `rooms/${roomId}/state.json` : "state.json";
 }
 function localStatePath(roomId: string): string {
+  roomId = canonRoom(roomId);
   return roomId ? `./local-state-${roomId}.json` : "./local-state.json";
 }
 export function puzzleImageKey(roomId: string, id: string): string {
+  roomId = canonRoom(roomId);
   return roomId ? `rooms/${roomId}/puzzle-images/${id}.jpg` : `puzzle-images/${id}.jpg`;
 }
 export function localPuzzlePath(roomId: string, id: string): string {
+  roomId = canonRoom(roomId);
   return roomId ? `./local-puzzle-${roomId}-${id}.jpg` : `./local-puzzle-${id}.jpg`;
 }
 // The "share a recent photo" feature — one photo per person, overwritten on
 // each new share (not one-per-upload like puzzle images), so the key is
 // fixed per person rather than per-upload-id. See PersonProfile.photoAt.
 export function photoKey(roomId: string, who: PersonKey): string {
+  roomId = canonRoom(roomId);
   return roomId ? `rooms/${roomId}/photos/${who}.jpg` : `photos/${who}.jpg`;
 }
 export function localPhotoPath(roomId: string, who: PersonKey): string {
+  roomId = canonRoom(roomId);
   return roomId ? `./local-photo-${roomId}-${who}.jpg` : `./local-photo-${who}.jpg`;
 }
 
@@ -55,6 +70,7 @@ const caches = new Map<string, State>();
 const writeChains = new Map<string, Promise<void>>();
 
 async function readRaw(roomId: string): Promise<string | null> {
+  roomId = canonRoom(roomId);
   if (useS3 && s3) {
     const file = s3.file(stateKey(roomId));
     if (await file.exists()) return await file.text();
@@ -68,6 +84,7 @@ async function readRaw(roomId: string): Promise<string | null> {
 }
 
 async function writeRaw(roomId: string, text: string): Promise<void> {
+  roomId = canonRoom(roomId);
   if (useS3 && s3) {
     await s3.file(stateKey(roomId)).write(text);
   } else {
@@ -76,6 +93,7 @@ async function writeRaw(roomId: string, text: string): Promise<void> {
 }
 
 export async function loadState(roomId: string): Promise<State> {
+  roomId = canonRoom(roomId);
   const cached = caches.get(roomId);
   if (cached) return cached;
   let state: State;
@@ -108,6 +126,7 @@ function trimHistory(state: State) {
 // never race each other's read-modify-write against the bucket. Different
 // rooms never block each other.
 export async function saveState(roomId: string, mutate: (state: State) => void): Promise<State> {
+  roomId = canonRoom(roomId);
   const run = async () => {
     const state = await loadState(roomId);
     mutate(state);
@@ -150,6 +169,7 @@ export async function createRoom(): Promise<string> {
 // queued or solved past aren't individually tracked once superseded, so
 // this clears what's reachable — the state itself is what actually mattered.
 export async function deleteRoom(roomId: string): Promise<void> {
+  roomId = canonRoom(roomId);
   const state = await loadState(roomId);
   if (state.puzzleCurrentId) {
     try {

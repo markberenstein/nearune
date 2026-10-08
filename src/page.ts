@@ -58,7 +58,7 @@ const RAW = String.raw`<!doctype html>
     background: var(--bg);
     color: var(--ink);
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    padding: 28px 16px 48px;
+    padding: max(28px, calc(env(safe-area-inset-top, 0px) + 14px)) 16px calc(48px + env(safe-area-inset-bottom, 0px));
     display: flex;
     justify-content: center;
   }
@@ -193,6 +193,17 @@ const RAW = String.raw`<!doctype html>
   .status-chip input { border: none; background: transparent; color: var(--ink); font: inherit; flex: 1; min-width: 0; outline: none; }
   .status-chip input { text-overflow: ellipsis; }
   .status-chip input::placeholder { color: var(--ink-soft); text-overflow: ellipsis; }
+  /* iOS dims disabled inputs (the partner's chip) and placeholders to a pale
+     grey; force full-strength text so they stay readable. */
+  .status-chip input, .status-chip input:disabled, .status-chip input:read-only { opacity: 1; -webkit-text-fill-color: var(--ink); color: var(--ink); }
+  .status-chip input::placeholder { opacity: 1; -webkit-text-fill-color: var(--ink-soft); color: var(--ink-soft); }
+  /* Links that sit directly on the weather sky (news / music / movies /
+     "show top 5") use the sky ink, not the brown accent, which is nearly
+     invisible on a night-blue sky. */
+  body.weather-active .news-line .news-link,
+  body.weather-active .music-line .music-link,
+  body.weather-active .movie-line .movie-link,
+  body.weather-active .chart-expand-btn { color: var(--weather-ink, #2B211B); font-weight: 700; text-decoration: underline; }
   /* SANDBOX EXPERIMENT: the partner's chip is tappable to preview their
      home screen's background — a subtle affordance, not a full button. */
   .status-chip-preview:hover { border-color: var(--accent); }

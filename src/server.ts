@@ -112,7 +112,18 @@ Bun.serve({
       if ((await roomsCreatedToday()) >= cap) {
         return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
       }
-      const id = await createRoom();
+      // Optional room name from the first partner ("Our Sky" -> oursky47).
+      // Screened like any other user text; if screening is down the name is
+      // simply skipped and a random two-word code is used instead.
+      const reqBody = await readJson(req);
+      const rawName = typeof reqBody?.name === "string" ? reqBody.name.trim().slice(0, 40) : "";
+      let useName = "";
+      if (rawName) {
+        const verdict = await moderateContent({ text: rawName });
+        if (verdict === "blocked") return json({ error: "inappropriate_name" }, { status: 400 });
+        if (verdict === "ok") useName = rawName;
+      }
+      const id = await createRoom(useName);
       regToday.n++;
       return json({ roomId: id });
     }

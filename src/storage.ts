@@ -154,10 +154,19 @@ function randomRoomId(): string {
 
 // Creates a brand-new, empty room and returns its id. Collisions are rare
 // (about 144,000 possible codes) and retried below.
-export async function createRoom(): Promise<string> {
-  let id = randomRoomId();
-  for (let tries = 0; tries < 20 && (await readRaw(id)) !== null; tries++) {
-    id = randomRoomId();
+// Turns a name the first partner typed ("Our Sky!") into a room-code stem
+// ("oursky"). Plain a-z/0-9 only, at most 16 characters; names with no Latin
+// letters or digits (or too short) return "" and fall back to two random words.
+export function roomSlug(name: string): string {
+  const slug = (name || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "").slice(0, 16);
+  return slug.length >= 3 ? slug : "";
+}
+
+export async function createRoom(preferredName?: string): Promise<string> {
+  const stem = roomSlug(preferredName || "");
+  let id = stem ? stem + String(10 + Math.floor(Math.random() * 90)) : randomRoomId();
+  for (let tries = 0; tries < 40 && ((await readRaw(id)) !== null || canonRoom(id) !== id); tries++) {
+    id = stem && tries < 30 ? stem + String(10 + Math.floor(Math.random() * 90)) : randomRoomId();
   }
   const fresh = defaultState();
   fresh.createdAt = new Date().toISOString();

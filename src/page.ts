@@ -980,6 +980,9 @@ const RAW = String.raw`<!doctype html>
     if (viewerKey === null && !ROOM) viewerKey = localStorage.getItem("sameSkyViewer");
   } catch (e) {}
   if (viewerKey !== "mark" && viewerKey !== "nikita") viewerKey = null;
+  // A device that already knows who it is in this room should also remember the
+  // room itself, so opening the app at "/" goes straight back here.
+  if (viewerKey && ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
 
   // The confirm-email link comes back as "?viewer=mark" (or "nikita") so
   // whoever just confirmed lands straight on their next step, even if this
@@ -2795,6 +2798,7 @@ const RAW = String.raw`<!doctype html>
     previewKey = null;
     weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
+    if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
     applyWeatherSky(); // instant, from whatever weather data is already loaded
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is

@@ -31,6 +31,7 @@ import { topMovies } from "./movies";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
+const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
 
 // Counts rooms created today (Pacific time). Scanned once per day / process
@@ -304,7 +305,29 @@ Bun.serve({
     }
 
     if (req.method === "GET" && restPath === "/api/state") {
-      const state = await loadState(roomId);
+      let state = await loadState(roomId);
+      // Self-heal: a person with a saved location but no timezone (the
+      // lookup failed at registration) would otherwise show UTC clocks.
+      // Resolve it now, at most once every 10 minutes per room.
+      try {
+        const missing = (["mark", "nikita"] as PersonKey[]).filter((k) => state.people?.[k]?.location && !state.people?.[k]?.tz);
+        const last = tzBackfillAt.get(roomId) || 0;
+        if (missing.length && Date.now() - last > 10 * 60 * 1000) {
+          tzBackfillAt.set(roomId, Date.now());
+          const found: Partial<Record<PersonKey, string>> = {};
+          for (const k of missing) {
+            const tz = await resolveTimezoneFromLocation(state.people![k]!.location!);
+            if (tz) found[k] = tz;
+          }
+          if (Object.keys(found).length) {
+            state = await saveState(roomId, (s) => {
+              for (const k of Object.keys(found) as PersonKey[]) {
+                if (s.people?.[k] && !s.people[k]!.tz) s.people[k]!.tz = found[k];
+              }
+            });
+          }
+        }
+      } catch (e) { /* never block state on a timezone lookup */ }
       return json(forClient(state));
     }
 

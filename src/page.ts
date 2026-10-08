@@ -535,7 +535,7 @@ const RAW = String.raw`<!doctype html>
   // is the original list, unchanged, so every room created before the
   // relationship picker existed (including the legacy main room) keeps
   // getting exactly the questions it always has.
-  var QUESTIONS_SIGNIFICANT_OTHER = [
+  var QUESTIONS_SIGNIFICANT_OTHER_V1 = [
     "What made you smile today, even for a second?",
     "If you were here right now, what would we be doing?",
     "What's a small thing from today you wish I'd seen?",
@@ -598,6 +598,74 @@ const RAW = String.raw`<!doctype html>
     "What's a plan, even a small one, that you're excited about?",
     "What's something you'd want us to do together the very first evening we're in the same place?"
   ];
+
+  // Lighter, more varied partner questions. Days before QUESTIONS_V2_START keep
+  // the original list (so past days still show the question that was asked);
+  // from that date on the new list is used.
+  var QUESTIONS_SIGNIFICANT_OTHER_V2 = [
+    "What made you smile today?",
+    "Coffee, tea, or something else this morning?",
+    "What did you have for lunch?",
+    "Pick one: beach, mountains, or city. Why?",
+    "What's the weather like where you are right now?",
+    "What song have you had on repeat this week?",
+    "Sweet or salty tonight?",
+    "What's the best thing you ate today?",
+    "Morning person or night owl today?",
+    "What's on your screen wallpaper right now?",
+    "What's your go-to snack?",
+    "What's the last thing that made you laugh?",
+    "Pick one: movie night in or dinner out?",
+    "What are you wearing right now?",
+    "What's something silly you did today?",
+    "What's your comfort show right now?",
+    "Describe your day in three words.",
+    "Pick one: pizza, pasta, or tacos?",
+    "What's the view from where you're sitting?",
+    "What would you order if I treated you to dinner tonight?",
+    "What's your favorite way to relax after work?",
+    "Cats, dogs, or neither?",
+    "What's something small you're looking forward to this week?",
+    "What's the first thing you did after waking up?",
+    "Pick one: road trip or plane ride?",
+    "What's a food you could eat every day?",
+    "What's the funniest thing you saw today?",
+    "Rate your day from 1 to 10 and tell me why.",
+    "What's your favorite season and why?",
+    "What's your favorite emoji lately?",
+    "Pick one: sunrise or sunset?",
+    "What's something you're craving right now?",
+    "What's the best smell you came across today?",
+    "What's a show or video you watched today?",
+    "Pick one: hot chocolate or iced coffee?",
+    "What was the busiest part of your day?",
+    "If you had a free hour right now, what would you do?",
+    "What's your favorite dessert?",
+    "What's a place nearby you like to walk or sit?",
+    "Pick one: Netflix marathon or long walk?",
+    "What's something you saw today that I'd have liked?",
+    "What did you listen to on the way today?",
+    "What's your favorite thing to drink on a hot day?",
+    "What's something you want to try this month?",
+    "Pick one: breakfast for dinner or dinner for breakfast?",
+    "What's the most colorful thing around you right now?",
+    "What's one word that describes today?",
+    "What's your favorite holiday or festival?",
+    "What's a snack you miss from home?",
+    "If you could be anywhere for lunch tomorrow, where?",
+    "What's the last photo you took?",
+    "Pick one: dancing in the kitchen or singing in the car?",
+    "What's a little thing that went right today?",
+    "What's your favorite color today?",
+    "What's your favorite way to spend a rainy day?",
+    "What would you eat for the rest of your life: rice, bread, or noodles?",
+    "What's a place you'd love to visit together someday?",
+    "What's something you're wearing or carrying that you love?",
+    "Pick one: a quiet night or a night out?",
+    "What's a funny habit you have?",
+    "What's something you'll do tomorrow that you're glad about?"
+  ];
+  var QUESTIONS_V2_START = "2026-10-09";
 
   // Family-relationship pool — warm and curious like the above, but without
   // assuming a romantic pairing (no "us as a couple" framing), so it reads
@@ -740,7 +808,7 @@ const RAW = String.raw`<!doctype html>
     var rel = state && state.relationship;
     if (rel === "family") return QUESTIONS_FAMILY;
     if (rel === "friend") return QUESTIONS_FRIEND;
-    return QUESTIONS_SIGNIFICANT_OTHER;
+    return QUESTIONS_SIGNIFICANT_OTHER_V1;
   }
 
   var EPOCH_MS = Date.UTC(2026, 0, 1);
@@ -777,6 +845,10 @@ const RAW = String.raw`<!doctype html>
   function questionForKey(key) {
     var pool = questionPoolFor();
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
+    if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V2_START) {
+      pool = QUESTIONS_SIGNIFICANT_OTHER_V2;
+      days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V2_START)) / DAY_MS);
+    }
     var idx = ((days % pool.length) + pool.length) % pool.length;
     return pool[idx];
   }

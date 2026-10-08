@@ -161,3 +161,10 @@ export async function resolveCountryCode(location: string): Promise<string | nul
   const code = first && typeof first.country_code === "string" ? first.country_code.toLowerCase() : "";
   return code || null;
 }
+
+// Coordinates + city label for a free-text location (admin stats map only).
+export async function resolveCoords(location: string): Promise<{ lat: number; lon: number; city: string; country: string } | null> {
+  const first = await geocode(location);
+  if (!first || typeof first.latitude !== "number" || typeof first.longitude !== "number") return null;
+  return { lat: first.latitude, lon: first.longitude, city: String(first.name || ""), country: String(first.country_code || "").toUpperCase() };
+}

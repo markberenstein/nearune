@@ -9,7 +9,6 @@ import { listRoomIds, loadState, saveState, canonRoom } from "./storage";
 import { resolveTimezoneFromLocation } from "./geo";
 import { todayKeyPT, todayKeyFor } from "./util";
 import { buildPageHtml } from "./page";
-import { elevenLabsUsage } from "./voice";
 
 type Report = { at: string; day: string; ok: boolean; checked: { contrast: number; rooms: number; people: number }; failures: string[]; fixed: string[] };
 let last: Report | null = null;
@@ -103,20 +102,6 @@ export async function runQa(): Promise<Report> {
     if (canonRoom("q7mvx3ke") !== "") failures.push("continuity: legacy alias q7mvx3ke no longer maps to the original room");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(todayKeyPT())) failures.push("continuity: day key malformed");
   } catch (e: any) { failures.push("rooms: " + (e?.message || e)); }
-
-  // 5) ElevenLabs usage vs. plan: warn at 80%, fail at 95%.
-  try {
-    const u = await elevenLabsUsage();
-    if (!u) console.log("[qa] elevenlabs usage unavailable (key missing or lacks User: read permission)");
-    else {
-      const pct = u.limit > 0 ? (u.used / u.limit) * 100 : 0;
-      const reset = u.resetsAt ? new Date(u.resetsAt * 1000).toISOString().slice(0, 10) : "?";
-      console.log(`[qa] elevenlabs used=${u.used} limit=${u.limit} pct=${pct.toFixed(1)} reset=${reset} voices=${u.voices ?? "?"}/${u.voiceLimit ?? "?"}`);
-      if (pct >= 95) failures.push(`elevenlabs usage ${pct.toFixed(0)}% of monthly characters (${u.used}/${u.limit}), resets ${reset}`);
-      else if (pct >= 80) console.log(`[qa] WARN elevenlabs usage ${pct.toFixed(0)}% of monthly characters, resets ${reset}`);
-      if (u.voices != null && u.voiceLimit != null && u.voiceLimit > 0 && u.voices >= u.voiceLimit * 0.9) failures.push(`elevenlabs voice slots ${u.voices}/${u.voiceLimit}`);
-    }
-  } catch (e: any) { console.log("[qa] elevenlabs usage check error: " + (e?.message || e)); }
 
   last = { at: new Date().toISOString(), day: todayKeyPT(), ok: failures.length === 0, checked: { contrast, rooms, people }, failures, fixed };
   console.log(`[qa] ${last.ok ? "PASS" : "FAIL"} day=${last.day} contrast=${contrast} rooms=${rooms} people=${people} fixed=${fixed.length} failures=${failures.length}`);

@@ -2,6 +2,7 @@
 // as the single-file version always was), "/r/<roomId>" is any other room,
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
+import { startStatsSchedule } from "./stats";
 import { isPerson, type PersonKey } from "./types";
 import {
   loadState,
@@ -1326,3 +1327,4 @@ console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "lo
 ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));
 
 startQaSchedule();
+startStatsSchedule();

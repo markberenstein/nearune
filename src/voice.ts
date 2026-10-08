@@ -103,3 +103,24 @@ export async function synthesizeSpeech(text: string, voiceId: string): Promise<U
     return null;
   }
 }
+
+// Monthly character usage vs. plan limit (for the daily self-check). Needs a
+// key with "User: read" permission; returns null when unavailable.
+export type VoiceUsage = { used: number; limit: number; resetsAt: number | null; voices: number | null; voiceLimit: number | null };
+export async function elevenLabsUsage(): Promise<VoiceUsage | null> {
+  const key = Bun.env.ELEVENLABS_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetch(ELEVENLABS_BASE + "/user/subscription", { headers: { "xi-api-key": key } });
+    if (!res.ok) return null;
+    const j: any = await res.json();
+    if (typeof j?.character_count !== "number" || typeof j?.character_limit !== "number") return null;
+    return {
+      used: j.character_count,
+      limit: j.character_limit,
+      resetsAt: typeof j.next_character_count_reset_unix === "number" ? j.next_character_count_reset_unix : null,
+      voices: typeof j.voice_slots_used === "number" ? j.voice_slots_used : null,
+      voiceLimit: typeof j.voice_limit === "number" ? j.voice_limit : null,
+    };
+  } catch { return null; }
+}

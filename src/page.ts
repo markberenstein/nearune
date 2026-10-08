@@ -70,6 +70,8 @@ const RAW = String.raw`<!doctype html>
     font-size: 1.7rem; letter-spacing: 0.01em; color: var(--accent);
   }
   .wordmark svg { width: 42px; height: 42px; flex: none; }
+  .room-code { text-align: center; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-soft); margin: 2px 0 10px; cursor: pointer; }
+  body.weather-active .room-code { color: var(--weather-ink, #2B211B); }
 
   .clocks {
     display: flex; align-items: center; justify-content: center; gap: 14px;
@@ -3133,7 +3135,12 @@ const RAW = String.raw`<!doctype html>
     var nikitaClock = solo && !isConfirmedKey("nikita") ? pendingClockBlock("nikita") : clockBlock("nikita");
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    return h("div", {}, [wordmark, clocks]);
+    var code = ROOM || "q7mvx3ke";
+    var roomLine = h("div", { class: "room-code", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
+    roomLine.addEventListener("click", function () {
+      try { navigator.clipboard.writeText(code); roomLine.textContent = t("Copied!"); setTimeout(function () { roomLine.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
+    });
+    return h("div", {}, [wordmark, roomLine, clocks]);
   }
 
   // Mic-recording state for the "record your voice" card below — module-
@@ -4317,6 +4324,19 @@ const RAW = String.raw`<!doctype html>
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") { loadWeather(); loadNews(); loadMusic(); loadMovies(); }
   });
+  // Picks dark or pale text, whichever reads better against BOTH ends of the
+  // sky gradient (WCAG contrast), instead of assuming day = dark, night = pale.
+  function inkForSky(sky) {
+    function lum(hex) {
+      var c = [1, 3, 5].map(function (i) { var v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+    function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+    var dark = "#2B211B", pale = "#F2EFE9";
+    var dMin = Math.min(ratio(dark, sky[0]), ratio(dark, sky[1]));
+    var pMin = Math.min(ratio(pale, sky[0]), ratio(pale, sky[1]));
+    return pMin > dMin ? pale : dark;
+  }
   function applyWeatherSky() {
     var el = document.getElementById("weather-sky");
     if (!el) return;
@@ -4341,7 +4361,7 @@ const RAW = String.raw`<!doctype html>
     // so text pinned to dark ink (the daytime default) goes nearly
     // invisible against it — switch to a pale ink instead whenever it's
     // nighttime at the OTHER person's location (the sky shown here).
-    document.body.style.setProperty("--weather-ink", w.isDay ? "#2B211B" : "#F2EFE9");
+    document.body.style.setProperty("--weather-ink", inkForSky(sky));
   }
 
   async function poll() {

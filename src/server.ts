@@ -31,6 +31,7 @@ import { topMovies } from "./movies";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
+import { startQaSchedule, lastQaReport, runQa } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
 
@@ -302,6 +303,11 @@ Bun.serve({
       return new Response(html, {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, must-revalidate" },
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/qa") {
+      // Summary only (counts and check names, no room data).
+      return json(lastQaReport() || (await runQa()));
     }
 
     if (req.method === "GET" && restPath === "/api/state") {
@@ -1306,3 +1312,5 @@ Bun.serve({
 
 console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
 ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));
+
+startQaSchedule();

@@ -141,20 +141,22 @@ export async function saveState(roomId: string, mutate: (state: State) => void):
   return caches.get(roomId)!;
 }
 
-const ROOM_ID_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"; // no 0/o/1/l/i — easier to type/read aloud
-
+// Room codes are two easy words plus two digits (e.g. "mossyfox47"): short to
+// say aloud, easy to remember, and still plain letters+digits so every
+// existing /r/<id> route and the "paste your room code" box accept them.
+// Older 8-character random ids keep working untouched.
+const ROOM_ADJ = ["amber","breezy","brave","bright","calm","clever","cosmic","cozy","crisp","dandy","eager","fuzzy","gentle","golden","happy","jolly","kind","lively","lucky","mellow","merry","mossy","nifty","olive","peachy","plucky","quiet","rosy","sunny","silver","snowy","speedy","swift","tidy","velvet","warm","windy","witty","zesty","lunar"];
+const ROOM_NOUN = ["otter","panda","falcon","maple","harbor","meadow","comet","lantern","pebble","river","willow","fox","robin","cedar","daisy","ember","fern","heron","iris","koala","lotus","moon","nest","orchid","plum","quail","raven","sparrow","tulip","violet","wren","yarrow","zebra","acorn","badger","cloud","dune","glade","kite","tide"];
 function randomRoomId(): string {
-  let s = "";
-  for (let i = 0; i < 8; i++) s += ROOM_ID_CHARS[Math.floor(Math.random() * ROOM_ID_CHARS.length)];
-  return s;
+  const pick = (a: string[]) => a[Math.floor(Math.random() * a.length)];
+  return pick(ROOM_ADJ) + pick(ROOM_NOUN) + String(10 + Math.floor(Math.random() * 90));
 }
 
-// Creates a brand-new, empty room and returns its id. Collisions are
-// astronomically unlikely at 8 chars from a 32-char alphabet, but a couple
-// of retries costs nothing.
+// Creates a brand-new, empty room and returns its id. Collisions are rare
+// (about 144,000 possible codes) and retried below.
 export async function createRoom(): Promise<string> {
   let id = randomRoomId();
-  for (let tries = 0; tries < 5 && (await readRaw(id)) !== null; tries++) {
+  for (let tries = 0; tries < 20 && (await readRaw(id)) !== null; tries++) {
     id = randomRoomId();
   }
   const fresh = defaultState();

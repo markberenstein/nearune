@@ -103,11 +103,11 @@ const ICON_STORM =
 // of condition colors.
 const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
   clear: {
-    day: { key: "clear-day", label: "Clear", sky: ["#2E7BC4", "#8FCBF2"], glow: "#FFD27A", icon: ICON_SUN },
+    day: { key: "clear-day", label: "Clear", sky: ["#5AA6E6", "#A9D8F7"], glow: "#FFD27A", icon: ICON_SUN },
     night: { key: "clear-night", label: "Clear", sky: ["#060B1E", "#141B3D"], glow: "#4C62A8", icon: ICON_MOON },
   },
   cloudy: {
-    day: { key: "cloudy-day", label: "Cloudy", sky: ["#6E7F91", "#B6C4D1"], glow: "#8C97A3", icon: ICON_CLOUD },
+    day: { key: "cloudy-day", label: "Cloudy", sky: ["#8497AA", "#B6C4D1"], glow: "#8C97A3", icon: ICON_CLOUD },
     night: { key: "cloudy-night", label: "Cloudy", sky: ["#171D27", "#2B333F"], glow: "#49525F", icon: ICON_CLOUD },
   },
   fog: {
@@ -115,7 +115,7 @@ const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
     night: { key: "fog-night", label: "Fog", sky: ["#1C2227", "#333B41"], glow: "#4B545B", icon: ICON_FOG },
   },
   rain: {
-    day: { key: "rain-day", label: "Rain", sky: ["#43566B", "#7B93A9"], glow: "#3A5068", icon: ICON_RAIN },
+    day: { key: "rain-day", label: "Rain", sky: ["#7C90A6", "#A9BCCD"], glow: "#3A5068", icon: ICON_RAIN },
     night: { key: "rain-night", label: "Rain", sky: ["#0A121C", "#1B2733"], glow: "#2C4056", icon: ICON_RAIN },
   },
   snow: {
@@ -262,3 +262,6 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
   weatherCache.set(q, { at: Date.now(), value });
   return value;
 }
+
+// Exposed for the daily self-check (qa.ts) so it audits the real palette.
+export { THEMES as WEATHER_THEMES };

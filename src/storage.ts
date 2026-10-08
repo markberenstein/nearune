@@ -9,7 +9,7 @@
 import { S3Client } from "bun";
 import { readdirSync } from "node:fs";
 import type { State, PersonKey } from "./types";
-import { todayKeyPT } from "./util";
+import { todayKeyFor } from "./util";
 
 const MAX_HISTORY = 400;
 
@@ -226,7 +226,7 @@ export async function ensurePuzzleMigrated(roomId: string): Promise<void> {
   if (s.puzzleCurrentId && !s.puzzleRoundStartDate) {
     await saveState(roomId, (st) => {
       if (st.puzzleCurrentId && !st.puzzleRoundStartDate) {
-        st.puzzleRoundStartDate = todayKeyPT();
+        st.puzzleRoundStartDate = todayKeyFor(st);
         st.puzzleBonusCredits = 0;
       }
     });

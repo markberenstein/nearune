@@ -833,16 +833,35 @@ const RAW = String.raw`<!doctype html>
   var PUZZLE_TOTAL = PUZZLE_COLS * PUZZLE_ROWS;
   var PUZZLE_ORDER = [16, 12, 9, 19, 18, 6, 5, 10, 15, 21, 11, 17, 1, 14, 22, 13, 2, 23, 4, 24, 7, 8, 0, 3, 20];
 
+  // A room's day rolls over at 6:30am in whichever of its two people's home
+  // zones is furthest ahead (Asia/Kolkata until both are known, which is also
+  // what the legacy room uses). Mirrors the server's todayKeyFor() in util.ts.
+  function tzOffsetMin(tz, at) {
+    try {
+      var parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(at);
+      var g = function (t) { return +parts.filter(function (p) { return p.type === t; })[0].value; };
+      return Math.round((Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute")) - Math.floor(at.getTime() / 60000) * 60000) / 60000);
+    } catch (e) { return null; }
+  }
+  function rolloverTz(at) {
+    var best = null, bestOff = -Infinity;
+    ["mark", "nikita"].forEach(function (k) {
+      var p = state && state.people && state.people[k];
+      var tz = p && p.tz;
+      if (!tz) return;
+      var off = tzOffsetMin(tz, at);
+      if (off !== null && off > bestOff) { bestOff = off; best = tz; }
+    });
+    return best || "Asia/Kolkata";
+  }
   function dateKey(d) {
-    // Mirrors the server: new day rolls over at 6:30am IST (always the
-    // more-advanced of Mark's/Nikita's two zones).
-    var parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d);
+    var parts = new Intl.DateTimeFormat("en-CA", { timeZone: rolloverTz(d), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d);
     var y, m, day, hh, mm;
     parts.forEach(function (p) {
       if (p.type === "year") y = +p.value;
       if (p.type === "month") m = +p.value;
       if (p.type === "day") day = +p.value;
-      if (p.type === "hour") hh = +p.value;
+      if (p.type === "hour") hh = +p.value % 24;
       if (p.type === "minute") mm = +p.value;
     });
     var ms = Date.UTC(y, m - 1, day);
@@ -915,9 +934,15 @@ const RAW = String.raw`<!doctype html>
     return personTz(key);
   }
   function nextRolloverMs() {
-    var n = Date.now(), d = new Date(n);
-    var c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 1, 0, 0);
-    return n >= c ? c + DAY_MS : c;
+    // First instant after now at which this room's day key changes.
+    var n = Date.now(), k = dateKey(new Date(n));
+    var lo = n, hi = n + 27 * 3600000;
+    if (dateKey(new Date(hi)) === k) return hi;
+    while (hi - lo > 1000) {
+      var mid = Math.floor((lo + hi) / 2);
+      if (dateKey(new Date(mid)) === k) lo = mid; else hi = mid;
+    }
+    return hi;
   }
   function countdownText() {
     var diff = nextRolloverMs() - Date.now();
@@ -4245,7 +4270,14 @@ const RAW = String.raw`<!doctype html>
       state = await res.json();
       online = true;
     } catch (e) { online = false; }
+    // Show the last known sky immediately (refreshed by loadWeather() below)
+    // so the background doesn't wait on the network.
+    try {
+      var cachedW = JSON.parse(localStorage.getItem("nearuneWeather:" + ROOM) || "null");
+      if (cachedW && cachedW.w && Date.now() - cachedW.at < 12 * 3600 * 1000) weatherByPerson = cachedW.w;
+    } catch (e3) {}
     renderApp();
+    applyWeatherSky();
     syncAppBadge();
     loadWeather();
     loadNews();
@@ -4276,6 +4308,7 @@ const RAW = String.raw`<!doctype html>
       var res = await fetch(RP + "/api/weather");
       var data = await res.json();
       weatherByPerson = (data && data.weather) || { mark: null, nikita: null };
+      try { localStorage.setItem("nearuneWeather:" + ROOM, JSON.stringify({ at: Date.now(), w: weatherByPerson })); } catch (e2) {}
     } catch (e) {
       return; // leave whatever theme was already showing rather than clear it on a blip
     }

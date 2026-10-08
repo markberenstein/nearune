@@ -28,10 +28,10 @@ import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs } from "./music";
 import { topMovies } from "./movies";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
-import { startQaSchedule, lastQaReport, runQa } from "./qa";
+import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
 
@@ -230,13 +230,13 @@ Bun.serve({
       const given = req.headers.get("x-cron-secret") || "";
       if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
       if (!anyPushConfigured) return json({ ok: true, sent: 0, note: "push not configured" });
-      const today = todayKeyPT();
       const ids = await listRoomIds();
       let sent = 0;
       for (const id of ids) {
         try {
           const state = await loadState(id);
           if (!state.pushSubs) continue;
+          const today = todayKeyFor(state);
           // "Still waiting" nudge: an invite unanswered for 2+ days, at most
           // once every 3 days, pushed to whoever sent it.
           const DAY_MS = 24 * 60 * 60 * 1000;
@@ -334,6 +334,7 @@ Bun.serve({
           }
         }
       } catch (e) { /* never block state on a timezone lookup */ }
+      try { roomQaOnce(roomId, state); } catch (e) {}
       return json(forClient(state));
     }
 
@@ -527,7 +528,7 @@ Bun.serve({
     // server-side regardless.
     if (req.method === "GET" && restPath === "/api/weather") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markWeather, nikitaWeather] = await Promise.all([
         currentWeather(effectiveLocation(state.people?.mark, today)),
         currentWeather(effectiveLocation(state.people?.nikita, today)),
@@ -543,7 +544,7 @@ Bun.serve({
     // /api/weather above, no API key required.
     if (req.method === "GET" && restPath === "/api/news") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markNews, nikitaNews] = await Promise.all([
         topLocalStory(effectiveLocation(state.people?.mark, today)),
         topLocalStory(effectiveLocation(state.people?.nikita, today)),
@@ -558,7 +559,7 @@ Bun.serve({
     // than needing a second round trip when someone expands the list.
     if (req.method === "GET" && restPath === "/api/music") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markMusic, nikitaMusic] = await Promise.all([
         topSongs(effectiveLocation(state.people?.mark, today), 5),
         topSongs(effectiveLocation(state.people?.nikita, today), 5),
@@ -569,7 +570,7 @@ Bun.serve({
     // Top movies chart (see movies.ts) — same shape as /api/music above.
     if (req.method === "GET" && restPath === "/api/movies") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markMovies, nikitaMovies] = await Promise.all([
         topMovies(effectiveLocation(state.people?.mark, today), 5),
         topMovies(effectiveLocation(state.people?.nikita, today), 5),
@@ -865,7 +866,7 @@ Bun.serve({
       const inviter: PersonKey = who === "mark" ? "nikita" : "mark";
       const inviterSub = state.pushSubs && state.pushSubs[inviter];
       if (inviterSub) {
-        const today = todayKeyPT();
+        const today = todayKeyFor(state);
         sendPush(inviterSub, {
           title: "Your Nearune partner joined!",
           body: name + " just joined Nearune — today's question is ready for you both.",
@@ -929,7 +930,7 @@ Bun.serve({
         s.puzzleAnswer = first.answer;
         if (first.question) s.puzzleQuestion = first.question; else delete s.puzzleQuestion;
         s.puzzleSetBy = who;
-        s.puzzleRoundStartDate = todayKeyPT();
+        s.puzzleRoundStartDate = todayKeyFor(s);
         s.puzzleBonusCredits = 0;
         delete s.puzzleRoundBase;
         s.puzzleSolved = false;
@@ -1162,7 +1163,7 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 120);
-      const today = todayKeyPT();
+      const today = todayKeyFor(await loadState(roomId));
 
       // guessMatches() (exact/substring) is the fast, free first check.
       // aiGuessMatches() is the generous fallback — catches a paraphrase,

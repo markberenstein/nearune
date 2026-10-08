@@ -7,7 +7,7 @@
 import { WEATHER_THEMES } from "./weather";
 import { listRoomIds, loadState, saveState, canonRoom } from "./storage";
 import { resolveTimezoneFromLocation } from "./geo";
-import { todayKeyPT } from "./util";
+import { todayKeyPT, todayKeyFor } from "./util";
 import { buildPageHtml } from "./page";
 
 type Report = { at: string; day: string; ok: boolean; checked: { contrast: number; rooms: number; people: number }; failures: string[]; fixed: string[] };
@@ -121,4 +121,22 @@ export function startQaSchedule(): void {
   };
   setTimeout(tick, 45_000);
   setInterval(tick, 60_000);
+}
+
+// Per-room check, run the first time each room is opened on a given day (see
+// the /api/state handler): both people have a valid timezone, and the room's
+// state loaded. Logs one short line per room per day.
+const roomChecked = new Map<string, string>();
+export function roomQaOnce(roomId: string, st: any): void {
+  const day = todayKeyFor(st);
+  if (roomChecked.get(roomId) === day) return;
+  roomChecked.set(roomId, day);
+  const problems: string[] = [];
+  for (const k of ["mark", "nikita"] as const) {
+    const p = st?.people?.[k];
+    if (!p) continue;
+    if (!p.tz) { problems.push(`${k} timezone missing`); continue; }
+    try { new Intl.DateTimeFormat("en-US", { timeZone: p.tz }); } catch { problems.push(`${k} timezone invalid`); }
+  }
+  console.log(`[qa] room ${roomId || "(legacy)"} day=${day} ${problems.length ? "FAIL " + problems.join("; ") : "ok"}`);
 }

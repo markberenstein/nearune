@@ -188,7 +188,15 @@ export async function isCityLevelLocation(location: string): Promise<boolean> {
   if (CITY_STATES.has(q.toLowerCase())) return true;
   const { first } = await geocodeFull(q);
   const fc = first && typeof first.feature_code === "string" ? first.feature_code : "";
-  return !(fc.startsWith("PCL") || fc.startsWith("ADM"));
+  const nm = first && typeof first.name === "string" ? first.name.trim().toLowerCase() : "";
+  const co = first && typeof first.country === "string" ? first.country.trim().toLowerCase() : "";
+  const ad = first && typeof first.admin1 === "string" ? first.admin1.trim().toLowerCase() : "";
+  // The place found is a country (code PCL*, or its name is the country's own name), a state or a county.
+  const isCountry = fc.startsWith("PCL") || (!!nm && nm === co);
+  const isRegion = fc.startsWith("ADM");
+  const ok = !(isCountry || isRegion);
+  console.log("[city-check] " + JSON.stringify({ q, fc, name: nm, country: co, admin1: ad, ok }));
+  return ok;
 }
 
 const blockedCache = new Map<string, boolean>();

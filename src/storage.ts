@@ -164,11 +164,9 @@ export function roomSlug(name: string): string {
 
 export async function createRoom(preferredName?: string): Promise<string> {
   const stem = roomSlug(preferredName || "");
-  // If the name already ends in two or more digits ("testsky47") the person
-  // chose their own code, so use it exactly when it's free; otherwise add two
-  // random digits ("oursky" -> "oursky72").
-  const ownCode = /[a-z][0-9]{2,}$/.test(stem);
-  let id = stem ? (ownCode ? stem : stem + String(10 + Math.floor(Math.random() * 90))) : randomRoomId();
+  // Use the name exactly when it's free ("oursky"); if it's taken, add two
+  // random digits ("oursky72"). No name at all gets two random words.
+  let id = stem || randomRoomId();
   for (let tries = 0; tries < 40 && ((await readRaw(id)) !== null || canonRoom(id) !== id); tries++) {
     id = stem && tries < 30 ? stem + String(10 + Math.floor(Math.random() * 90)) : randomRoomId();
   }

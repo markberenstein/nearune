@@ -120,7 +120,7 @@ Bun.serve({
       if ((await roomsCreatedToday()) >= cap) {
         return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
       }
-      // Optional room name from the first partner ("Our Sky" -> oursky47).
+      // Optional room name from the first partner ("Our Sky" -> oursky, or oursky47 if taken).
       // Screened like any other user text; if screening is down the name is
       // simply skipped and a random two-word code is used instead.
       const reqBody = await readJson(req);

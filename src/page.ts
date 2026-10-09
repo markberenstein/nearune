@@ -4625,7 +4625,7 @@ export function buildNewRoomPage(): string {
   <p>Nearune is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
   <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your Nearune partner; when you each open it, you'll register your own name, language, and location, then you're set.</p>
   <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Name your room (optional), like Our Sky" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin:0 0 6px">
-  <p class="note" style="margin:0 0 14px">Your room code is built from this name (for example oursky47), so it's easy to remember. Leave it blank and we'll pick two friendly words for you.</p>
+  <p class="note" style="margin:0 0 14px">Your room code is built from this name (for example oursky), so it's easy to remember. Leave it blank and we'll pick two friendly words for you.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>

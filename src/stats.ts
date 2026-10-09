@@ -8,22 +8,55 @@ import { topSongs, previewClip } from "./music";
 import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
 import { elevenLabsUsage } from "./voice";
+import { claudeUsageSummary } from "./usage";
+
+// Railway project cost, via Railway's GraphQL API. Needs RAILWAY_API_TOKEN (an account token). Returns null when unset or on any failure.
+async function railwayUsage() {
+  const tok = Bun.env.RAILWAY_API_TOKEN;
+  if (!tok) return null;
+  const pid = Bun.env.RAILWAY_PROJECT_ID;
+  if (!pid) return null;
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const meas = ["MEMORY_USAGE_GB", "CPU_USAGE", "NETWORK_TX_GB"];
+  // $ per unit: memory per GB-minute, CPU per vCPU-minute, egress per GB.
+  const rate: Record<string, number> = { MEMORY_USAGE_GB: 0.000231, CPU_USAGE: 0.000463, NETWORK_TX_GB: 0.05 };
+  const gql = async (query: string) => {
+    const r = await fetch("https://backboard.railway.com/graphql/v2", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + tok }, body: JSON.stringify({ query }) });
+    const j: any = await r.json();
+    if (j.errors) throw new Error(JSON.stringify(j.errors).slice(0, 200));
+    return j.data;
+  };
+  try {
+    const m = JSON.stringify(meas).replace(/"/g, "");
+    const cur = await gql("query { usage(projectId: \"" + pid + "\", measurements: " + m + ", startDate: \"" + start + "\") { measurement value } }");
+    const est = await gql("query { estimatedUsage(projectId: \"" + pid + "\", measurements: " + m + ") { measurement estimatedValue } }");
+    const sum = (rows: any[], f: string) => { const o: Record<string, number> = {}; for (const x of rows || []) o[x.measurement] = (o[x.measurement] || 0) + Number(x[f] || 0); return o; };
+    const c = sum(cur.usage, "value"), e = sum(est.estimatedUsage, "estimatedValue");
+    const cost = (o: Record<string, number>) => ({ memory: +(o.MEMORY_USAGE_GB * rate.MEMORY_USAGE_GB || 0).toFixed(2), cpu: +(o.CPU_USAGE * rate.CPU_USAGE || 0).toFixed(2), egress: +(o.NETWORK_TX_GB * rate.NETWORK_TX_GB || 0).toFixed(2) });
+    const cc = cost(c), ee = cost(e);
+    return { current: { ...cc, total: +(cc.memory + cc.cpu + cc.egress).toFixed(2) }, estimated: { ...ee, total: +(ee.memory + ee.cpu + ee.egress).toFixed(2) } };
+  } catch (err: any) { return { error: String(err?.message || err).slice(0, 160) }; }
+}
 
 const coordCache = new Map<string, { lat: number; lon: number; city: string; country: string } | null>();
 
 export async function computeStats() {
   const ids = await listRoomIds();
-  let rooms = 0, active = 0, people = 0;
+  let rooms = 0, active = 0, people = 0, answered = 0;
   const locByCountry = new Map<string, string>();
-  const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; wk?: { ok: boolean; ms: number | null } }>();
+  const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
   for (const id of ids) {
     let st: any;
     try { st = await loadState(id); } catch { continue; }
     rooms++;
+    try { if (Object.values(st?.answers || {}).some((day: any) => day && (day.mark || day.nikita))) answered++; } catch {}
     const ppl = ["mark", "nikita"].map((k) => st?.people?.[k]).filter(Boolean);
     people += ppl.length;
     if (ppl.length === 2 && ppl.every((p: any) => p.confirmed)) active++;
-    for (const p of ppl) {
+    for (const k of ["mark", "nikita"]) {
+      const p = st?.people?.[k]; if (!p) continue;
+      const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
       const loc = String(p.location || "").trim();
       if (!loc) continue;
       if (!coordCache.has(loc)) coordCache.set(loc, await resolveCoords(loc).catch(() => null));
@@ -32,7 +65,8 @@ export async function computeStats() {
       if (c.country && !locByCountry.has(c.country)) locByCountry.set(c.country, loc);
       const key = c.lat.toFixed(1) + "," + c.lon.toFixed(1);
       const e = byCity.get(key);
-      if (e) e.n++; else byCity.set(key, { city: c.city, country: c.country, lat: +c.lat.toFixed(2), lon: +c.lon.toFixed(2), n: 1 });
+      const who = { name: String(p.name || "(no name)").slice(0, 40), partner: o ? String(o.name || "(no name)").slice(0, 40) : "(waiting for partner)", partnerLoc: o ? String(o.location || "").slice(0, 60) : "" };
+      if (e) { e.n++; e.people.push(who); } else byCity.set(key, { city: c.city, country: c.country, lat: +c.lat.toFixed(2), lon: +c.lon.toFixed(2), n: 1, people: [who] });
     }
   }
   const u = await elevenLabsUsage();
@@ -89,10 +123,12 @@ export async function computeStats() {
   }
   return {
     at: new Date().toISOString(),
-    rooms, activeRooms: active, people,
+    rooms, activeRooms: active, answeredRooms: answered, people,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,
+    claude: await claudeUsageSummary().catch(() => null),
+    railway: await railwayUsage(),
     elevenlabs: u ? { used: u.used, limit: u.limit, resetsAt: u.resetsAt, voices: u.voices, voiceLimit: u.voiceLimit } : null,
   };
 }

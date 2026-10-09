@@ -1,3 +1,4 @@
+import { recordClaude } from "./usage";
 // Nearune — puzzle-guess judging via Claude. util.ts's guessMatches() (exact
 // or substring match on normalized text) is the fast, free, always-available
 // first check; this is the slower fallback for "right idea, different
@@ -46,6 +47,7 @@ export async function aiGuessMatches(guess: string, answer: string): Promise<boo
     });
     if (!res.ok) return null;
     const data: any = await res.json();
+    recordClaude("guess", data);
     const text = (data && data.content && data.content[0] && data.content[0].text) || "";
     const verdict = text.trim().toUpperCase();
     if (verdict.indexOf("YES") === 0) return true;
@@ -95,6 +97,7 @@ export async function moderateContent(opts: { image?: Uint8Array; text?: string 
     });
     if (!res.ok) return "unavailable";
     const data: any = await res.json();
+    recordClaude("moderation", data);
     const verdict = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().toUpperCase();
     if (verdict.indexOf("BLOCK") === 0) return "blocked";
     if (verdict.indexOf("OK") === 0) return "ok";
@@ -131,6 +134,7 @@ export async function guessPlaceFromImage(image: Uint8Array): Promise<string | n
     });
     if (!res.ok) return null;
     const data: any = await res.json();
+    recordClaude("place", data);
     const out = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().replace(/^["']|["'.]$/g, "");
     if (!out || /unknown/i.test(out) || out.length > 80) return null;
     return out;

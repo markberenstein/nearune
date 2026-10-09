@@ -1186,7 +1186,7 @@ const RAW = String.raw`<!doctype html>
 
   async function api(path, body) {
     var res = await fetch(RP + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error("request failed");
+    if (!res.ok) { var er = new Error("request failed"); try { er.code = (await res.json()).error; } catch (x) {} throw er; }
     var next = await res.json();
     state = next;
     online = true;
@@ -2679,6 +2679,12 @@ const RAW = String.raw`<!doctype html>
     var app = document.getElementById("app");
     if (!app) return;
     app.innerHTML = "";
+    if (state && state.error === "region_unavailable") {
+      var rb = document.createElement("div");
+      rb.style.margin = "60px 24px"; rb.style.textAlign = "center"; rb.style.fontSize = "18px";
+      rb.textContent = t("Nearune isn't available in that location.");
+      app.appendChild(rb); return;
+    }
 
     if (inviteParams) { app.appendChild(acceptInviteForm()); return; }
     // A brand-new room (not the legacy one) with nobody registered yet has
@@ -4037,7 +4043,7 @@ const RAW = String.raw`<!doctype html>
         showEarly: !!(travelDraft.from && travelDraft.showEarly),
       });
       travelFormOpen = false;
-    } catch (e) { travelError = t("Something went wrong — try again."); }
+    } catch (e) { travelError = e && e.code === "region_unavailable" ? t("Nearune isn't available in that location.") : t("Something went wrong — try again."); }
     travelBusy = false;
     renderApp();
   }

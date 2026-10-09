@@ -331,6 +331,16 @@ Bun.serve({
 
     if (req.method === "GET" && restPath === "/api/state") {
       let state = await loadState(roomId);
+      // Existing users: a room with anyone located in (or traveling to) a blocked country is closed.
+      try {
+        for (const k of ["mark", "nikita"] as PersonKey[]) {
+          const p: any = state.people?.[k];
+          if (!p) continue;
+          if (await isBlockedLocation(String(p.location || "")) || (p.travelLocation && await isBlockedLocation(String(p.travelLocation)))) {
+            return json({ error: "region_unavailable" }, { status: 403 });
+          }
+        }
+      } catch {}
       // Self-heal: a person with a saved location but no timezone (the
       // lookup failed at registration) would otherwise show UTC clocks.
       // Resolve it now, at most once every 10 minutes per room.
@@ -615,6 +625,7 @@ Bun.serve({
       const { who } = body || {};
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      if (location && await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
       const asDateKey = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
       const from = asDateKey(body?.from);
       const until = asDateKey(body?.until);

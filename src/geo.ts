@@ -1,3 +1,4 @@
+import { recordClaude } from "./usage";
 // Nearune — resolves a free-text "where you're based" string (city,
 // country, whatever someone types) to a real IANA timezone and a likely
 // primary language, via Open-Meteo's free geocoding API (no key required).
@@ -106,6 +107,7 @@ async function aiFixLocation(q: string): Promise<string | null> {
     });
     if (res.ok) {
       const data: any = await res.json();
+      recordClaude("location", data);
       const text = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().split("\n")[0];
       if (text && !/^none\b/i.test(text) && text.length <= 60) out = text;
     }
@@ -173,9 +175,17 @@ export async function resolveCoords(location: string): Promise<{ lat: number; lo
 // relations. Editable without a deploy via the BLOCKED_COUNTRIES env var
 // (comma-separated ISO codes). Default: Bhutan, Iran, North Korea.
 // Fails open: an empty location or an unresolvable one is never blocked.
+const blockedCache = new Map<string, boolean>();
 export async function isBlockedLocation(location: string): Promise<boolean> {
   const blocked = (Bun.env.BLOCKED_COUNTRIES ?? "BT,IR,KP").split(",").map((c) => c.trim().toLowerCase()).filter(Boolean);
-  if (!blocked.length || !location.trim()) return false;
-  const cc = await resolveCountryCode(location).catch(() => null);
-  return !!cc && blocked.includes(cc.toLowerCase());
+  const q = (location || "").trim();
+  if (!blocked.length || !q) return false;
+  const ck = blocked.join(",") + "|" + q.toLowerCase();
+  const hit = blockedCache.get(ck);
+  if (hit !== undefined) return hit;
+  const cc = await resolveCountryCode(q).catch(() => null);
+  const res = !!cc && blocked.includes(cc.toLowerCase());
+  // Only cache successful lookups so a failed geocode is retried (fails open meanwhile).
+  if (cc) { if (blockedCache.size > 1000) blockedCache.clear(); blockedCache.set(ck, res); }
+  return res;
 }

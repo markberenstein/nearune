@@ -2327,7 +2327,7 @@ const RAW = String.raw`<!doctype html>
     }, function () { setLocNote(t("Couldn't get your location. Please type your city.")); }, { timeout: 10000, maximumAge: 600000 });
   }
   var autoLocTried = false;
-  function makeLocButton(draft) {
+  function makeLocButton(draft, noAuto) {
     var b = document.createElement("button");
     b.type = "button";
     b.textContent = t("📍 Use my current location");
@@ -2336,7 +2336,7 @@ const RAW = String.raw`<!doctype html>
     b.addEventListener("click", function () { useCurrentLocation(draft); });
     // If location access was already granted, fill it in without asking again.
     try {
-      if (!autoLocTried && navigator.permissions && navigator.permissions.query && !draft.location.trim()) {
+      if (!noAuto && !autoLocTried && navigator.permissions && navigator.permissions.query && !draft.location.trim()) {
         autoLocTried = true;
         navigator.permissions.query({ name: "geolocation" }).then(function (st) {
           if (st && st.state === "granted" && !draft.location.trim()) useCurrentLocation(draft);
@@ -4120,6 +4120,8 @@ const RAW = String.raw`<!doctype html>
     };
     travelError = "";
     travelFormOpen = true;
+    locCityError = "";
+    travelDraft.languageTouched = true;
     renderApp();
   }
   function cancelTravelForm() {
@@ -4129,6 +4131,7 @@ const RAW = String.raw`<!doctype html>
   async function saveTravelForm() {
     var location = travelDraft.location.trim();
     if (!location) { travelError = t("Enter a city, or use Back home to clear it."); renderApp(); return; }
+    if (locCityError) { travelError = locCityError; renderApp(); return; }
     travelBusy = true; travelError = ""; renderApp();
     try {
       await api("/api/travel", {
@@ -4139,7 +4142,7 @@ const RAW = String.raw`<!doctype html>
         showEarly: !!(travelDraft.from && travelDraft.showEarly),
       });
       travelFormOpen = false;
-    } catch (e) { travelError = e && e.code === "region_unavailable" ? t("Nearune isn't available in that location.") : t("Something went wrong — try again."); }
+    } catch (e) { travelError = e && e.code === "region_unavailable" ? t("Nearune isn't available in that location.") : e && e.code === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("Something went wrong — try again."); }
     travelBusy = false;
     renderApp();
   }
@@ -4190,7 +4193,11 @@ const RAW = String.raw`<!doctype html>
       var card = h("div", { class: "edit-form" });
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Set where you're traveling — your partner's weather, local-story line and clock will show this instead of home. Leave \"Starts\" blank to begin right away, or pick a future date to schedule it ahead.") }));
       var fields = h("div", { class: "puzzle-setup" });
-      fields.appendChild(textField(travelDraft.location, "City you're traveling to", function (v) { travelDraft.location = v; }));
+      lastLocInputEl = textField(travelDraft.location, "City you're traveling to (e.g. Paris, FR)", function (v) { travelDraft.location = v; suggestLanguageFromLocation(travelDraft, v); });
+      fields.appendChild(lastLocInputEl);
+      fields.appendChild(makeLocButton(travelDraft, true));
+      fields.appendChild(makeLocNote());
+      fields.appendChild(makeLocChoices());
       var fromInput = document.createElement("input");
       fromInput.type = "date";
       fromInput.value = travelDraft.from;

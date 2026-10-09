@@ -1,4 +1,4 @@
-import { expandUsState, US_ABBR } from "./usstates";
+import { expandUsState, US_ABBR, regionAbbr } from "./usstates";
 import { recordClaude } from "./usage";
 // Nearune — resolves a free-text "where you're based" string (city,
 // country, whatever someone types) to a real IANA timezone and a likely
@@ -90,6 +90,7 @@ function matchesQualifiers(r: any, rest: string[]): boolean {
     if (r.country && norm(r.country) === t) return true;
     if (cc === t || (t === "usa" && cc === "us") || (t === "uk" && cc === "gb")) return true;
     if (cc === "us" && US_ABBR[t.toUpperCase()] && US_ABBR[t.toUpperCase()] === norm(r.admin1 || "")) return true;
+    if (regionAbbr(cc, r.admin1 || "") === t.toUpperCase()) return true;
     return false;
   });
 }
@@ -126,7 +127,11 @@ export async function searchPlaces(q0: string): Promise<{ label: string; lat: nu
     if (fc.startsWith("PCL") || fc.startsWith("ADM")) continue;
     if (norm(r.name) !== norm(cityName)) continue;
     if (!matchesQualifiers(r, rest)) continue;
-    const label = [r.name, r.admin1 && norm(r.admin1) !== norm(r.name) ? r.admin1 : "", r.country || ""].filter(Boolean).join(", ");
+    const cc2 = String(r.country_code || "").toUpperCase();
+    const ab = regionAbbr(cc2, r.admin1 || "");
+    let label = [r.name, ab, cc2 || r.country || ""].filter(Boolean).join(", ");
+    // Regions with no standard abbreviation: only name the region when the short label would repeat.
+    if (!ab && seen.has(label) && r.admin1) label = [r.name, r.admin1, cc2 || r.country || ""].filter(Boolean).join(", ");
     if (seen.has(label)) continue;
     seen.add(label);
     out.push({ label, lat: r.latitude, lon: r.longitude });

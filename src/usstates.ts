@@ -28,3 +28,22 @@ export const US_ABBR: Record<string, string> = {
   ND: "north dakota", OH: "ohio", OK: "oklahoma", OR: "oregon", PA: "pennsylvania", RI: "rhode island", SC: "south carolina", SD: "south dakota",
   TN: "tennessee", TX: "texas", UT: "utah", VT: "vermont", VA: "virginia", WA: "washington", WV: "west virginia", WI: "wisconsin", WY: "wyoming", DC: "district of columbia",
 };
+
+// Abbreviations for first-level regions, by lower-case country code. Names are normalised (lower case, no accents).
+export const REGION_ABBR: Record<string, Record<string, string>> = {
+  us: Object.fromEntries(Object.entries(US_ABBR).map(([ab, name]) => [name, ab])),
+  ca: {
+    "alberta": "AB", "british columbia": "BC", "manitoba": "MB", "new brunswick": "NB", "newfoundland and labrador": "NL",
+    "nova scotia": "NS", "ontario": "ON", "prince edward island": "PE", "quebec": "QC", "saskatchewan": "SK",
+    "northwest territories": "NT", "nunavut": "NU", "yukon": "YT",
+  },
+  au: {
+    "new south wales": "NSW", "victoria": "VIC", "queensland": "QLD", "western australia": "WA", "south australia": "SA",
+    "tasmania": "TAS", "australian capital territory": "ACT", "northern territory": "NT",
+  },
+};
+export function regionAbbr(countryCode: string, region: string): string {
+  const m = REGION_ABBR[String(countryCode || "").toLowerCase()];
+  if (!m) return "";
+  return m[String(region || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase()] || "";
+}

@@ -24,6 +24,7 @@ import {
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
+import { regionAbbr } from "./usstates";
 import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
@@ -588,7 +589,11 @@ Bun.serve({
         const a = d?.address || {};
         const city = a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || "";
         if (!city) return json({ label: null });
-        return json({ label: [city, a.state || a.region || "", a.country || ""].filter(Boolean).join(", ") });
+        {
+          const cc3 = String(a.country_code || "").toUpperCase();
+          const st = a.state || a.region || "";
+          return json({ label: [city, regionAbbr(cc3, st), cc3 || a.country || ""].filter(Boolean).join(", ") });
+        }
       } catch { return json({ label: null }); }
     }
 
@@ -671,6 +676,7 @@ Bun.serve({
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
       if (location && await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (location && !(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       const asDateKey = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
       const from = asDateKey(body?.from);
       const until = asDateKey(body?.until);

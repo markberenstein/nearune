@@ -7,7 +7,7 @@ import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip } from "./music";
 import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
-import { elevenLabsUsage } from "./voice";
+import { elevenLabsUsage, voiceSelfTest } from "./voice";
 import { claudeUsageSummary } from "./usage";
 
 // Railway project cost, via Railway's GraphQL API. Needs RAILWAY_API_TOKEN (an account token). Returns null when unset or on any failure.
@@ -44,6 +44,7 @@ const coordCache = new Map<string, { lat: number; lon: number; city: string; cou
 export async function computeStats() {
   const ids = await listRoomIds();
   let rooms = 0, active = 0, people = 0, answered = 0;
+  const voiceIds: { room: number; who: string; id: string }[] = [];
   const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; people: { name: string; location: string; confirmed: boolean }[] }[] = [];
   const locByCountry = new Map<string, string>();
   const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
@@ -68,6 +69,7 @@ export async function computeStats() {
     } catch {}
     for (const k of ["mark", "nikita"]) {
       const p = st?.people?.[k]; if (!p) continue;
+      if (p.voiceId) voiceIds.push({ room: rooms, who: String(p.name || k).slice(0, 30), id: String(p.voiceId) });
       const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
       const loc = String(p.location || "").trim();
       if (!loc) continue;
@@ -132,6 +134,19 @@ export async function computeStats() {
     });
     const mc = qa.checks[qa.checks.length - 1];
     if (!mc.ok) { qa.ok = false; qa.failures.push("Music player: " + mc.detail); }
+  }
+  // Voice playback: speak one word in up to 3 real cloned voices (or just ping ElevenLabs when none are saved).
+  if (qa && Array.isArray(qa.checks)) {
+    const tests = voiceIds.length ? voiceIds.slice(0, 3) : [null];
+    const vitems: { label: string; ok: boolean; note: string }[] = [];
+    for (const v of tests) {
+      let r: { ok: boolean; detail: string };
+      try { r = await voiceSelfTest(v ? v.id : null); } catch (e: any) { r = { ok: false, detail: String(e?.message || e).slice(0, 120) }; }
+      vitems.push({ label: v ? "Room " + v.room + " - " + v.who : "ElevenLabs account", ok: r.ok, note: r.detail });
+    }
+    const vbad = vitems.filter((i) => !i.ok);
+    qa.checks.push({ name: "Voice playback (cloned voices)", ok: vbad.length === 0, items: vitems, detail: vbad.length ? vbad.map((i) => i.label + ": " + i.note).join("; ") : "all tested voices spoke" });
+    if (vbad.length) { qa.ok = false; qa.failures.push("Voice playback: " + vbad.map((i) => i.label + ": " + i.note).join("; ")); }
   }
   return {
     at: new Date().toISOString(),

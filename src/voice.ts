@@ -96,12 +96,38 @@ export async function synthesizeSpeech(text: string, voiceId: string): Promise<U
         voice_settings: { stability: 0.7, similarity_boost: 0.85 },
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Logged (not sent to the client) so a failing voice shows its real reason in Railway's logs.
+      let body = "";
+      try { body = (await res.text()).slice(0, 300); } catch {}
+      console.log("[voice] speak failed -> HTTP " + res.status + " " + body);
+      lastSynthError = "HTTP " + res.status + " " + body;
+      return null;
+    }
     const buf = await res.arrayBuffer();
+    lastSynthError = "";
     return new Uint8Array(buf);
-  } catch {
+  } catch (e: any) {
+    console.log("[voice] speak failed -> " + (e?.message || e));
+    lastSynthError = String(e?.message || e);
     return null;
   }
+}
+
+let lastSynthError = "";
+// Health check for the twice-daily QA: speaks one short word in a real cloned
+// voice and reports exactly why it failed if it did. (A few characters, so it
+// costs next to nothing.)
+export async function voiceSelfTest(voiceId: string | null): Promise<{ ok: boolean; detail: string }> {
+  const key = Bun.env.ELEVENLABS_API_KEY;
+  if (!key) return { ok: false, detail: "ELEVENLABS_API_KEY is not set" };
+  if (!voiceId) {
+    const u = await elevenLabsUsage();
+    return u ? { ok: true, detail: "no cloned voices saved yet; ElevenLabs account reachable" } : { ok: false, detail: "ElevenLabs account not reachable" };
+  }
+  const audio = await synthesizeSpeech("Hi", voiceId);
+  if (audio && audio.length > 500) return { ok: true, detail: "cloned voice spoke (" + audio.length + " bytes)" };
+  return { ok: false, detail: lastSynthError || "no audio returned" };
 }
 
 // Monthly character usage vs. plan limit (for the daily self-check). Needs a

@@ -6,6 +6,7 @@ import { listRoomIds, loadState } from "./storage";
 import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip } from "./music";
 import { runQa } from "./qa";
+import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
 import { elevenLabsUsage } from "./voice";
 
 const coordCache = new Map<string, { lat: number; lon: number; city: string; country: string } | null>();
@@ -48,12 +49,36 @@ export async function computeStats() {
   }
   let qa: any = null;
   try { const r = await runQa(); qa = { at: r.at, ok: r.ok, failures: r.failures, fixed: r.fixed, checks: r.checks }; } catch {}
+  // WeatherKit connection test: one live call for a fixed point (San Mateo).
+  const wk: { ok: boolean; configured: boolean; ms: number | null; detail: string } = { ok: false, configured: weatherKitConfigured(), ms: null, detail: "" };
+  if (!wk.configured) wk.detail = "WeatherKit keys not set";
+  else {
+    const t0 = Date.now();
+    try {
+      const w = await weatherKitCurrentWeather(37.56, -122.33);
+      wk.ms = Date.now() - t0;
+      wk.ok = !!w;
+      wk.detail = w ? Math.round(w.tempC) + " C, " + w.conditionCode : "no data returned";
+    } catch (e: any) { wk.ms = Date.now() - t0; wk.detail = "error: " + String(e?.message || e).slice(0, 80); }
+  }
+  if (qa && Array.isArray(qa.checks)) {
+    const bad = music.filter((m) => !m.chart || m.previewsOk < m.total);
+    qa.checks.push({
+      name: "Music player (charts and previews)",
+      ok: music.length > 0 && bad.length === 0,
+      detail: music.length === 0 ? "no countries to test"
+        : bad.length ? bad.map((m) => m.country + (m.chart ? " " + m.previewsOk + "/" + m.total + " previews" : " chart unavailable")).join("; ")
+        : music.length + " countries, all charts load and " + music.reduce((a, m) => a + m.total, 0) + " previews download",
+    });
+    const mc = qa.checks[qa.checks.length - 1];
+    if (!mc.ok) { qa.ok = false; qa.failures.push("Music player: " + mc.detail); }
+  }
   return {
     at: new Date().toISOString(),
     rooms, activeRooms: active, people,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
-    music,
     qa,
+    weatherkit: wk,
     elevenlabs: u ? { used: u.used, limit: u.limit, resetsAt: u.resetsAt, voices: u.voices, voiceLimit: u.voiceLimit } : null,
   };
 }

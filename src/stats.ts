@@ -15,7 +15,7 @@ export async function computeStats() {
   const ids = await listRoomIds();
   let rooms = 0, active = 0, people = 0;
   const locByCountry = new Map<string, string>();
-  const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number }>();
+  const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; wk?: { ok: boolean; ms: number | null } }>();
   for (const id of ids) {
     let st: any;
     try { st = await loadState(id); } catch { continue; }
@@ -49,6 +49,17 @@ export async function computeStats() {
   }
   let qa: any = null;
   try { const r = await runQa(); qa = { at: r.at, ok: r.ok, failures: r.failures, fixed: r.fixed, checks: r.checks }; } catch {}
+  // WeatherKit connection test per city (the same call the app makes for a
+  // person's background), max 20 cities.
+  if (weatherKitConfigured()) {
+    await Promise.all([...byCity.values()].slice(0, 20).map(async (c) => {
+      const t0 = Date.now();
+      try {
+        const w = await weatherKitCurrentWeather(c.lat, c.lon);
+        c.wk = { ok: !!w, ms: Date.now() - t0 };
+      } catch { c.wk = { ok: false, ms: Date.now() - t0 }; }
+    }));
+  }
   // WeatherKit connection test: one live call for a fixed point (San Mateo).
   const wk: { ok: boolean; configured: boolean; ms: number | null; detail: string } = { ok: false, configured: weatherKitConfigured(), ms: null, detail: "" };
   if (!wk.configured) wk.detail = "WeatherKit keys not set";

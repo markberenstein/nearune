@@ -2403,6 +2403,7 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Nearune") });
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
+      if (!acceptDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
       if (locCityError) { regError = locCityError; renderApp(); return; }
       if (!acceptDraft.name.trim()) { regError = "Enter your name."; renderApp(); return; }
       regBusy = true; regError = ""; renderApp();
@@ -2440,6 +2441,7 @@ const RAW = String.raw`<!doctype html>
   var lastConfirmUrl = "";
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
+    if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
     if (locCityError) { regError = locCityError; renderApp(); return; }
     if (!name || !email) { regError = t("Name and Instagram handle (or email) required."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see

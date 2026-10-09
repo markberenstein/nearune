@@ -183,15 +183,18 @@ export async function resolveCoords(location: string): Promise<{ lat: number; lo
 const CITY_STATES = new Set(["singapore", "monaco", "hong kong", "vatican city", "macau", "macao", "gibraltar", "luxembourg"]);
 export async function isCityLevelLocation(location: string): Promise<boolean> {
   const q = (location || "").trim();
-  if (!q) return true;
+  if (!q) return false;
   if (expandUsState(q) !== q) return false;
   if (CITY_STATES.has(q.toLowerCase())) return true;
-  const { first } = await geocodeFull(q);
-  const fc = first && typeof first.feature_code === "string" ? first.feature_code : "";
-  const nm = first && typeof first.name === "string" ? first.name.trim().toLowerCase() : "";
-  const co = first && typeof first.country === "string" ? first.country.trim().toLowerCase() : "";
-  const ad = first && typeof first.admin1 === "string" ? first.admin1.trim().toLowerCase() : "";
-  // The place found is a country (code PCL*, or its name is the country's own name), a state or a county.
+  let { first } = await geocodeFull(q);
+  if (!first) { await new Promise((r) => setTimeout(r, 400)); first = (await geocodeFull(q)).first; }
+  // Strict: a place the lookup cannot identify is not accepted.
+  if (!first) { console.log("[city-check] " + JSON.stringify({ q, found: false, ok: false })); return false; }
+  const fc = typeof first.feature_code === "string" ? first.feature_code : "";
+  const nm = typeof first.name === "string" ? first.name.trim().toLowerCase() : "";
+  const co = typeof first.country === "string" ? first.country.trim().toLowerCase() : "";
+  const ad = typeof first.admin1 === "string" ? first.admin1.trim().toLowerCase() : "";
+  // A country (code PCL*, or its name is the country's own name), a state or a county is not a city.
   const isCountry = fc.startsWith("PCL") || (!!nm && nm === co);
   const isRegion = fc.startsWith("ADM");
   const ok = !(isCountry || isRegion);

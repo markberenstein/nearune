@@ -2296,13 +2296,29 @@ const RAW = String.raw`<!doctype html>
   // mobile until they tap away), which left the dropdown looking stuck.
   var lastLangSelectEl = null;
   var lastLocInputEl = null;
+  var locCityError = "", locNoteEl = null;
+  function setLocNote(msg) {
+    locCityError = msg || "";
+    if (locNoteEl && document.body.contains(locNoteEl)) locNoteEl.textContent = locCityError;
+  }
+  function makeLocNote() {
+    locNoteEl = document.createElement("p");
+    locNoteEl.className = "puzzle-guess-note";
+    locNoteEl.style.color = "#b3261e";
+    locNoteEl.setAttribute("role", "alert");
+    locNoteEl.textContent = locCityError;
+    return locNoteEl;
+  }
   function suggestLanguageFromLocation(draft, locationText) {
     if (geoSuggestTimer) clearTimeout(geoSuggestTimer);
-    if (!locationText.trim()) return;
+    if (!locationText.trim()) { setLocNote(""); return; }
     geoSuggestTimer = setTimeout(function () {
       fetch(RP + "/api/geo?location=" + encodeURIComponent(locationText.trim()))
         .then(function (r) { return r.json(); })
         .then(function (info) {
+          if (draft.location.trim() === locationText.trim()) {
+            setLocNote(info && info.city === false ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : "");
+          }
           if (info && info.corrected && draft.location.trim() === locationText.trim()) {
             draft.location = info.corrected;
             if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = info.corrected;
@@ -2380,12 +2396,14 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
+    form.appendChild(makeLocNote());
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Nearune") });
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
+      if (locCityError) { regError = locCityError; renderApp(); return; }
       if (!acceptDraft.name.trim()) { regError = "Enter your name."; renderApp(); return; }
       regBusy = true; regError = ""; renderApp();
       fetch(RP + "/api/accept-invite", {
@@ -2422,6 +2440,7 @@ const RAW = String.raw`<!doctype html>
   var lastConfirmUrl = "";
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
+    if (locCityError) { regError = locCityError; renderApp(); return; }
     if (!name || !email) { regError = t("Name and Instagram handle (or email) required."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
@@ -2486,6 +2505,7 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     lastLocInputEl = textField(registerDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
+    form.appendChild(makeLocNote());
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your Instagram handle (or email if you don't use Instagram)", function (v) { registerDraft.email = v; }));
     form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No Instagram? Use your email instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));

@@ -567,7 +567,8 @@ Bun.serve({
     if (req.method === "GET" && restPath === "/api/geo") {
       const location = url.searchParams.get("location") || "";
       const info = await resolveLocationInfo(location);
-      return json(info);
+      const city = await isCityLevelLocation(location);
+      return json({ ...info, city });
     }
 
     // SANDBOX EXPERIMENT: current weather at the OTHER person's registered

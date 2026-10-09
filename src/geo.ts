@@ -1,3 +1,4 @@
+import { expandUsState } from "./usstates";
 import { recordClaude } from "./usage";
 // Nearune — resolves a free-text "where you're based" string (city,
 // country, whatever someone types) to a real IANA timezone and a likely
@@ -68,6 +69,7 @@ const INDIA_STATE_LANGUAGE: Record<string, string> = {
 };
 
 async function geocodeRaw(q: string): Promise<any | null> {
+  q = expandUsState(q);
   try {
     const url =
       "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" +

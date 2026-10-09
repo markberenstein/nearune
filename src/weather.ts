@@ -8,6 +8,7 @@
 // background theme. Results are cached briefly in memory since weather
 // changes slowly and this can be polled by every device every so often.
 
+import { expandUsState } from "./usstates";
 import { weatherKitConfigured, weatherKitCurrentWeather, weatherKitBucket, weatherKitLabel } from "./weatherkit";
 
 type GeoPoint = { lat: number; lon: number; name: string; countryCode: string } | null;
@@ -23,7 +24,7 @@ async function geocode(location: string): Promise<GeoPoint> {
   let value: GeoPoint = null;
   try {
     const url =
-      "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + encodeURIComponent(q);
+      "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + encodeURIComponent(expandUsState(q));
     const res = await fetch(url);
     if (res.ok) {
       const data: any = await res.json();

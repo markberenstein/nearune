@@ -10,7 +10,7 @@ import { resolveTimezoneFromLocation } from "./geo";
 import { todayKeyPT, todayKeyFor } from "./util";
 import { buildPageHtml } from "./page";
 
-type Report = { at: string; day: string; ok: boolean; checked: { contrast: number; rooms: number; people: number }; failures: string[]; fixed: string[] };
+type Report = { at: string; day: string; ok: boolean; checked: { contrast: number; rooms: number; people: number }; failures: string[]; fixed: string[]; checks: { name: string; ok: boolean; detail: string }[] };
 let last: Report | null = null;
 export function lastQaReport(): Report | null { return last; }
 
@@ -60,6 +60,7 @@ export async function runQa(): Promise<Report> {
     }
   } catch (e: any) { failures.push("contrast tokens: could not read page (" + (e?.message || e) + ")"); }
 
+  const tokenChecks = contrast;
   // 2) Every weather sky: the better of dark/pale ink must clear 4.5:1 at BOTH
   // ends of the gradient (this is the same rule the client uses to pick ink).
   try {
@@ -103,7 +104,17 @@ export async function runQa(): Promise<Report> {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(todayKeyPT())) failures.push("continuity: day key malformed");
   } catch (e: any) { failures.push("rooms: " + (e?.message || e)); }
 
-  last = { at: new Date().toISOString(), day: todayKeyPT(), ok: failures.length === 0, checked: { contrast, rooms, people }, failures, fixed };
+  const has = (...p: string[]) => failures.filter((f) => p.some((x) => f.startsWith(x)));
+  const grp = (name: string, bad: string[], okText: string): { name: string; ok: boolean; detail: string } =>
+    ({ name, ok: bad.length === 0, detail: bad.length ? bad.join("; ") : okText });
+  const checks = [
+    grp("Page colors readable (light and dark)", has("contrast light", "contrast dark", "contrast tokens"), tokenChecks + " color pairs pass"),
+    grp("Weather skies readable (day and night)", has("contrast sky", "contrast skies"), (contrast - tokenChecks) + " skies pass"),
+    grp("Clocks have a valid timezone", has("clock"), people + " people across " + rooms + " rooms" + (fixed.length ? "; fixed " + fixed.length + " automatically" : "")),
+    grp("Every room loads", has("room ", "rooms"), rooms + " rooms loaded"),
+    grp("Day key and original-room link", has("continuity"), "day key valid, legacy link resolves"),
+  ];
+  last = { at: new Date().toISOString(), day: todayKeyPT(), ok: failures.length === 0, checked: { contrast, rooms, people }, failures, fixed, checks };
   console.log(`[qa] ${last.ok ? "PASS" : "FAIL"} day=${last.day} contrast=${contrast} rooms=${rooms} people=${people} fixed=${fixed.length} failures=${failures.length}`);
   for (const f of failures) console.log("[qa] FAIL " + f);
   for (const f of fixed) console.log("[qa] FIXED " + f);

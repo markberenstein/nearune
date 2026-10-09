@@ -5,6 +5,7 @@
 import { listRoomIds, loadState } from "./storage";
 import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip } from "./music";
+import { runQa } from "./qa";
 import { elevenLabsUsage } from "./voice";
 
 const coordCache = new Map<string, { lat: number; lon: number; city: string; country: string } | null>();
@@ -45,11 +46,14 @@ export async function computeStats() {
       music.push({ country, chart: true, previewsOk: res.filter(Boolean).length, total: res.length });
     } catch { music.push({ country, chart: false, previewsOk: 0, total: 0 }); }
   }
+  let qa: any = null;
+  try { const r = await runQa(); qa = { at: r.at, ok: r.ok, failures: r.failures, fixed: r.fixed, checks: r.checks }; } catch {}
   return {
     at: new Date().toISOString(),
     rooms, activeRooms: active, people,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     music,
+    qa,
     elevenlabs: u ? { used: u.used, limit: u.limit, resetsAt: u.resetsAt, voices: u.voices, voiceLimit: u.voiceLimit } : null,
   };
 }

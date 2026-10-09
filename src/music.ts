@@ -107,12 +107,12 @@ export async function previewClip(title: string, artist: string): Promise<{ type
 
 // Top `limit` songs (default 5) currently popular in whichever country a
 // free-text location resolves to.
-export async function topSongs(location: string, limit = 5): Promise<MusicChart> {
+export async function topSongs(location: string, limit = 5, fresh = false): Promise<MusicChart> {
   const country = await resolveCountryCode(location);
   if (!country) return null;
   const cacheKey = country + "|" + limit;
   const cached = chartCache.get(cacheKey);
-  if (cached) {
+  if (cached && !fresh) {
     const ttl = cached.value ? CHART_TTL : FAILURE_TTL;
     if (Date.now() - cached.at < ttl) return cached.value;
   }

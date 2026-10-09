@@ -41,7 +41,9 @@ export async function computeStats() {
   const music: { country: string; chart: boolean; previewsOk: number; total: number; songs: { label: string; ok: boolean }[] }[] = [];
   for (const [country, loc] of [...locByCountry].slice(0, 6)) {
     try {
-      const chart = await topSongs(loc, 5);
+      let chart = await topSongs(loc, 5);
+      // Apple's chart feed fails briefly and at random; retry up to twice, bypassing the short failure cache, before calling it down.
+      for (let r = 0; r < 2 && (!chart || !chart.length); r++) { await new Promise((res) => setTimeout(res, 6000)); chart = await topSongs(loc, 5, true); }
       if (!chart || !chart.length) { music.push({ country, chart: false, previewsOk: 0, total: 0, songs: [] }); continue; }
       const res = await Promise.all(chart.map((e) => previewClip(e.title, e.artist).then((c) => !!c).catch(() => false)));
       music.push({ country, chart: true, previewsOk: res.filter(Boolean).length, total: res.length, songs: chart.map((e, i) => ({ label: "#" + e.rank + " " + e.title + (e.artist ? " - " + e.artist : ""), ok: res[i] })) });

@@ -568,8 +568,28 @@ Bun.serve({
       const location = url.searchParams.get("location") || "";
       const info = await resolveLocationInfo(location);
       const city = await isCityLevelLocation(location);
-      const places = await searchPlaces(location);
-      return json({ ...info, city, places });
+      let places = await searchPlaces(location);
+      let suggested = false;
+      // Nothing matches as typed (a misspelling): offer the places for the corrected spelling.
+      if (!places.length && info.corrected) { places = await searchPlaces(info.corrected); suggested = places.length > 0; }
+      return json({ ...info, city, places, suggested });
+    }
+
+    // "Use my current location": turns browser coordinates into a "City, Region, Country" label.
+    // Coordinates are rounded to about a kilometre and not stored.
+    if (req.method === "GET" && restPath === "/api/reverse-geo") {
+      if (!rateLimit("reverse-geo:" + clientIp(req, server), 20, 60 * 60 * 1000)) return json({ error: "rate_limited" }, { status: 429 });
+      const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+      if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return json({ error: "invalid" }, { status: 400 });
+      try {
+        const r = await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=" + lat.toFixed(2) + "&lon=" + lon.toFixed(2), { headers: { "user-agent": "Nearune/1.0 (https://nearune.ai)" } });
+        if (!r.ok) return json({ label: null });
+        const d: any = await r.json();
+        const a = d?.address || {};
+        const city = a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || "";
+        if (!city) return json({ label: null });
+        return json({ label: [city, a.state || a.region || "", a.country || ""].filter(Boolean).join(", ") });
+      } catch { return json({ label: null }); }
     }
 
     // SANDBOX EXPERIMENT: current weather at the OTHER person's registered

@@ -2309,6 +2309,42 @@ const RAW = String.raw`<!doctype html>
     locNoteEl.textContent = locCityError;
     return locNoteEl;
   }
+  function useCurrentLocation(draft) {
+    if (!navigator.geolocation) return;
+    setLocNote(t("Finding your location…"));
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      fetch(RP + "/api/reverse-geo?lat=" + pos.coords.latitude + "&lon=" + pos.coords.longitude)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.label) {
+            draft.location = d.label;
+            if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = d.label;
+            setLocNote("");
+            suggestLanguageFromLocation(draft, d.label);
+          } else { setLocNote(t("Couldn't work out your city. Please type it.")); }
+        })
+        .catch(function () { setLocNote(t("Couldn't work out your city. Please type it.")); });
+    }, function () { setLocNote(t("Couldn't get your location. Please type your city.")); }, { timeout: 10000, maximumAge: 600000 });
+  }
+  var autoLocTried = false;
+  function makeLocButton(draft) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = t("📍 Use my current location");
+    b.style.cssText = "display:block;margin:-2px auto 8px;padding:6px 12px;border:0;background:transparent;font:inherit;font-size:0.9em;color:inherit;text-decoration:underline;cursor:pointer";
+    if (!navigator.geolocation) b.style.display = "none";
+    b.addEventListener("click", function () { useCurrentLocation(draft); });
+    // If location access was already granted, fill it in without asking again.
+    try {
+      if (!autoLocTried && navigator.permissions && navigator.permissions.query && !draft.location.trim()) {
+        autoLocTried = true;
+        navigator.permissions.query({ name: "geolocation" }).then(function (st) {
+          if (st && st.state === "granted" && !draft.location.trim()) useCurrentLocation(draft);
+        }).catch(function () {});
+      }
+    } catch (e) {}
+    return b;
+  }
   var locChoicesEl = null;
   function makeLocChoices() {
     locChoicesEl = document.createElement("div");
@@ -2350,13 +2386,10 @@ const RAW = String.raw`<!doctype html>
           if (draft.location.trim() === locationText.trim()) {
             var pls = (info && info.places) || [];
             var exact = pls.some(function (pl) { return pl.label.toLowerCase() === locationText.trim().toLowerCase(); });
-            var ambiguous = pls.length >= 2 && !exact;
-            setLocNote(info && info.city === false ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "");
+            var suggestedList = !!(info && info.suggested) && pls.length > 0 && !exact;
+            var ambiguous = (pls.length >= 2 && !exact) || suggestedList;
+            setLocNote(suggestedList ? t("We couldn't find that spelling. Did you mean one of these? Pick yours from the list.") : info && info.city === false && !pls.length ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "");
             showLocChoices(draft, ambiguous ? pls : []);
-          }
-          if (info && info.corrected && draft.location.trim() === locationText.trim()) {
-            draft.location = info.corrected;
-            if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = info.corrected;
           }
           if (draft.languageTouched) return; // they picked one while we were waiting
           if (info && info.language && draft.location.trim() === locationText.trim()) {
@@ -2431,6 +2464,7 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
+    form.appendChild(makeLocButton(acceptDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
@@ -2543,6 +2577,7 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     lastLocInputEl = textField(registerDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
+    form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));

@@ -63,6 +63,19 @@ export async function runQa(): Promise<Report> {
     }
   } catch (e: any) { failures.push("contrast tokens: could not read page (" + (e?.message || e) + ")"); }
 
+  // 1b) Text that sits directly on the weather sky (not inside a card) must use the sky ink,
+  // otherwise it can be dark-on-dark at night (this is how the past-days journal went unreadable).
+  try {
+    const html = buildPageHtml("", "qa");
+    for (const cls of ["journal-toggle", "journal-date", "journal-q", "journal-a", "journal-empty"]) {
+      contrast++;
+      const rule = new RegExp("body\\.weather-active[^{}]*\\." + cls + "\\b[^{}]*\\{[^}]*--weather-ink");
+      const ok = rule.test(html);
+      tokenItems.push({ label: "on-sky text ." + cls, ok, note: ok ? "uses sky ink" : "does not use sky ink" });
+      if (!ok) failures.push("contrast on-sky text ." + cls + ": not using the sky ink (unreadable at night)");
+    }
+  } catch (e: any) { failures.push("contrast on-sky text: " + (e?.message || e)); }
+
   const tokenChecks = contrast;
   // 2) Every weather sky: the better of dark/pale ink must clear 4.5:1 at BOTH
   // ends of the gradient (this is the same rule the client uses to pick ink).
@@ -118,7 +131,7 @@ export async function runQa(): Promise<Report> {
   const grp = (name: string, bad: string[], okText: string, items: Item[]): { name: string; ok: boolean; detail: string; items: Item[] } =>
     ({ name, ok: bad.length === 0, detail: bad.length ? bad.join("; ") : okText, items });
   const checks = [
-    grp("Page colors readable (light and dark)", has("contrast light", "contrast dark", "contrast tokens"), tokenChecks + " color pairs pass", tokenItems),
+    grp("Page colors readable (light and dark)", has("contrast light", "contrast dark", "contrast tokens", "contrast on-sky"), tokenChecks + " color pairs pass", tokenItems),
     grp("Weather skies readable (day and night)", has("contrast sky", "contrast skies"), (contrast - tokenChecks) + " skies pass", skyItems),
     grp("Clocks have a valid timezone", has("clock"), people + " people across " + rooms + " rooms" + (fixed.length ? "; fixed " + fixed.length + " automatically" : ""), clockItems),
     grp("Every room loads", has("room ", "rooms"), rooms + " rooms loaded", roomItems),

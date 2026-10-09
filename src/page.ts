@@ -174,6 +174,18 @@ const RAW = String.raw`<!doctype html>
     color: var(--weather-ink, #2B211B);
   }
 
+  /* Past-days journal sits directly on the sky (not in a card), so its text and
+     lines use the sky ink too — plain --ink is dark in light mode and vanished on a night sky. */
+  body.weather-active .journal-toggle,
+  body.weather-active .journal-date,
+  body.weather-active .journal-q,
+  body.weather-active .journal-a,
+  body.weather-active .journal-a b,
+  body.weather-active .journal-empty,
+  body.weather-active .journal-entry .comment,
+  body.weather-active .journal-entry .comment-name { color: var(--weather-ink, #2B211B); }
+  body.weather-active .journal-entry { border-left-color: color-mix(in srgb, var(--weather-ink, #2B211B) 55%, transparent); }
+  body.weather-active .journal-entry .comments { border-top-color: color-mix(in srgb, var(--weather-ink, #2B211B) 40%, transparent); }
   body.weather-active .translate-inline { border-left-color: var(--weather-ink, #2B211B); }
   body.weather-active .eyebrow, body.weather-active .voice-card-prompt { color: var(--weather-ink, #2B211B); }
   /* Inside a card surface (white in light mode) the sky ink can be pale at

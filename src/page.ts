@@ -2394,7 +2394,7 @@ const RAW = String.raw`<!doctype html>
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
-          if (!res.ok) { regError = t("That invite link isn't valid."); renderApp(); return; }
+          if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
@@ -2436,7 +2436,9 @@ const RAW = String.raw`<!doctype html>
       .then(function (res) {
         regBusy = false;
         if (!res.ok) {
-          regError = res.data && res.data.error === "rate_limited"
+          regError = res.data && res.data.error === "region_unavailable"
+            ? t("Nearune isn't available in that location.")
+            : res.data && res.data.error === "rate_limited"
             ? t("Too many attempts — wait a bit and try again.")
             : t("Couldn't register — try again.");
           renderApp(); return;

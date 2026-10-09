@@ -24,7 +24,7 @@ import {
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
-import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs, previewClip } from "./music";
@@ -686,6 +686,7 @@ Bun.serve({
       if (!isPerson(who) || !name || (!email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
+      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
       if (handle) {
         // Instagram-handle sign-up: nothing is emailed (there's no address),
         // so there's nothing to confirm and nothing that could be used to
@@ -863,6 +864,7 @@ Bun.serve({
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
+      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
       (["mark", "nikita"] as PersonKey[]).forEach((k) => {

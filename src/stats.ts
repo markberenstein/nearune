@@ -47,6 +47,8 @@ export async function computeStats() {
       music.push({ country, chart: true, previewsOk: res.filter(Boolean).length, total: res.length, songs: chart.map((e, i) => ({ label: "#" + e.rank + " " + e.title + (e.artist ? " - " + e.artist : ""), ok: res[i] })) });
     } catch { music.push({ country, chart: false, previewsOk: 0, total: 0, songs: [] }); }
   }
+  let qa: any = null;
+  try { const r = await runQa(); qa = { at: r.at, ok: r.ok, failures: r.failures, fixed: r.fixed, checks: r.checks }; } catch {}
   // WeatherKit connection test: one live call for a fixed point (San Mateo).
   const wk: { ok: boolean; configured: boolean; ms: number | null; detail: string } = { ok: false, configured: weatherKitConfigured(), ms: null, detail: "" };
   if (!wk.configured) wk.detail = "WeatherKit keys not set";

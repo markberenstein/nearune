@@ -168,3 +168,14 @@ export async function resolveCoords(location: string): Promise<{ lat: number; lo
   if (!first || typeof first.latitude !== "number" || typeof first.longitude !== "number") return null;
   return { lat: first.latitude, lon: first.longitude, city: String(first.name || ""), country: String(first.country_code || "").toUpperCase() };
 }
+
+// Countries Nearune is not offered in: those with no U.S. diplomatic
+// relations. Editable without a deploy via the BLOCKED_COUNTRIES env var
+// (comma-separated ISO codes). Default: Bhutan, Iran, North Korea.
+// Fails open: an empty location or an unresolvable one is never blocked.
+export async function isBlockedLocation(location: string): Promise<boolean> {
+  const blocked = (Bun.env.BLOCKED_COUNTRIES ?? "BT,IR,KP").split(",").map((c) => c.trim().toLowerCase()).filter(Boolean);
+  if (!blocked.length || !location.trim()) return false;
+  const cc = await resolveCountryCode(location).catch(() => null);
+  return !!cc && blocked.includes(cc.toLowerCase());
+}

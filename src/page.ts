@@ -298,6 +298,8 @@ const RAW = String.raw`<!doctype html>
   .edit-btn:hover { opacity: 1; }
   .edit-form { display: flex; flex-direction: column; gap: 8px; }
   .edit-form textarea { min-height: 64px; }
+  /* The travel form sits at the top, over the sky wash, so it gets a solid card (same as the pill above it) to stay readable at night. */
+  .travel-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 0 0 12px; }
   .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
   .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
   .mini-btn.primary { background: var(--accent); color: var(--on-accent); }
@@ -4144,6 +4146,8 @@ const RAW = String.raw`<!doctype html>
     var location = travelDraft.location.trim();
     if (!location) { travelError = t("Enter a city, or use Back home to clear it."); renderApp(); return; }
     if (locCityError) { travelError = locCityError; renderApp(); return; }
+    if (travelDraft.from && travelDraft.until && travelDraft.until < travelDraft.from) { travelError = t("The return date can't be before the start date."); renderApp(); return; }
+    if (travelDraft.until && travelDraft.until < dateKey(new Date())) { travelError = t("The return date is already past."); renderApp(); return; }
     travelBusy = true; travelError = ""; renderApp();
     try {
       await api("/api/travel", {
@@ -4202,7 +4206,7 @@ const RAW = String.raw`<!doctype html>
     var today = dateKey(new Date());
     var wrap = h("div", {});
     if (travelFormOpen) {
-      var card = h("div", { class: "edit-form" });
+      var card = h("div", { class: "edit-form travel-card" });
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Set where you're traveling — your partner's weather, local-story line and clock will show this instead of home. Leave \"Starts\" blank to begin right away, or pick a future date to schedule it ahead.") }));
       var fields = h("div", { class: "puzzle-setup" });
       lastLocInputEl = textField(travelDraft.location, "City you're traveling to (e.g. Paris, FR)", function (v) { travelDraft.location = v; suggestLanguageFromLocation(travelDraft, v); });
@@ -4213,7 +4217,7 @@ const RAW = String.raw`<!doctype html>
       var fromInput = document.createElement("input");
       fromInput.type = "date";
       fromInput.value = travelDraft.from;
-      fromInput.addEventListener("input", function () { travelDraft.from = fromInput.value; renderApp(); });
+      fromInput.addEventListener("change", function () { travelDraft.from = fromInput.value; renderApp(); });
       fields.appendChild(h("div", { class: "travel-until-row" }, [
         h("span", { class: "travel-until-label", text: t("Starts (optional)") }),
         fromInput,

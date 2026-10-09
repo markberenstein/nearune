@@ -2309,15 +2309,50 @@ const RAW = String.raw`<!doctype html>
     locNoteEl.textContent = locCityError;
     return locNoteEl;
   }
+  var locChoicesEl = null;
+  function makeLocChoices() {
+    locChoicesEl = document.createElement("div");
+    locChoicesEl.style.display = "none";
+    locChoicesEl.style.margin = "-2px 0 10px";
+    locChoicesEl.style.border = "1px solid rgba(0,0,0,0.12)";
+    locChoicesEl.style.borderRadius = "16px";
+    locChoicesEl.style.overflow = "hidden";
+    locChoicesEl.style.background = "#fff";
+    return locChoicesEl;
+  }
+  function showLocChoices(draft, places) {
+    if (!locChoicesEl || !document.body.contains(locChoicesEl)) return;
+    locChoicesEl.innerHTML = "";
+    if (!places || !places.length) { locChoicesEl.style.display = "none"; return; }
+    places.forEach(function (pl) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = pl.label;
+      b.style.cssText = "display:block;width:100%;text-align:left;padding:12px 16px;border:0;border-bottom:1px solid rgba(0,0,0,0.08);background:transparent;font:inherit;color:inherit;cursor:pointer";
+      b.addEventListener("click", function () {
+        draft.location = pl.label;
+        if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = pl.label;
+        locChoicesEl.style.display = "none";
+        setLocNote("");
+        suggestLanguageFromLocation(draft, pl.label);
+      });
+      locChoicesEl.appendChild(b);
+    });
+    locChoicesEl.style.display = "block";
+  }
   function suggestLanguageFromLocation(draft, locationText) {
     if (geoSuggestTimer) clearTimeout(geoSuggestTimer);
-    if (!locationText.trim()) { setLocNote(""); return; }
+    if (!locationText.trim()) { setLocNote(""); showLocChoices(draft, []); return; }
     geoSuggestTimer = setTimeout(function () {
       fetch(RP + "/api/geo?location=" + encodeURIComponent(locationText.trim()))
         .then(function (r) { return r.json(); })
         .then(function (info) {
           if (draft.location.trim() === locationText.trim()) {
-            setLocNote(info && info.city === false ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : "");
+            var pls = (info && info.places) || [];
+            var exact = pls.some(function (pl) { return pl.label.toLowerCase() === locationText.trim().toLowerCase(); });
+            var ambiguous = pls.length >= 2 && !exact;
+            setLocNote(info && info.city === false ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "");
+            showLocChoices(draft, ambiguous ? pls : []);
           }
           if (info && info.corrected && draft.location.trim() === locationText.trim()) {
             draft.location = info.corrected;
@@ -2397,6 +2432,7 @@ const RAW = String.raw`<!doctype html>
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocNote());
+    form.appendChild(makeLocChoices());
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
@@ -2508,6 +2544,7 @@ const RAW = String.raw`<!doctype html>
     lastLocInputEl = textField(registerDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocNote());
+    form.appendChild(makeLocChoices());
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your Instagram handle (or email if you don't use Instagram)", function (v) { registerDraft.email = v; }));
     form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No Instagram? Use your email instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));

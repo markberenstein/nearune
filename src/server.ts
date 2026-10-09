@@ -24,7 +24,7 @@ import {
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
-import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation } from "./geo";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs, previewClip } from "./music";
@@ -568,7 +568,8 @@ Bun.serve({
       const location = url.searchParams.get("location") || "";
       const info = await resolveLocationInfo(location);
       const city = await isCityLevelLocation(location);
-      return json({ ...info, city });
+      const places = await searchPlaces(location);
+      return json({ ...info, city, places });
     }
 
     // SANDBOX EXPERIMENT: current weather at the OTHER person's registered

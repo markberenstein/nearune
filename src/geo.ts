@@ -1,4 +1,4 @@
-import { expandUsState } from "./usstates";
+import { expandUsState, US_ABBR } from "./usstates";
 import { recordClaude } from "./usage";
 // Nearune — resolves a free-text "where you're based" string (city,
 // country, whatever someone types) to a real IANA timezone and a likely
@@ -68,19 +68,71 @@ const INDIA_STATE_LANGUAGE: Record<string, string> = {
   "punjab": "Punjabi",
 };
 
-async function geocodeRaw(q: string): Promise<any | null> {
-  q = expandUsState(q);
+const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+async function fetchPlaces(name: string, count: number): Promise<any[]> {
   try {
-    const url =
-      "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" +
-      encodeURIComponent(q);
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    const res = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=" + count + "&language=en&format=json&name=" + encodeURIComponent(name));
+    if (!res.ok) return [];
     const data: any = await res.json();
-    return (data && Array.isArray(data.results) && data.results[0]) || null;
-  } catch {
-    return null;
+    return (data && Array.isArray(data.results)) ? data.results : [];
+  } catch { return []; }
+}
+
+// Does a result match the qualifiers typed after the city name ("TX", "Texas", "France", "US")?
+function matchesQualifiers(r: any, rest: string[]): boolean {
+  return rest.every((t0) => {
+    const t = norm(t0);
+    if (!t) return true;
+    const cc = String(r.country_code || "").toLowerCase();
+    if (r.admin1 && norm(r.admin1) === t) return true;
+    if (r.admin2 && norm(r.admin2) === t) return true;
+    if (r.country && norm(r.country) === t) return true;
+    if (cc === t || (t === "usa" && cc === "us") || (t === "uk" && cc === "gb")) return true;
+    if (cc === "us" && US_ABBR[t.toUpperCase()] && US_ABBR[t.toUpperCase()] === norm(r.admin1 || "")) return true;
+    return false;
+  });
+}
+
+// Best match for free text. "City, Region, Country" picks the matching place; plain text takes the top result.
+export async function geocodePlace(q0: string): Promise<any | null> {
+  const q = expandUsState(q0);
+  if (q.includes(",")) {
+    const parts = q.split(",").map((s) => s.trim()).filter(Boolean);
+    const cityName = parts[0], rest = parts.slice(1);
+    if (cityName && rest.length) {
+      const hits = (await fetchPlaces(cityName, 10)).filter((r) => norm(r.name) === norm(cityName) && matchesQualifiers(r, rest));
+      if (hits[0]) return hits[0];
+    }
   }
+  return (await fetchPlaces(q, 1))[0] || null;
+}
+
+async function geocodeRaw(q: string): Promise<any | null> {
+  return geocodePlace(q);
+}
+
+// Cities and towns matching the text, for a "which one?" list. Up to 6, labelled "City, Region, Country".
+export async function searchPlaces(q0: string): Promise<{ label: string; lat: number; lon: number }[]> {
+  const q = expandUsState((q0 || "").trim());
+  const parts = q.split(",").map((s) => s.trim()).filter(Boolean);
+  const cityName = parts[0] || "";
+  if (cityName.length < 2) return [];
+  const rest = parts.slice(1);
+  const out: { label: string; lat: number; lon: number }[] = [];
+  const seen = new Set<string>();
+  for (const r of await fetchPlaces(cityName, 10)) {
+    const fc = String(r.feature_code || "");
+    if (fc.startsWith("PCL") || fc.startsWith("ADM")) continue;
+    if (norm(r.name) !== norm(cityName)) continue;
+    if (!matchesQualifiers(r, rest)) continue;
+    const label = [r.name, r.admin1 && norm(r.admin1) !== norm(r.name) ? r.admin1 : "", r.country || ""].filter(Boolean).join(", ");
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, lat: r.latitude, lon: r.longitude });
+    if (out.length >= 6) break;
+  }
+  return out;
 }
 
 // When the geocoder finds nothing (usually a misspelling like "Mumbay" or

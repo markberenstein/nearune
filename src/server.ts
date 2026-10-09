@@ -907,6 +907,7 @@ Bun.serve({
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
           "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
           (Bun.env.APP_STORE_URL ? "<p>Get the Nearune app: <a href=\"" + Bun.env.APP_STORE_URL + "\">Download on the App Store</a></p>" : "") +
+          "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });

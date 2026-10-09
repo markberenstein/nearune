@@ -2639,7 +2639,7 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
-      var copyText = lastAppStoreUrl && url === lastInviteUrl ? "Join me on Nearune. Get the app: " + lastAppStoreUrl + "\nThen open this link: " + url : url;
+      var copyText = lastAppStoreUrl && url === lastInviteUrl ? "Join me on Nearune. Get the app: " + lastAppStoreUrl + "\nThen open this link: " + url + "\nNo iPhone app? Use it in your browser at nearune.ai" : url;
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
@@ -2655,7 +2655,7 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       if (navigator.share) {
         var shareObj = { title: "Nearune", url: url };
-        if (lastAppStoreUrl) shareObj.text = "Join me on Nearune. Get the app: " + lastAppStoreUrl + " — then open this link:";
+        if (lastAppStoreUrl) shareObj.text = "Join me on Nearune. Get the app: " + lastAppStoreUrl + " — then open this link (or use it in your browser at nearune.ai):";
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});

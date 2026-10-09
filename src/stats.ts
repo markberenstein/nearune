@@ -44,6 +44,7 @@ const coordCache = new Map<string, { lat: number; lon: number; city: string; cou
 export async function computeStats() {
   const ids = await listRoomIds();
   let rooms = 0, active = 0, people = 0, answered = 0;
+  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; people: { name: string; location: string; confirmed: boolean }[] }[] = [];
   const locByCountry = new Map<string, string>();
   const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
   for (const id of ids) {
@@ -54,6 +55,17 @@ export async function computeStats() {
     const ppl = ["mark", "nikita"].map((k) => st?.people?.[k]).filter(Boolean);
     people += ppl.length;
     if (ppl.length === 2 && ppl.every((p: any) => p.confirmed)) active++;
+    try {
+      const days = Object.entries(st?.answers || {}).filter(([, day]: any) => day && (day.mark || day.nikita)).map(([d]) => d).sort();
+      roomList.push({
+        n: rooms,
+        created: st?.createdAt || null,
+        status: ppl.length === 2 && ppl.every((p: any) => p.confirmed) ? "active" : ppl.length < 2 ? "waiting for partner" : "partner not confirmed",
+        answeredDays: days.length,
+        lastAnswer: days.length ? days[days.length - 1] : null,
+        people: ppl.map((p: any) => ({ name: String(p.name || "(no name)").slice(0, 40), location: String(p.location || "").slice(0, 60), confirmed: !!p.confirmed })),
+      });
+    } catch {}
     for (const k of ["mark", "nikita"]) {
       const p = st?.people?.[k]; if (!p) continue;
       const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
@@ -123,7 +135,7 @@ export async function computeStats() {
   }
   return {
     at: new Date().toISOString(),
-    rooms, activeRooms: active, answeredRooms: answered, people,
+    rooms, activeRooms: active, answeredRooms: answered, people, roomList,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,

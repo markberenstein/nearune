@@ -27,7 +27,7 @@ import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
 import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { topSongs } from "./music";
+import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
@@ -94,6 +94,13 @@ Bun.serve({
     }
     const roomPrefix = roomId ? "/r/" + roomId : "";
     const HOUR = 60 * 60 * 1000;
+
+    if (req.method === "GET" && url.pathname === "/api/music-preview") {
+      if (!rateLimit("music-preview:" + clientIp(req, server), 120, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "");
+      if (!clip) return json({ error: "no_preview" }, { status: 404 });
+      return new Response(clip.bytes, { headers: { "content-type": clip.type, "cache-control": "public, max-age=3600", "accept-ranges": "none" } });
+    }
 
     if (req.method === "POST" && url.pathname === "/api/create-room") {
       // Caps how many fresh rooms one visitor can spin up — a real couple

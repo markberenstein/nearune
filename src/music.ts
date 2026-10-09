@@ -60,6 +60,51 @@ async function fetchPreviewUrl(title: string, artist: string): Promise<string | 
   }
 }
 
+
+// Fresh preview bytes for one song, served through our own /api/music-preview
+// route. Deezer's mp3 links carry a short-lived signed token (they stop
+// working within hours, but the chart is cached for 6), and their CDN can be
+// refused for listeners in some countries, so the link is never handed to the
+// browser: the server looks it up when someone taps play, downloads the clip,
+// and serves it from our own domain. Falls back to Apple's iTunes preview.
+const previewCache = new Map<string, { at: number; type: string; bytes: ArrayBuffer }>();
+const PREVIEW_TTL = 60 * 60 * 1000;
+async function grab(url: string): Promise<{ type: string; bytes: ArrayBuffer } | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+    const bytes = await res.arrayBuffer();
+    if (bytes.byteLength < 10_000 || bytes.byteLength > 3_000_000) return null;
+    return { type: res.headers.get("content-type") || "audio/mpeg", bytes };
+  } catch { return null; }
+}
+export async function previewClip(title: string, artist: string): Promise<{ type: string; bytes: ArrayBuffer } | null> {
+  title = title.slice(0, 120); artist = artist.slice(0, 120);
+  if (!title) return null;
+  const key = (title + "|" + artist).toLowerCase();
+  const hit = previewCache.get(key);
+  if (hit && Date.now() - hit.at < PREVIEW_TTL) return hit;
+  let got: { type: string; bytes: ArrayBuffer } | null = null;
+  let via = "";
+  const deezer = await fetchPreviewUrl(title, artist);
+  if (deezer) { got = await grab(deezer); via = "deezer"; }
+  if (!got) {
+    try {
+      const q = [title, artist].filter(Boolean).join(" ");
+      const res = await fetch("https://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + encodeURIComponent(q), { signal: AbortSignal.timeout(8000) });
+      const j: any = res.ok ? await res.json() : null;
+      const u = j && j.results && j.results[0] && j.results[0].previewUrl;
+      if (typeof u === "string") { got = await grab(u); via = "itunes"; }
+    } catch {}
+  }
+  console.log("[music] preview " + (got ? "ok via " + via : "FAIL") + ": " + key);
+  if (!got) return null;
+  if (previewCache.size > 300) previewCache.clear();
+  const entry = { at: Date.now(), ...got };
+  previewCache.set(key, entry);
+  return entry;
+}
+
 // Top `limit` songs (default 5) currently popular in whichever country a
 // free-text location resolves to.
 export async function topSongs(location: string, limit = 5): Promise<MusicChart> {
@@ -84,14 +129,13 @@ export async function topSongs(location: string, limit = 5): Promise<MusicChart>
         const results: any[] = (data && data.feed && Array.isArray(data.feed.results) && data.feed.results) || [];
         const top = results.slice(0, limit);
         if (top.length) {
-          const previewUrls = await Promise.all(top.map((r) => (r ? fetchPreviewUrl(r.name || "", r.artistName || "") : Promise.resolve(null))));
           value = top.map((r, i) => ({
             rank: i + 1,
             title: r.name || "",
             artist: r.artistName || "",
             url: r.url || "",
             artworkUrl: r.artworkUrl100 || "",
-            previewUrl: previewUrls[i],
+            previewUrl: r.name ? "/api/music-preview?t=" + encodeURIComponent(r.name || "") + "&a=" + encodeURIComponent(r.artistName || "") : null,
           }));
         } else {
           console.log("[music] fetch " + country + " -> HTTP 200 but no results");

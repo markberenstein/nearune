@@ -10,7 +10,8 @@ import { resolveTimezoneFromLocation } from "./geo";
 import { todayKeyPT, todayKeyFor } from "./util";
 import { buildPageHtml } from "./page";
 
-type Report = { at: string; day: string; ok: boolean; checked: { contrast: number; rooms: number; people: number }; failures: string[]; fixed: string[]; checks: { name: string; ok: boolean; detail: string }[] };
+type Item = { label: string; ok: boolean; note: string };
+type Report = { at: string; day: string; ok: boolean; checked: { contrast: number; rooms: number; people: number }; failures: string[]; fixed: string[]; checks: { name: string; ok: boolean; detail: string; items?: Item[] }[] };
 let last: Report | null = null;
 export function lastQaReport(): Report | null { return last; }
 
@@ -39,10 +40,12 @@ export async function runQa(): Promise<Report> {
   const failures: string[] = [];
   const fixed: string[] = [];
   let contrast = 0;
+  const tokenItems: Item[] = [], skyItems: Item[] = [], clockItems: Item[] = [], roomItems: Item[] = [], contItems: Item[] = [];
   const need = (label: string, fg: string | undefined, bg: string | undefined, min: number) => {
-    if (!fg || !bg || !HEX.test(fg) || !HEX.test(bg)) { failures.push(`contrast ${label}: missing color`); return; }
+    if (!fg || !bg || !HEX.test(fg) || !HEX.test(bg)) { failures.push(`contrast ${label}: missing color`); tokenItems.push({ label, ok: false, note: "missing color" }); return; }
     contrast++;
     const r = ratio(fg, bg);
+    tokenItems.push({ label, ok: r >= min, note: r.toFixed(1) + ":1 (needs " + min + ":1)" });
     if (r < min) failures.push(`contrast ${label}: ${r.toFixed(1)}:1 (needs ${min}:1)`);
   };
 
@@ -72,6 +75,7 @@ export async function runQa(): Promise<Report> {
           Math.min(ratio("#F2EFE9", sky[0]), ratio("#F2EFE9", sky[1])),
         );
         contrast++;
+        skyItems.push({ label: bucket + " (" + which + ")", ok: best >= 4.5, note: best.toFixed(1) + ":1 (needs 4.5:1)" });
         if (best < 4.5) failures.push(`contrast sky ${bucket}-${which}: best ink ${best.toFixed(1)}:1 (needs 4.5:1)`);
       }
     }
@@ -84,35 +88,41 @@ export async function runQa(): Promise<Report> {
     for (const id of ids) {
       rooms++;
       let st;
-      try { st = await loadState(id); } catch (e: any) { failures.push(`room ${id || "(legacy)"}: state unreadable`); continue; }
+      try { st = await loadState(id); roomItems.push({ label: "Room " + rooms, ok: true, note: "loaded" }); } catch (e: any) { failures.push(`room ${id || "(legacy)"}: state unreadable`); roomItems.push({ label: "Room " + rooms, ok: false, note: "state unreadable" }); continue; }
       for (const k of ["mark", "nikita"] as const) {
         const p = st.people?.[k];
         if (!p) continue;
         people++;
         let valid = false;
         if (p.tz) { try { new Intl.DateTimeFormat("en-US", { timeZone: p.tz }); valid = true; } catch {} }
-        if (valid) continue;
-        if (!p.location) { if (id !== "") failures.push(`clock ${id}/${k}: no timezone and no location`); continue; }
+        const who = "Room " + rooms + ", partner " + (k === "mark" ? 1 : 2);
+        if (valid) { clockItems.push({ label: who, ok: true, note: p.tz }); continue; }
+        if (!p.location) { if (id !== "") { failures.push(`clock ${id}/${k}: no timezone and no location`); clockItems.push({ label: who, ok: false, note: "no timezone and no location" }); } continue; }
         const tz = await resolveTimezoneFromLocation(p.location).catch(() => null);
         if (tz) {
           await saveState(id, (s) => { if (s.people?.[k]) s.people[k]!.tz = tz; });
           fixed.push(`clock ${id}/${k}: set timezone ${tz}`);
-        } else failures.push(`clock ${id}/${k}: timezone missing and could not be resolved from "${p.location}"`);
+          clockItems.push({ label: who, ok: true, note: "fixed automatically: " + tz });
+        } else { failures.push(`clock ${id}/${k}: timezone missing and could not be resolved from "${p.location}"`); clockItems.push({ label: who, ok: false, note: "timezone missing, could not resolve" }); }
       }
     }
-    if (canonRoom("q7mvx3ke") !== "") failures.push("continuity: legacy alias q7mvx3ke no longer maps to the original room");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(todayKeyPT())) failures.push("continuity: day key malformed");
+    const aliasOk = canonRoom("q7mvx3ke") === "";
+    if (!aliasOk) failures.push("continuity: legacy alias q7mvx3ke no longer maps to the original room");
+    contItems.push({ label: "Original-room link resolves", ok: aliasOk, note: aliasOk ? "resolves" : "broken" });
+    const keyOk = /^\d{4}-\d{2}-\d{2}$/.test(todayKeyPT());
+    if (!keyOk) failures.push("continuity: day key malformed");
+    contItems.push({ label: "Day key is a valid date", ok: keyOk, note: todayKeyPT() });
   } catch (e: any) { failures.push("rooms: " + (e?.message || e)); }
 
   const has = (...p: string[]) => failures.filter((f) => p.some((x) => f.startsWith(x)));
-  const grp = (name: string, bad: string[], okText: string): { name: string; ok: boolean; detail: string } =>
-    ({ name, ok: bad.length === 0, detail: bad.length ? bad.join("; ") : okText });
+  const grp = (name: string, bad: string[], okText: string, items: Item[]): { name: string; ok: boolean; detail: string; items: Item[] } =>
+    ({ name, ok: bad.length === 0, detail: bad.length ? bad.join("; ") : okText, items });
   const checks = [
-    grp("Page colors readable (light and dark)", has("contrast light", "contrast dark", "contrast tokens"), tokenChecks + " color pairs pass"),
-    grp("Weather skies readable (day and night)", has("contrast sky", "contrast skies"), (contrast - tokenChecks) + " skies pass"),
-    grp("Clocks have a valid timezone", has("clock"), people + " people across " + rooms + " rooms" + (fixed.length ? "; fixed " + fixed.length + " automatically" : "")),
-    grp("Every room loads", has("room ", "rooms"), rooms + " rooms loaded"),
-    grp("Day key and original-room link", has("continuity"), "day key valid, legacy link resolves"),
+    grp("Page colors readable (light and dark)", has("contrast light", "contrast dark", "contrast tokens"), tokenChecks + " color pairs pass", tokenItems),
+    grp("Weather skies readable (day and night)", has("contrast sky", "contrast skies"), (contrast - tokenChecks) + " skies pass", skyItems),
+    grp("Clocks have a valid timezone", has("clock"), people + " people across " + rooms + " rooms" + (fixed.length ? "; fixed " + fixed.length + " automatically" : ""), clockItems),
+    grp("Every room loads", has("room ", "rooms"), rooms + " rooms loaded", roomItems),
+    grp("Day key and original-room link", has("continuity"), "day key valid, legacy link resolves", contItems),
   ];
   last = { at: new Date().toISOString(), day: todayKeyPT(), ok: failures.length === 0, checked: { contrast, rooms, people }, failures, fixed, checks };
   console.log(`[qa] ${last.ok ? "PASS" : "FAIL"} day=${last.day} contrast=${contrast} rooms=${rooms} people=${people} fixed=${fixed.length} failures=${failures.length}`);

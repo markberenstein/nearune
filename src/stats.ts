@@ -38,17 +38,15 @@ export async function computeStats() {
   const u = await elevenLabsUsage();
   // Music player health: for each country our people are in (max 6), is the
   // Apple chart reachable and do the top-5 song previews actually fetch?
-  const music: { country: string; chart: boolean; previewsOk: number; total: number }[] = [];
+  const music: { country: string; chart: boolean; previewsOk: number; total: number; songs: { label: string; ok: boolean }[] }[] = [];
   for (const [country, loc] of [...locByCountry].slice(0, 6)) {
     try {
       const chart = await topSongs(loc, 5);
-      if (!chart || !chart.length) { music.push({ country, chart: false, previewsOk: 0, total: 0 }); continue; }
+      if (!chart || !chart.length) { music.push({ country, chart: false, previewsOk: 0, total: 0, songs: [] }); continue; }
       const res = await Promise.all(chart.map((e) => previewClip(e.title, e.artist).then((c) => !!c).catch(() => false)));
-      music.push({ country, chart: true, previewsOk: res.filter(Boolean).length, total: res.length });
-    } catch { music.push({ country, chart: false, previewsOk: 0, total: 0 }); }
+      music.push({ country, chart: true, previewsOk: res.filter(Boolean).length, total: res.length, songs: chart.map((e, i) => ({ label: "#" + e.rank + " " + e.title + (e.artist ? " - " + e.artist : ""), ok: res[i] })) });
+    } catch { music.push({ country, chart: false, previewsOk: 0, total: 0, songs: [] }); }
   }
-  let qa: any = null;
-  try { const r = await runQa(); qa = { at: r.at, ok: r.ok, failures: r.failures, fixed: r.fixed, checks: r.checks }; } catch {}
   // WeatherKit connection test: one live call for a fixed point (San Mateo).
   const wk: { ok: boolean; configured: boolean; ms: number | null; detail: string } = { ok: false, configured: weatherKitConfigured(), ms: null, detail: "" };
   if (!wk.configured) wk.detail = "WeatherKit keys not set";
@@ -66,6 +64,7 @@ export async function computeStats() {
     qa.checks.push({
       name: "Music player (charts and previews)",
       ok: music.length > 0 && bad.length === 0,
+      items: music.flatMap((m) => m.chart ? m.songs.map((sg) => ({ label: m.country + " " + sg.label, ok: sg.ok, note: sg.ok ? "preview plays" : "preview failed" })) : [{ label: m.country + " chart", ok: false, note: "chart unavailable" }]),
       detail: music.length === 0 ? "no countries to test"
         : bad.length ? bad.map((m) => m.country + (m.chart ? " " + m.previewsOk + "/" + m.total + " previews" : " chart unavailable")).join("; ")
         : music.length + " countries, all charts load and " + music.reduce((a, m) => a + m.total, 0) + " previews download",

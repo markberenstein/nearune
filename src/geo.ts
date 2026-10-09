@@ -177,6 +177,20 @@ export async function resolveCoords(location: string): Promise<{ lat: number; lo
 // relations. Editable without a deploy via the BLOCKED_COUNTRIES env var
 // (comma-separated ISO codes). Default: Bhutan, Iran, North Korea.
 // Fails open: an empty location or an unresolvable one is never blocked.
+// True when the text names a city or town. Rejects a bare country, state or
+// county (feature codes PCL*, ADM*) so every person has a city for weather and
+// the clock. Fails open when the lookup finds nothing.
+const CITY_STATES = new Set(["singapore", "monaco", "hong kong", "vatican city", "macau", "macao", "gibraltar", "luxembourg"]);
+export async function isCityLevelLocation(location: string): Promise<boolean> {
+  const q = (location || "").trim();
+  if (!q) return true;
+  if (expandUsState(q) !== q) return false;
+  if (CITY_STATES.has(q.toLowerCase())) return true;
+  const { first } = await geocodeFull(q);
+  const fc = first && typeof first.feature_code === "string" ? first.feature_code : "";
+  return !(fc.startsWith("PCL") || fc.startsWith("ADM"));
+}
+
 const blockedCache = new Map<string, boolean>();
 export async function isBlockedLocation(location: string): Promise<boolean> {
   const blocked = (Bun.env.BLOCKED_COUNTRIES ?? "BT,IR,KP").split(",").map((c) => c.trim().toLowerCase()).filter(Boolean);

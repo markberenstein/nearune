@@ -24,7 +24,7 @@ import {
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
-import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation } from "./geo";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs, previewClip } from "./music";
@@ -242,6 +242,29 @@ Bun.serve({
         if (s.pushSubs) delete s.pushSubs[who];
       });
       return json({ ok: true });
+    }
+
+    // Support tool: change one person's saved location. Needs the x-cron-secret header.
+    // Body: { name, from, to } updates every person with that name and current location.
+    if (req.method === "POST" && url.pathname === "/api/admin/set-location") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const nm = String(b?.name || "").trim(), from = String(b?.from || "").trim().toLowerCase(), to = String(b?.to || "").trim().slice(0, 80);
+      if (!nm || !from || !to) return json({ error: "invalid" }, { status: 400 });
+      const tz = await resolveTimezoneFromLocation(to);
+      let changed = 0;
+      for (const id of await listRoomIds()) {
+        const st = await loadState(id);
+        for (const k of ["mark", "nikita"] as PersonKey[]) {
+          const p: any = st.people?.[k];
+          if (p && String(p.name || "").trim() === nm && String(p.location || "").trim().toLowerCase() === from) {
+            await saveState(id, (s) => { const q: any = s.people?.[k]; if (q) { q.location = to; if (tz) q.tz = tz; } });
+            changed++;
+          }
+        }
+      }
+      return json({ ok: true, changed, tz });
     }
 
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
@@ -698,6 +721,7 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       if (handle) {
         // Instagram-handle sign-up: nothing is emailed (there's no address),
         // so there's nothing to confirm and nothing that could be used to
@@ -876,6 +900,7 @@ Bun.serve({
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
       if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
       (["mark", "nikita"] as PersonKey[]).forEach((k) => {

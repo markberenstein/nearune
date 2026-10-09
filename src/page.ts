@@ -2378,7 +2378,7 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: t("Finish setting up your Nearune.") })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    lastLocInputEl = textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
+    lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. San Mateo, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
@@ -2394,7 +2394,7 @@ const RAW = String.raw`<!doctype html>
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
-          if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : t("That invite link isn't valid."); renderApp(); return; }
+          if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : res.data && res.data.error === "city_required" ? t("Please enter a city, not just a state or country (for example, San Mateo, CA).") : t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
@@ -2438,6 +2438,8 @@ const RAW = String.raw`<!doctype html>
         if (!res.ok) {
           regError = res.data && res.data.error === "region_unavailable"
             ? t("Nearune isn't available in that location.")
+            : res.data && res.data.error === "city_required"
+            ? t("Please enter a city, not just a state or country (for example, San Mateo, CA).")
             : res.data && res.data.error === "rate_limited"
             ? t("Too many attempts — wait a bit and try again.")
             : t("Couldn't register — try again.");
@@ -2482,7 +2484,7 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: subtitle })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    lastLocInputEl = textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
+    lastLocInputEl = textField(registerDraft.location, "City where you're based (e.g. San Mateo, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(textField(registerDraft.email, "Your Instagram handle (or email if you don't use Instagram)", function (v) { registerDraft.email = v; }));

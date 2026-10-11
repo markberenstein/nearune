@@ -438,6 +438,11 @@ const RAW = String.raw`<!doctype html>
   .photo-caption { margin: 4px 0 0; overflow-wrap: anywhere; }
   .photo-hint { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; }
   .photo-comment { width: 100%; box-sizing: border-box; margin-top: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line, #ccc); background: var(--surface); color: var(--ink); font: inherit; }
+  .photo-zoom-wrap { position: relative; overflow: hidden; border-radius: 10px; margin-top: 8px; touch-action: pan-y; }
+  .photo-zoom-wrap .shared-photo { margin-top: 0; will-change: transform; transform-origin: center center; }
+  .photo-zoom-overlay .photo-zoom-wrap { width: 100vw; height: 100vh; margin: 0; border-radius: 0; touch-action: none; }
+  .photo-zoom-overlay .photo-zoom-wrap .shared-photo { width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; background: transparent; }
+  .photo-zoom-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px; width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 20px; z-index: 2; cursor: pointer; }
   .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
   [hidden] { display: none !important; }
 </style>
@@ -3600,6 +3605,77 @@ const RAW = String.raw`<!doctype html>
   // control sits underneath it, always visible.
   // A micro thumbnail (tap to enlarge) with the sharer's comment beside it.
   // Shown for BOTH people so each can see what the other sees.
+  // Pinch-to-zoom for a shared photo: the page-level pinch is disabled (see the
+  // viewport note up top), so this mirrors the puzzle's handler. Pinching, or
+  // double-tapping, lifts the photo into a full-screen overlay where you can
+  // pan; the close button or zooming back out returns it inline.
+  function zoomablePhoto(src, alt) {
+    var wrap = h("div", { class: "photo-zoom-wrap" });
+    var img = h("img", { class: "shared-photo", src: src, alt: alt });
+    wrap.appendChild(img);
+    var scale = 1, panX = 0, panY = 0, startDist = 0, startScale = 1;
+    var startX = 0, startY = 0, startPanX = 0, startPanY = 0, lastTap = 0;
+    var overlay = null, placeholder = null;
+    function openOverlay() {
+      if (overlay) return;
+      placeholder = document.createComment("photo-zoom");
+      if (wrap.parentNode) wrap.parentNode.insertBefore(placeholder, wrap);
+      overlay = h("div", { class: "puzzle-zoom-overlay photo-zoom-overlay" });
+      var closeBtn = h("button", { class: "photo-zoom-close", text: "\u2715" });
+      closeBtn.addEventListener("click", closeOverlay);
+      overlay.appendChild(wrap);
+      overlay.appendChild(closeBtn);
+      document.body.appendChild(overlay);
+    }
+    function closeOverlay() {
+      scale = 1; panX = 0; panY = 0;
+      draw();
+      if (!overlay) return;
+      if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(wrap, placeholder);
+        placeholder.parentNode.removeChild(placeholder);
+      }
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      overlay = null; placeholder = null;
+    }
+    function draw() {
+      var maxX = Math.max(0, (wrap.clientWidth * scale - wrap.clientWidth) / 2);
+      var maxY = Math.max(0, (wrap.clientHeight * scale - wrap.clientHeight) / 2);
+      panX = Math.min(Math.max(panX, -maxX), maxX);
+      panY = Math.min(Math.max(panY, -maxY), maxY);
+      img.style.transform = scale > 1 ? "translate(" + panX + "px," + panY + "px) scale(" + scale + ")" : "";
+    }
+    function dist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
+    wrap.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        startDist = dist(e.touches[0], e.touches[1]);
+        startScale = scale;
+      } else if (e.touches.length === 1) {
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        startPanX = panX; startPanY = panY;
+        var now = Date.now();
+        if (now - lastTap < 300) {
+          if (scale > 1) { closeOverlay(); } else { scale = 2.5; openOverlay(); draw(); }
+        }
+        lastTap = now;
+      }
+    }, { passive: true });
+    wrap.addEventListener("touchmove", function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        scale = Math.min(Math.max(startScale * (dist(e.touches[0], e.touches[1]) / startDist), 1), 8);
+        if (scale > 1) openOverlay();
+        draw();
+      } else if (e.touches.length === 1 && scale > 1) {
+        e.preventDefault();
+        panX = startPanX + (e.touches[0].clientX - startX);
+        panY = startPanY + (e.touches[0].clientY - startY);
+        draw();
+      }
+    }, { passive: false });
+    wrap.addEventListener("touchend", function () { if (scale <= 1.02 && overlay) closeOverlay(); }, { passive: true });
+    return wrap;
+  }
   function photoRow(personKey, label, photoAt, caption, expanded, onToggle, canReport) {
     var box = h("div", {});
     var row = h("div", { class: "photo-row" });
@@ -3613,7 +3689,7 @@ const RAW = String.raw`<!doctype html>
     if (canReport) meta.appendChild(reportLink("photo"));
     row.appendChild(meta);
     box.appendChild(row);
-    if (expanded) box.appendChild(h("img", { class: "shared-photo", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label }));
+    if (expanded) box.appendChild(zoomablePhoto(RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), label));
     return box;
   }
   function photoCardBlock() {

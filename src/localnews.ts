@@ -102,7 +102,7 @@ async function fetchCandidates(query: string): Promise<{ headline: string; sourc
 // Grim, political, promotional or dull headlines that slip past the search
 // exclusions (these are checked on the headline text itself).
 // Outlets that hard-paywall or meter most articles: skip them so the story opens for everyone.
-const PAYWALLED = /(chronicle|mercury news|east bay times|san jose spotlight|new york times|nytimes|wall street journal|wsj|washington post|financial times|bloomberg|the athletic|los angeles times|latimes|boston globe|newsday|telegraph|the times|economist|business insider|wired|the information|seattle times|chicago tribune|denver post|baltimore sun|orlando sentinel|sun sentinel|miami herald|tampa bay times|star tribune|dallas morning|houston chronicle|atlantic|new yorker|politico pro|barron|forbes|insider|bild|le monde|le figaro|nikkei|haaretz|jerusalem post|kyiv independent plus)/i;
+const PAYWALLED = /(chronicle|mercury news|east bay times|san jose spotlight|new york times|nytimes|wall street journal|wsj|washington post|financial times|bloomberg|the athletic|los angeles times|latimes|boston globe|newsday|telegraph|the times|economist|business insider|wired|the information|seattle times|chicago tribune|denver post|baltimore sun|orlando sentinel|sun sentinel|miami herald|tampa bay times|star tribune|dallas morning|houston chronicle|atlantic|new yorker|politico pro|barron|forbes|insider|bild|le monde|le figaro|nikkei|haaretz|jerusalem post|the hindu|hindustan times|indian express|economic times|business standard|livemint|business today|moneycontrol|firstpost|scroll\.in|the print|theprint|kyiv independent plus)/i;
 const BAD_HEADLINE = /\b(dies|died|dead|death|killed|kill|murder|shooting|shot|stabb|crash|fatal|victim|tragedy|tragic|police say|arrest|charged|sentenced|court|lawsuit|trump|biden|election|vote|senate|congress|governor|mayor says|war|attack|abuse|assault|missing|body found|overdose|obituary|lottery|powerball|stock|earnings|forecast|weather alert|weekend events|things to do|top \d+|best of|sale|coupon|deal|score|recap|playoff|vs\.?)\b/i;
 
 // Asks Claude Haiku to pick the single most delightful, genuinely quirky
@@ -182,7 +182,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   }
   console.log(
     "[localnews] " + q + " (theme=" + theme.name + ") -> " +
-    (value ? "ok: " + JSON.stringify(value.headline) : "no on-theme story found")
+    (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" : "no on-theme story found")
   );
   if (value) { seenStories.set(q, [...seen, value.headline].slice(-30)); }
   newsCache.set(cacheKey, { at: Date.now(), value });

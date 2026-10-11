@@ -19,6 +19,7 @@
 // daily and both people see a genuinely different kind of story each day.
 
 import { todayKeyPT } from "./util";
+import { recordClaude } from "./usage";
 
 export type LocalStory = { headline: string; source: string; url: string } | null;
 
@@ -62,41 +63,77 @@ function decodeEntities(s: string): string {
     .replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(parseInt(code, 10)));
 }
 
-function firstItem(xml: string): { title: string; link: string } | null {
-  const itemMatch = xml.match(/<item>([\s\S]*?)<\/item>/);
-  if (!itemMatch) return null;
-  const itemXml = itemMatch[1];
-  const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
-  const linkMatch = itemXml.match(/<link>([\s\S]*?)<\/link>/);
-  if (!titleMatch) return null;
-  return { title: decodeEntities(titleMatch[1].trim()), link: linkMatch ? linkMatch[1].trim() : "" };
+function allItems(xml: string, max: number): { title: string; link: string }[] {
+  const out: { title: string; link: string }[] = [];
+  const re = /<item>([\s\S]*?)<\/item>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) && out.length < max) {
+    const itemXml = m[1];
+    const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
+    const linkMatch = itemXml.match(/<link>([\s\S]*?)<\/link>/);
+    if (!titleMatch) continue;
+    out.push({ title: decodeEntities(titleMatch[1].trim()), link: linkMatch ? linkMatch[1].trim() : "" });
+  }
+  return out;
 }
 
-async function fetchTopStory(query: string): Promise<LocalStory> {
+async function fetchCandidates(query: string): Promise<{ headline: string; source: string; url: string }[]> {
   try {
     const url = "https://news.google.com/rss/search?q=" + encodeURIComponent(query) + "&hl=en-US&gl=US&ceid=US:en";
     const res = await fetch(url);
     if (!res.ok) {
       console.log("[localnews] fetch " + JSON.stringify(query) + " -> HTTP " + res.status + " " + res.statusText);
-      return null;
+      return [];
     }
     const xml = await res.text();
-    const item = firstItem(xml);
-    if (!item || !item.title) {
-      console.log("[localnews] fetch " + JSON.stringify(query) + " -> no <item>/<title> found in RSS (" + xml.length + " bytes)");
-      return null;
-    }
+    const items = allItems(xml, 12);
     // Google News titles are usually "Headline - Source" — split on the
     // LAST " - " so a hyphen inside the headline itself doesn't break it.
-    const idx = item.title.lastIndexOf(" - ");
-    const headline = idx > 0 ? item.title.slice(0, idx) : item.title;
-    const source = idx > 0 ? item.title.slice(idx + 3) : "";
-    return { headline, source, url: item.link };
+    return items.filter((it) => it.title).map((it) => {
+      const idx = it.title.lastIndexOf(" - ");
+      return { headline: idx > 0 ? it.title.slice(0, idx) : it.title, source: idx > 0 ? it.title.slice(idx + 3) : "", url: it.link };
+    });
   } catch (err: any) {
     console.log("[localnews] fetch " + JSON.stringify(query) + " -> threw: " + (err && err.message ? err.message : String(err)));
-    return null;
+    return [];
   }
 }
+
+// Grim, political, promotional or dull headlines that slip past the search
+// exclusions (these are checked on the headline text itself).
+const BAD_HEADLINE = /\b(dies|died|dead|death|killed|kill|murder|shooting|shot|stabb|crash|fatal|victim|tragedy|tragic|police say|arrest|charged|sentenced|court|lawsuit|trump|biden|election|vote|senate|congress|governor|mayor says|war|attack|abuse|assault|missing|body found|overdose|obituary|lottery|powerball|stock|earnings|forecast|weather alert|weekend events|things to do|top \d+|best of|sale|coupon|deal|score|recap|playoff|vs\.?)\b/i;
+
+// Asks Claude Haiku to pick the single most delightful, genuinely quirky
+// story from the candidates (or none). Returns an index, or null.
+async function pickQuirkiest(place: string, headlines: string[]): Promise<number | null> {
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key || headlines.length === 0) return null;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 10,
+        system:
+          "You pick one news headline for two people who live far apart to smile over together. " +
+          "Choose the headline that is funniest: absurd, deadpan, delightfully odd or a charming local mishap, with a wink of humor. Prefer humor over merely sweet; heartwarming is the tiebreaker. It must be about something that actually happened near " + place + ". " +
+          "It must be lighthearted and safe: no death, injury, crime, politics, disasters, ads, listicles, sports results or weather alerts. " +
+          "Reply with only the number of the best headline, or NONE if none is genuinely fun.",
+        messages: [{ role: "user", content: headlines.map((h, i) => (i + 1) + ". " + h).join("\n") }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    recordClaude("news", data);
+    const text = String(data?.content?.[0]?.text || "").trim();
+    const n = parseInt(text, 10);
+    return Number.isFinite(n) && n >= 1 && n <= headlines.length ? n - 1 : null;
+  } catch { return null; }
+}
+
+// Headlines already shown per place, so the same story never repeats.
+const seenStories = new Map<string, string[]>();
 
 // Excluded so a story merely mentioning "event" or "festival" in passing
 // (a shooting AT an event, a crash NEAR a festival) can't sneak through —
@@ -127,14 +164,25 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
   const cached = newsCache.get(cacheKey);
   if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
-  const value = await fetchTopStory(q + " " + theme.terms + " " + EXCLUDE_TERMS);
-  // Temporary diagnostic — same idea as weatherkit.ts's, to confirm from
-  // the Railway logs whether this is actually pulling real stories, and
-  // which theme is active for the day.
+  const seen = seenStories.get(q) || [];
+  let value: LocalStory = null;
+  // Today's theme first; if nothing genuinely fun turns up, one more theme.
+  const idx = THEMES.findIndex((t) => t.name === theme.name);
+  for (const t of [theme, THEMES[(idx + 3) % THEMES.length]]) {
+    // "when:14d" keeps it to the last two weeks so it is a fresh story.
+    const cands = (await fetchCandidates(q + " " + t.terms + " " + EXCLUDE_TERMS + " when:14d"))
+      .filter((c) => !BAD_HEADLINE.test(c.headline) && c.headline.length >= 25 && !seen.includes(c.headline));
+    if (!cands.length) continue;
+    const pick = await pickQuirkiest(q, cands.map((c) => c.headline));
+    if (pick !== null) { value = cands[pick]; break; }
+    // No Claude key or no confident pick: only fall back when Claude was unavailable.
+    if (!Bun.env.ANTHROPIC_API_KEY) { value = cands[0]; break; }
+  }
   console.log(
     "[localnews] " + q + " (theme=" + theme.name + ") -> " +
     (value ? "ok: " + JSON.stringify(value.headline) : "no on-theme story found")
   );
+  if (value) { seenStories.set(q, [...seen, value.headline].slice(-30)); }
   newsCache.set(cacheKey, { at: Date.now(), value });
   return value;
 }

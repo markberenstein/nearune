@@ -107,7 +107,7 @@ const BAD_HEADLINE = /\b(dies|died|dead|death|killed|kill|murder|shooting|shot|s
 
 // Asks Claude Haiku to pick the single most delightful, genuinely quirky
 // story from the candidates (or none). Returns an index, or null.
-async function pickQuirkiest(place: string, headlines: string[]): Promise<number | null> {
+async function pickQuirkiest(place: string, headlines: string[], strict = true): Promise<number | null> {
   const key = Bun.env.ANTHROPIC_API_KEY;
   if (!key || headlines.length === 0) return null;
   try {
@@ -121,7 +121,9 @@ async function pickQuirkiest(place: string, headlines: string[]): Promise<number
           "You pick one news headline for two people who live far apart to smile over together. " +
           "Choose the headline that is funniest: absurd, deadpan, delightfully odd or a charming local mishap, with a wink of humor. Prefer humor over merely sweet; heartwarming is the tiebreaker. It must be about something that actually happened near " + place + ". " +
           "It must be lighthearted and safe: no death, injury, crime, politics, disasters, ads, listicles, sports results or weather alerts. " +
-          "Reply with only the number of the best headline, or NONE if none is genuinely fun.",
+          (strict
+            ? "Reply with only the number of the best headline, or NONE if none is genuinely fun."
+            : "Reply with only the number of the lightest, most pleasant headline. Reply NONE only if every headline is grim, political or an ad."),
         messages: [{ role: "user", content: headlines.map((h, i) => (i + 1) + ". " + h).join("\n") }],
       }),
     });
@@ -168,16 +170,26 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
   const seen = seenStories.get(q) || [];
   let value: LocalStory = null;
-  // Today's theme first; if nothing genuinely fun turns up, one more theme.
   const idx = THEMES.findIndex((t) => t.name === theme.name);
-  for (const t of [theme, THEMES[(idx + 3) % THEMES.length]]) {
-    // "when:14d" keeps it to the last two weeks so it is a fresh story.
-    const cands = (await fetchCandidates(q + " " + t.terms + " " + EXCLUDE_TERMS + " when:14d"))
+  const city = q.split(",")[0].trim() || q;
+  // Tiers, strictest first, so every place still gets a story most days:
+  // today's theme, a second theme, then looser "quirky" searches that go back
+  // a month and use just the city name (a long "City, State, Country" label
+  // rarely matches headlines). Looser tiers let Claude settle for the
+  // lightest pleasant story rather than demanding a laugh.
+  const tiers: { query: string; strict: boolean }[] = [
+    { query: q + " " + theme.terms + " " + EXCLUDE_TERMS + " when:14d", strict: true },
+    { query: q + " " + THEMES[(idx + 3) % THEMES.length].terms + " " + EXCLUDE_TERMS + " when:14d", strict: true },
+    { query: city + " (viral OR quirky OR unusual OR funny OR bizarre OR heartwarming OR adorable) " + EXCLUDE_TERMS + " when:30d", strict: false },
+    { query: city + " (festival OR tradition OR \"local favorite\" OR \"first-ever\" OR unveils OR celebrates) " + EXCLUDE_TERMS + " when:30d", strict: false },
+  ];
+  for (const tier of tiers) {
+    const cands = (await fetchCandidates(tier.query))
       .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !seen.includes(c.headline));
     if (!cands.length) continue;
-    const pick = await pickQuirkiest(q, cands.map((c) => c.headline));
+    const pick = await pickQuirkiest(q, cands.map((c) => c.headline), tier.strict);
     if (pick !== null) { value = cands[pick]; break; }
-    // No Claude key or no confident pick: only fall back when Claude was unavailable.
+    // No Claude key: take the first filtered candidate. A Claude "NONE" means move to the next tier.
     if (!Bun.env.ANTHROPIC_API_KEY) { value = cands[0]; break; }
   }
   console.log(
@@ -185,6 +197,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" : "no on-theme story found")
   );
   if (value) { seenStories.set(q, [...seen, value.headline].slice(-30)); }
-  newsCache.set(cacheKey, { at: Date.now(), value });
+  // A miss is only cached briefly so a later open (or the daily check) retries.
+  newsCache.set(cacheKey, { at: value ? Date.now() : Date.now() - NEWS_TTL + 10 * 60 * 1000, value });
   return value;
 }

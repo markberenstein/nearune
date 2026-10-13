@@ -765,7 +765,7 @@ const RAW = String.raw`<!doctype html>
     "What's the one thing you hope I never stop doing?"
   ];
   // From this day on, partner rooms get the more romantic V3 list (past days keep their questions).
-  var QUESTIONS_V3_START = "2026-10-13";
+  var QUESTIONS_V3_START = "2026-10-14";
 
   // Family-relationship pool — warm and curious like the above, but without
   // assuming a romantic pairing (no "us as a couple" framing), so it reads

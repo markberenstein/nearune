@@ -699,6 +699,74 @@ const RAW = String.raw`<!doctype html>
   ];
   var QUESTIONS_V2_START = "2026-10-09";
 
+  var QUESTIONS_SIGNIFICANT_OTHER_V3 = [
+    "What's the first thing you'd do if I walked through your door right now?",
+    "What's something I do that you can't stop thinking about?",
+    "Describe the way I smell without saying the word 'good'.",
+    "What's your favorite thing about the way I look at you?",
+    "If we had one uninterrupted evening together tonight, how would it go?",
+    "What's a text you almost sent me today?",
+    "Where's the first place you'd want me to kiss you?",
+    "What's the most attractive thing about me that nobody else would notice?",
+    "What would you whisper to me right now if I were next to you?",
+    "What's a moment from us that you replay when you miss me?",
+    "Pick one: slow dance in the kitchen or a long, quiet kiss. Why?",
+    "What's the coziest thing you'd want me to wrap you up in tonight?",
+    "What's something you've been wanting to tell me but haven't found the right moment?",
+    "What's your favorite way for me to say your name?",
+    "What would you want to do with me for a whole hour, no phones, no interruptions?",
+    "What's a song that makes you think of us in the dark?",
+    "When did you last catch yourself smiling about me for no reason?",
+    "What's the most romantic thing you can picture us doing this month?",
+    "What's your favorite memory of us being close?",
+    "If you could teleport me to you for ten minutes, what would you do with them?",
+    "What's something about me that still gives you butterflies?",
+    "What would our perfect morning-after look like?",
+    "Pick one: a hand on your back or fingers in your hair. Why?",
+    "What's the most adventurous thing you'd want to try with me someday?",
+    "What's the last thing you thought about me before falling asleep?",
+    "What do you wish I could see right now, and why?",
+    "Describe our first kiss in three words.",
+    "What's your favorite thing I've ever said to you?",
+    "What would you cook me if I were sitting at your table tonight?",
+    "What's a place in the world where you'd want us to get lost together?",
+    "What's a little thing I do that makes your heart race?",
+    "If tonight were ours, what would be the first song you'd put on?",
+    "What's one thing about us that feels like a secret?",
+    "Pick one: candlelight dinner or a midnight swim. Why?",
+    "What part of your day did you wish I was in?",
+    "What's something I wore that you still remember?",
+    "Finish this sentence: 'The moment I see you, I...'",
+    "What's a flirty nickname you wish I'd use for you?",
+    "What do you think about when you're alone and missing me?",
+    "What would make tonight feel like a date even though we're apart?",
+    "What's the best part of waking up next to someone you love?",
+    "What's your favorite thing about my voice?",
+    "Describe the look on my face that you love most.",
+    "What's something you want me to plan for our first night back together?",
+    "What's a compliment you'd love to hear from me tonight?",
+    "What would you do if you had me to yourself for a whole weekend?",
+    "What's something I said that made you blush?",
+    "What's the sweetest thing you've daydreamed about us?",
+    "Pick one: breakfast in bed or dessert at midnight. Why?",
+    "What do you want me to remember about how it feels to be close to you?",
+    "What's the most spontaneous thing you'd want us to do together?",
+    "What's your favorite way for me to hold you?",
+    "What's a moment today that would have been better with me?",
+    "What's something about my body language that gives me away?",
+    "What would you want me to say to you right before we kiss?",
+    "If you could rewind to any evening with me, which one?",
+    "What's something you'd happily get distracted by me doing right now?",
+    "What's one way I make ordinary days feel special?",
+    "What's a secret you'd tell me only in person?",
+    "What's your favorite thing to imagine us doing on our next night out?",
+    "What would you want to be doing in my arms right now? Be sweet or be bold.",
+    "Complete the sentence: 'I'd give anything to be next to you when...'",
+    "What's the one thing you hope I never stop doing?"
+  ];
+  // From this day on, partner rooms get the more romantic V3 list (past days keep their questions).
+  var QUESTIONS_V3_START = "2026-10-13";
+
   // Family-relationship pool — warm and curious like the above, but without
   // assuming a romantic pairing (no "us as a couple" framing), so it reads
   // naturally between a parent and adult child, siblings, cousins, etc.
@@ -896,7 +964,10 @@ const RAW = String.raw`<!doctype html>
   function questionForKey(key) {
     var pool = questionPoolFor();
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
-    if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V2_START) {
+    if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V3_START) {
+      pool = QUESTIONS_SIGNIFICANT_OTHER_V3;
+      days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V3_START)) / DAY_MS);
+    } else if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V2_START) {
       pool = QUESTIONS_SIGNIFICANT_OTHER_V2;
       days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V2_START)) / DAY_MS);
     }

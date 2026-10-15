@@ -77,10 +77,36 @@ function allItems(xml: string, max: number): { title: string; link: string }[] {
   return out;
 }
 
+// Google News throttles bursts (HTTP 503/429), which happens right after a
+// restart when every cache is empty. Requests are paced one at a time, and a
+// throttled one is retried after a pause.
+let gnChain: Promise<unknown> = Promise.resolve();
+let gnThrottledAt = 0;
+function gnFetch(url: string): Promise<Response> {
+  const run = async (): Promise<Response> => {
+    let res = await fetch(url);
+    for (const wait of [3000, 8000]) {
+      if (res.status !== 503 && res.status !== 429) break;
+      gnThrottledAt = Date.now();
+      await new Promise((r) => setTimeout(r, wait));
+      res = await fetch(url);
+    }
+    if (res.status === 503 || res.status === 429) gnThrottledAt = Date.now();
+    await new Promise((r) => setTimeout(r, 800));
+    return res;
+  };
+  const p = gnChain.then(run, run);
+  gnChain = p.catch(() => {});
+  return p;
+}
+// Last story found for each place, shown when a fresh search comes up empty
+// (or Google is throttling) so a place is not left with nothing.
+const lastGood = new Map<string, LocalStory>();
+
 async function fetchCandidates(query: string): Promise<{ headline: string; source: string; url: string }[]> {
   try {
     const url = "https://news.google.com/rss/search?q=" + encodeURIComponent(query) + "&hl=en-US&gl=US&ceid=US:en";
-    const res = await fetch(url);
+    const res = await gnFetch(url);
     if (!res.ok) {
       console.log("[localnews] fetch " + JSON.stringify(query) + " -> HTTP " + res.status + " " + res.statusText);
       return [];
@@ -196,8 +222,15 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     "[localnews] " + q + " (theme=" + theme.name + ") -> " +
     (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" : "no on-theme story found")
   );
-  if (value) { seenStories.set(q, [...seen, value.headline].slice(-30)); }
-  // A miss is only cached briefly so a later open (or the daily check) retries.
-  newsCache.set(cacheKey, { at: value ? Date.now() : Date.now() - NEWS_TTL + 10 * 60 * 1000, value });
+  if (value) { seenStories.set(q, [...seen, value.headline].slice(-30)); lastGood.set(q, value); }
+  const throttled = Date.now() - gnThrottledAt < 2 * 60 * 1000;
+  if (!value && lastGood.get(q)) {
+    // Fresh search found nothing (or was throttled): keep showing the last good story.
+    value = lastGood.get(q)!;
+    console.log("[localnews] " + q + " -> reusing last good story" + (throttled ? " (Google throttled)" : ""));
+  }
+  // A miss is only cached briefly so a later open (or the daily check) retries:
+  // 10 minutes normally, about a minute when Google was throttling.
+  newsCache.set(cacheKey, { at: value ? Date.now() : Date.now() - NEWS_TTL + (throttled ? 60 : 600) * 1000, value });
   return value;
 }

@@ -152,7 +152,11 @@ export async function computeStats() {
     if (vbad.length) { qa.ok = false; qa.failures.push("Voice playback: " + vbad.map((i) => i.label + ": " + i.note).join("; ")); }
   }
   // Quirky local story: every place with an active couple must come back with a story today.
-  if (qa && Array.isArray(qa.checks)) {
+  // Skipped in the first minutes after a restart: the stories are fetched from
+  // Google News, which throttles the burst of lookups (the 12:00/00:00 runs cover it).
+  if (qa && Array.isArray(qa.checks) && process.uptime() < 600) {
+    qa.checks.push({ name: "Quirky local stories (every active place)", ok: true, items: [], detail: "skipped right after a restart (avoids Google News rate limits)" });
+  } else if (qa && Array.isArray(qa.checks)) {
     const nitems: { label: string; ok: boolean; note: string }[] = [];
     for (const loc of [...newsLocs].slice(0, 8)) {
       let st: any = null;

@@ -207,6 +207,20 @@ export async function geocodeAny(location: string): Promise<any | null> {
   return null;
 }
 
+// "City, Region, Country" label for free text typed without a comma (the form
+// the city list produces), e.g. "Changi singapore" -> "Changi Village, SG".
+// Text that already has a comma (picked from the list) is left alone, and so
+// is anything that cannot be resolved.
+export async function canonicalPlaceLabel(location: string): Promise<string> {
+  const q = (location || "").trim();
+  if (!q || q.includes(",")) return q;
+  const r = await geocodeAny(q);
+  if (!r || !r.name) return q;
+  const cc = String(r.country_code || "").toUpperCase();
+  const ab = regionAbbr(cc, r.admin1 || "");
+  return [r.name, ab, cc || r.country || ""].filter(Boolean).join(", ").slice(0, 80);
+}
+
 export async function resolveTimezoneFromLocation(location: string): Promise<string | null> {
   const first = await geocode(location);
   const tz = first && typeof first.timezone === "string" ? first.timezone : null;

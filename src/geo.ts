@@ -191,6 +191,22 @@ async function geocode(location: string): Promise<any | null> {
   return (await geocodeFull(location)).first;
 }
 
+// Weather's lookup: the normal geocode (with the Claude spelling fix), then,
+// for free text with no comma such as "Changi Singapore", progressively
+// shorter prefixes ("Changi") so a place plus a country word still resolves.
+export async function geocodeAny(location: string): Promise<any | null> {
+  const q = (location || "").trim();
+  if (!q) return null;
+  const first = await geocode(q);
+  if (first) return first;
+  const words = q.split(/[\s,]+/).filter(Boolean);
+  for (let n = words.length - 1; n >= 1; n--) {
+    const r = await geocodeRaw(words.slice(0, n).join(" "));
+    if (r) return r;
+  }
+  return null;
+}
+
 export async function resolveTimezoneFromLocation(location: string): Promise<string | null> {
   const first = await geocode(location);
   const tz = first && typeof first.timezone === "string" ? first.timezone : null;

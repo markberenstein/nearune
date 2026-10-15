@@ -8,7 +8,7 @@
 // background theme. Results are cached briefly in memory since weather
 // changes slowly and this can be polled by every device every so often.
 
-import { geocodePlace } from "./geo";
+import { geocodeAny } from "./geo";
 import { weatherKitConfigured, weatherKitCurrentWeather, weatherKitBucket, weatherKitLabel } from "./weatherkit";
 
 type GeoPoint = { lat: number; lon: number; name: string; countryCode: string } | null;
@@ -23,7 +23,7 @@ async function geocode(location: string): Promise<GeoPoint> {
   if (cached && Date.now() - cached.at < GEO_TTL) return cached.value;
   let value: GeoPoint = null;
   try {
-    const first = await geocodePlace(q);
+    const first = await geocodeAny(q);
     if (first) value = { lat: first.latitude, lon: first.longitude, name: first.name, countryCode: first.country_code || "" };
   } catch {}
   geoCache.set(q, { at: Date.now(), value });

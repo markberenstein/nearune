@@ -5045,7 +5045,7 @@ export function buildSupportPage() {
     <p>Nearune is a private daily question and photo puzzle for two people who live apart. If something isn't working, or you have a question or idea, write to us and we'll reply within a couple of days.</p>
 
     <h2>Contact us</h2>
-    <p>Email <a href="mailto:mark.berenstein@gmail.com?subject=Nearune%20support">mark.berenstein@gmail.com</a>. Please include your room code (shown at the top of the app) and which device you're using, such as an iPhone or iPad, so we can look into it quickly.</p>
+    <p>Email <a href="mailto:support@nearune.ai?subject=Nearune%20support">support@nearune.ai</a>. Please include your room code (shown at the top of the app) and which device you're using, such as an iPhone or iPad, so we can look into it quickly.</p>
 
     <h2>Common questions</h2>
     <ul>

@@ -31,6 +31,8 @@
 	     this situation. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Nearune uses your location only when you tap "Use my current location", to fill in your city for the weather, local time and local story your partner sees.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Nearune uses the microphone to record your voice sample, so your partner can hear your messages in your own voice.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

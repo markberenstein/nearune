@@ -54,6 +54,9 @@ const RAW = String.raw`<!doctype html>
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* Larger type on tablets (iPad): every rem-based size scales with this. */
+  @media (min-width: 700px) { html { font-size: 112.5%; } }
+
   body {
     background: var(--bg);
     color: var(--ink);
@@ -80,7 +83,7 @@ const RAW = String.raw`<!doctype html>
   }
   .clock-block { text-align: center; min-width: 108px; }
   .clock-block.clock-me { border: 2px solid #8C6FA8; border-radius: 6px; padding: 6px 10px; }
-  .clock-city { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
+  .clock-city { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
@@ -108,28 +111,28 @@ const RAW = String.raw`<!doctype html>
      weight, not bold — bold read as a generic weather-widget look rather
      than anything resembling the real app. */
   .weather-widget-tile-temp { font-size: 1.55rem; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
-  .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 1; }
-  .weather-widget-tile-humidity { font-size: 0.7rem; font-weight: 500; line-height: 1; opacity: 1; margin-top: 2px; }
-  .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2; opacity: 1; }
+  .weather-widget-tile-temp-secondary { font-size: 0.8rem; font-weight: 500; line-height: 1; opacity: 1; }
+  .weather-widget-tile-humidity { font-size: 0.8rem; font-weight: 500; line-height: 1; opacity: 1; margin-top: 2px; }
+  .weather-widget-tile-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2; opacity: 1; }
   .weather-widget-detail {
     padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
-    border-radius: 12px; font-size: 0.78rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
+    border-radius: 12px; font-size: 0.8rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
     max-width: 320px;
   }
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
-  .weather-widget-trend-label { margin-top: 10px; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+  .weather-widget-trend-label { margin-top: 10px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
   .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 76px; margin-top: 6px; }
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-  .trend-bar-temp { font-size: 0.62rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; }
+  .trend-bar-temp { font-size: 0.8rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
-  .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
-  .trend-bar-hum { font-size: 0.58rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
+  .trend-bar-hour { font-size: 0.8rem; color: var(--ink-soft); margin-top: 3px; }
+  .trend-bar-hum { font-size: 0.8rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
   /* Sits beside the weather tile, so left-aligned rather than the old
      full-width centered line under the clocks. */
   .sky-line {
     text-align: left; font-style: italic; color: var(--ink-soft);
-    font-size: 0.74rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
+    font-size: 0.8rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -203,7 +206,7 @@ const RAW = String.raw`<!doctype html>
     padding: 8px 14px; font-size: 0.82rem;
   }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .status-travel-flag { font-size: 0.75rem; line-height: 1; flex: none; }
+  .status-travel-flag { font-size: 0.8rem; line-height: 1; flex: none; }
   .status-chip input { border: none; background: transparent; color: var(--ink); font: inherit; flex: 1; min-width: 0; outline: none; }
   .status-chip input { text-overflow: ellipsis; }
   .status-chip input::placeholder { color: var(--ink-soft); text-overflow: ellipsis; }
@@ -225,7 +228,7 @@ const RAW = String.raw`<!doctype html>
   .status-edit-btn { flex: none; background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 2px 4px; }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 24px; box-shadow: 0 2px 10px var(--shadow); }
-  .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .eyebrow { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
   .question { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.5rem; line-height: 1.3; text-wrap: balance; margin: 0 0 22px; }
 
   .answer-form { display: flex; flex-direction: column; gap: 10px; }
@@ -250,7 +253,7 @@ const RAW = String.raw`<!doctype html>
   .answers-reveal { display: flex; flex-direction: column; gap: 14px; }
   .answer-bubble { border-radius: 14px; padding: 14px 16px; border: 1px solid var(--line); }
   .answer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .answer-name { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+  .answer-name { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
   .answer-text { font-size: 0.98rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
   .translate-inline { display: block; margin-top: 6px; font-size: 0.88rem; font-style: italic; color: var(--ink-soft); border-left: 2px solid var(--line); padding-left: 8px; }
   .translate-inline-row { display: flex; align-items: baseline; gap: 6px; }
@@ -294,14 +297,14 @@ const RAW = String.raw`<!doctype html>
   .voice-card-howto-steps li { margin: 0 0 6px; }
   .voice-card-howto-steps li:last-child { margin-bottom: 0; }
 
-  .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
+  .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.8rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
   .edit-form { display: flex; flex-direction: column; gap: 8px; }
   .edit-form textarea { min-height: 64px; }
   /* The travel form sits at the top, over the sky wash, so it gets a solid card (same as the pill above it) to stay readable at night. */
   .travel-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 0 0 12px; }
   .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+  .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
   .mini-btn.primary { background: var(--accent); color: var(--on-accent); }
   .mini-btn.ghost { background: var(--surface-2); color: var(--ink); }
   .own-answer-visible { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 2px; }
@@ -340,7 +343,7 @@ const RAW = String.raw`<!doctype html>
   .puzzle-upload-btn { background: var(--accent); color: var(--on-accent); border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .puzzle-upload-btn:disabled { opacity: 0.6; cursor: default; }
   .puzzle-replace { text-align: center; }
-  .puzzle-replace-btn { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.76rem; text-decoration: underline; cursor: pointer; padding: 4px; }
+  .puzzle-replace-btn { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; padding: 4px; }
   .puzzle-done-note { text-align: center; font-size: 0.85rem; color: var(--good); font-weight: 700; margin: 0; }
   .puzzle-setup { display: flex; flex-direction: column; gap: 8px; width: 100%; }
   .puzzle-setup input[type="text"] { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
@@ -350,7 +353,7 @@ const RAW = String.raw`<!doctype html>
   .puzzle-setup input[type="date"] { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .travel-until-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .travel-until-label { font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; }
+  .travel-until-label { font-size: 0.8rem; color: var(--ink-soft); white-space: nowrap; }
   .puzzle-setup-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .puzzle-choose-btn { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 9px 16px; font: inherit; font-size: 0.83rem; cursor: pointer; }
   .puzzle-guess { display: flex; flex-direction: column; gap: 8px; }
@@ -364,7 +367,7 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-list { display: flex; flex-direction: column; gap: 12px; }
   .puzzle-batch-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .puzzle-batch-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .puzzle-batch-name { font-size: 0.78rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .puzzle-batch-name { font-size: 0.8rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .puzzle-batch-row input { width: 100%; box-sizing: border-box; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--ink); font: inherit; font-size: 0.82rem; outline: none; }
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
@@ -372,7 +375,7 @@ const RAW = String.raw`<!doctype html>
   .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
   .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
-  .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.68rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+  .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.8rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
@@ -381,7 +384,7 @@ const RAW = String.raw`<!doctype html>
   .journal-toggle.open .chevron { transform: rotate(90deg); }
   .journal { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
   .journal-entry { border-left: 2px solid var(--line); padding-left: 14px; }
-  .journal-date { font-size: 0.72rem; color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 4px; }
+  .journal-date { font-size: 0.8rem; color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 4px; }
   .journal-q { font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 0.95rem; margin: 0 0 8px; }
   .journal-a { font-size: 0.85rem; margin-bottom: 4px; }
   .journal-a b { font-weight: 700; }
@@ -396,7 +399,7 @@ const RAW = String.raw`<!doctype html>
   .picker-btn:hover { border-color: var(--accent); }
 
   .switch-row { text-align: center; }
-  .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.78rem; text-decoration: underline; cursor: pointer; padding: 4px; }
+  .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; padding: 4px; }
   /* The traveling button and (under it) the notifications link now sit
      right at the top of the page, directly over the full-height weather
      sky wash — too low-contrast there as plain text, so they get the same
@@ -408,7 +411,7 @@ const RAW = String.raw`<!doctype html>
   }
   .top-action-row .switch-link { color: var(--ink); }
   .offline-note { text-align: center; font-size: 0.8rem; color: var(--ink-soft); padding: 4px 8px; }
-  .cdt { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; }
+  .cdt { text-align: center; font-size: 0.8rem; color: var(--ink-soft); padding: 2px 8px; }
   /* SANDBOX EXPERIMENT: the fun-local-news line — same muted, centered
      treatment as .cdt so it doesn't compete for attention, just the
      headline itself underlined as a link out to the source. */
@@ -2853,6 +2856,7 @@ const RAW = String.raw`<!doctype html>
     if (pushRow) app.appendChild(pushRow);
     var foot = h("div", { class: "switch-row" });
     foot.appendChild(h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") }));
+    foot.appendChild(h("a", { class: "switch-link", href: "/support", text: t("Support") }));
     foot.appendChild(h("a", { class: "switch-link", href: "/terms", text: t("Terms") }));
     var del = h("button", { class: "switch-link", text: t("Delete my data") });
     del.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
@@ -4803,7 +4807,7 @@ export function buildNewRoomPage(): string {
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
   <p class="note" id="roomMsg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Lost your link? Email it to me</a></p>
-  <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>
+  <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a> &nbsp;·&nbsp; <a href="/support" style="color:var(--ink-soft)">Support</a></p>
 </div>
 <script>
 document.getElementById("openRoom").addEventListener("click", function () {
@@ -5029,5 +5033,30 @@ export function buildTermsPage() {
 
     <h2>Contact</h2>
     <p>Questions about these terms: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+  );
+}
+
+
+export function buildSupportPage() {
+  return legalPageShell(
+    "Support",
+    `<h1>Nearune Support</h1>
+    <p class="updated">We're happy to help.</p>
+    <p>Nearune is a private daily question and photo puzzle for two people who live apart. If something isn't working, or you have a question or idea, write to us and we'll reply within a couple of days.</p>
+
+    <h2>Contact us</h2>
+    <p>Email <a href="mailto:mark.berenstein@gmail.com?subject=Nearune%20support">mark.berenstein@gmail.com</a>. Please include your room code (shown at the top of the app) and which device you're using, such as an iPhone or iPad, so we can look into it quickly.</p>
+
+    <h2>Common questions</h2>
+    <ul>
+      <li><strong>I lost my room link.</strong> On the Nearune start page, choose the option to email yourself a recovery link, using the same email you registered with.</li>
+      <li><strong>"Use my current location" doesn't fill in my city.</strong> Allow location access for Nearune when asked (Settings &rsaquo; Nearune &rsaquo; Location), or simply type your city and pick it from the list.</li>
+      <li><strong>My partner's weather or local story is missing.</strong> Make sure each of you has set a city. Stories refresh through the day and can take a minute to appear.</li>
+      <li><strong>I want my data deleted.</strong> Open the app and choose "Delete my data", or email us and we'll do it for you.</li>
+      <li><strong>Report or block something.</strong> Use the report and block options next to your partner's photo, answer or comment.</li>
+    </ul>
+
+    <h2>More</h2>
+    <p><a href="/privacy">Privacy Policy</a> &nbsp;·&nbsp; <a href="/terms">Terms of Use</a></p>`
   );
 }

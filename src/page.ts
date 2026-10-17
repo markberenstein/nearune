@@ -2397,7 +2397,7 @@ const RAW = String.raw`<!doctype html>
   function makeLocNote() {
     locNoteEl = document.createElement("p");
     locNoteEl.className = "puzzle-guess-note";
-    locNoteEl.style.color = "#b3261e";
+    locNoteEl.style.color = "#f0605a";
     locNoteEl.setAttribute("role", "alert");
     locNoteEl.textContent = locCityError;
     return locNoteEl;
@@ -2405,7 +2405,11 @@ const RAW = String.raw`<!doctype html>
   function useCurrentLocation(draft) {
     if (!navigator.geolocation) return;
     setLocNote(t("Finding your location…"));
+    var locDone = false;
+    var locWatch = setTimeout(function () { if (!locDone) { locDone = true; setLocNote(t("Couldn't get your location. Please type your city.")); } }, 15000);
     navigator.geolocation.getCurrentPosition(function (pos) {
+      if (locDone) return;
+      locDone = true; clearTimeout(locWatch);
       fetch(RP + "/api/reverse-geo?lat=" + pos.coords.latitude + "&lon=" + pos.coords.longitude)
         .then(function (r) { return r.json(); })
         .then(function (d) {
@@ -2417,7 +2421,7 @@ const RAW = String.raw`<!doctype html>
           } else { setLocNote(t("Couldn't work out your city. Please type it.")); }
         })
         .catch(function () { setLocNote(t("Couldn't work out your city. Please type it.")); });
-    }, function () { setLocNote(t("Couldn't get your location. Please type your city.")); }, { timeout: 10000, maximumAge: 600000 });
+    }, function () { if (locDone) return; locDone = true; clearTimeout(locWatch); setLocNote(t("Couldn't get your location. Please type your city.")); }, { timeout: 10000, maximumAge: 600000 });
   }
   var autoLocTried = false;
   function makeLocButton(draft, noAuto) {
@@ -2457,7 +2461,7 @@ const RAW = String.raw`<!doctype html>
       var b = document.createElement("button");
       b.type = "button";
       b.textContent = pl.label;
-      b.style.cssText = "display:block;width:100%;text-align:left;padding:12px 16px;border:0;border-bottom:1px solid rgba(0,0,0,0.08);background:transparent;font:inherit;color:inherit;cursor:pointer";
+      b.style.cssText = "display:block;width:100%;text-align:left;padding:12px 16px;border:0;border-bottom:1px solid rgba(0,0,0,0.08);background:#fff;font:inherit;font-size:1rem;color:#1b1f2a;cursor:pointer";
       b.addEventListener("click", function () {
         draft.location = pl.label;
         if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = pl.label;

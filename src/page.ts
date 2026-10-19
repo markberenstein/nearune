@@ -3763,7 +3763,10 @@ const RAW = String.raw`<!doctype html>
     row.appendChild(img);
     var meta = h("div", { class: "photo-meta" });
     meta.appendChild(h("div", { class: "photo-who", text: "📷 " + label }));
-    if (caption) meta.appendChild(h("p", { class: "photo-caption", text: caption }));
+    if (caption) {
+      meta.appendChild(h("p", { class: "photo-caption", text: caption }));
+      meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey));
+    }
     meta.appendChild(h("p", { class: "photo-hint", text: expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it") }));
     if (canReport) meta.appendChild(reportLink("photo"));
     row.appendChild(meta);

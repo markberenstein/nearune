@@ -161,7 +161,7 @@ export async function computeStats() {
     for (const loc of [...newsLocs].slice(0, 8)) {
       let st: any = null;
       try { st = await topLocalStory(loc); } catch {}
-      nitems.push({ label: loc, ok: !!st, note: st ? String(st.headline).slice(0, 80) + (st.source ? " (" + st.source + ")" : "") : "no story found today" });
+      nitems.push({ label: loc, ok: !!st, note: st ? String(st.headline).slice(0, 80) + (st.source ? " (" + st.source + ")" : "") + (st.access === "free" ? " - opens free" : " - link not verified") : "no story found today" });
     }
     const nbad = nitems.filter((i) => !i.ok);
     qa.checks.push({ name: "Quirky local stories (every active place)", ok: nbad.length === 0, items: nitems, detail: nitems.length === 0 ? "no active places" : nbad.length ? nbad.map((i) => i.label).join("; ") + ": no story today" : nitems.length + " places, all have a story" });

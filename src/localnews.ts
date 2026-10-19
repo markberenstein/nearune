@@ -21,7 +21,7 @@
 import { todayKeyPT } from "./util";
 import { recordClaude } from "./usage";
 
-export type LocalStory = { headline: string; source: string; url: string } | null;
+export type LocalStory = { headline: string; source: string; url: string; access?: "free" | "unverified" } | null;
 
 const newsCache = new Map<string, { at: number; value: LocalStory }>();
 const NEWS_TTL = 2 * 60 * 60 * 1000; // 2 hours — news doesn't need to be fresh-by-the-minute
@@ -128,7 +128,7 @@ async function fetchCandidates(query: string): Promise<{ headline: string; sourc
 // Grim, political, promotional or dull headlines that slip past the search
 // exclusions (these are checked on the headline text itself).
 // Outlets that hard-paywall or meter most articles: skip them so the story opens for everyone.
-const PAYWALLED = /(chronicle|mercury news|east bay times|san jose spotlight|new york times|nytimes|wall street journal|wsj|washington post|financial times|bloomberg|the athletic|los angeles times|latimes|boston globe|newsday|telegraph|the times|economist|business insider|wired|the information|seattle times|chicago tribune|denver post|baltimore sun|orlando sentinel|sun sentinel|miami herald|tampa bay times|star tribune|dallas morning|houston chronicle|atlantic|new yorker|politico pro|barron|forbes|insider|bild|le monde|le figaro|nikkei|haaretz|jerusalem post|the hindu|hindustan times|indian express|economic times|business standard|livemint|business today|moneycontrol|firstpost|scroll\.in|the print|theprint|kyiv independent plus)/i;
+const PAYWALLED = /(chronicle|mercury news|east bay times|san jose spotlight|new york times|nytimes|wall street journal|wsj|washington post|financial times|bloomberg|the athletic|los angeles times|latimes|boston globe|newsday|telegraph|the times|economist|business insider|wired|the information|seattle times|chicago tribune|denver post|baltimore sun|orlando sentinel|sun sentinel|miami herald|tampa bay times|star tribune|dallas morning|houston chronicle|atlantic|new yorker|politico pro|barron|forbes|insider|bild|le monde|le figaro|nikkei|haaretz|jerusalem post|the hindu|hindustan times|indian express|economic times|business standard|livemint|business today|moneycontrol|firstpost|scroll\.in|the print|theprint|kyiv independent plus|deccan herald|outlook business|hindu businessline|the week|straits times|south china morning post|scmp|sydney morning herald|the age|the australian|herald sun|courier mail|globe and mail|toronto star|national post|irish times|japan times|nation media|financial express|\bmint\b)/i;
 const BAD_HEADLINE = /\b(dies|died|dead|death|killed|kill|murder|shooting|shot|stabb|crash|fatal|victim|tragedy|tragic|police say|arrest|charged|sentenced|court|lawsuit|trump|biden|election|vote|senate|congress|governor|mayor says|war|attack|abuse|assault|missing|body found|overdose|obituary|lottery|powerball|stock|earnings|forecast|weather alert|weekend events|things to do|top \d+|best of|sale|coupon|deal|score|recap|playoff|vs\.?)\b/i;
 
 // Asks Claude Haiku to pick the single most delightful, genuinely quirky
@@ -160,6 +160,42 @@ async function pickQuirkiest(place: string, headlines: string[], strict = true):
     const n = parseInt(text, 10);
     return Number.isFinite(n) && n >= 1 && n <= headlines.length ? n - 1 : null;
   } catch { return null; }
+}
+
+
+// Opens the story link the way a reader would and says whether it looks free.
+// "paywalled" = the page blocks readers or carries paywall markers; "unverified" =
+// the link could not be resolved (Google News links often hand off with
+// JavaScript), which is accepted but reported as such on the admin page.
+async function checkArticleAccess(url: string): Promise<"free" | "paywalled" | "unverified"> {
+  if (!url) return "unverified";
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 7000);
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: ctl.signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "accept": "text/html,application/xhtml+xml",
+        "accept-language": "en-US,en;q=0.9",
+      },
+    });
+    clearTimeout(timer);
+    const finalUrl = res.url || url;
+    let host = "";
+    try { host = new URL(finalUrl).hostname; } catch {}
+    if (/(^|\.)(news|consent)\.google\.com$/.test(host)) return "unverified";
+    if (PAYWALLED.test(host)) return "paywalled";
+    if ([401, 402, 403, 451].includes(res.status)) return "paywalled";
+    if (!res.ok) return "unverified";
+    const html = (await res.text()).slice(0, 400000);
+    if (/"isAccessibleForFree"\s*:\s*(false|"false")/i.test(html)) return "paywalled";
+    if (/(subscribe to (continue|read|unlock)|subscription (is )?required|already a subscriber|sign in to (continue|read)|log in to (continue|read)|register to (continue|read)|premium (content|article|story)|unlock (this|the) (article|story)|you have reached your (free|monthly)|paywall)/i.test(html)) return "paywalled";
+    return "free";
+  } catch {
+    return "unverified";
+  }
 }
 
 // Headlines already shown per place, so the same story never repeats.
@@ -212,11 +248,25 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   for (const tier of tiers) {
     const cands = (await fetchCandidates(tier.query))
       .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !seen.includes(c.headline));
-    if (!cands.length) continue;
-    const pick = await pickQuirkiest(q, cands.map((c) => c.headline), tier.strict);
-    if (pick !== null) { value = cands[pick]; break; }
-    // No Claude key: take the first filtered candidate. A Claude "NONE" means move to the next tier.
-    if (!Bun.env.ANTHROPIC_API_KEY) { value = cands[0]; break; }
+    // Pick the best story, open it, and if it turns out to be paywalled drop it and
+    // pick again (up to 3 tries per tier) so a story nobody can read is never shown.
+    let pool = cands;
+    for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
+      let pick: number | null;
+      if (!Bun.env.ANTHROPIC_API_KEY) pick = 0; // No Claude key: take the first candidate.
+      else pick = await pickQuirkiest(q, pool.map((c) => c.headline), tier.strict);
+      if (pick === null) break; // Claude said NONE: move to the next tier.
+      const cand = pool[pick];
+      const access = await checkArticleAccess(cand.url);
+      if (access === "paywalled") {
+        console.log("[localnews] " + q + " -> skipped paywalled story " + JSON.stringify(cand.headline) + " [" + cand.source + "]");
+        pool = pool.filter((_, i) => i !== pick);
+        continue;
+      }
+      value = { ...cand, access };
+      break;
+    }
+    if (value) break;
   }
   console.log(
     "[localnews] " + q + " (theme=" + theme.name + ") -> " +

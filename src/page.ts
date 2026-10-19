@@ -196,6 +196,7 @@ const RAW = String.raw`<!doctype html>
      normal soft ink on card surfaces. */
   body.weather-active .card .translate-inline,
   body.weather-active .streak-card .translate-inline,
+  body.weather-active .voice-card .translate-inline,
   body.weather-active .status-chip .translate-inline { color: var(--ink-soft); border-left-color: var(--line); }
   body.weather-active .card .eyebrow,
   body.weather-active .streak-card .eyebrow { color: var(--ink-soft); }

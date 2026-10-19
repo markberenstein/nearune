@@ -5004,7 +5004,7 @@ export function buildPrivacyPage() {
     <p>If this policy changes in a meaningful way, we'll update the date at the top of this page.</p>
 
     <h2>Contact</h2>
-    <p>Questions about this policy or your data: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+    <p>Questions about this policy or your data: <a href="mailto:support@nearune.ai">support@nearune.ai</a>.</p>`
   );
 }
 
@@ -5040,7 +5040,7 @@ export function buildTermsPage() {
     <p>These terms are governed by the laws of the State of California, without regard to conflict-of-law principles.</p>
 
     <h2>Contact</h2>
-    <p>Questions about these terms: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+    <p>Questions about these terms: <a href="mailto:support@nearune.ai">support@nearune.ai</a>.</p>`
   );
 }
 

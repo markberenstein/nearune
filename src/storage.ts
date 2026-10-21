@@ -162,7 +162,7 @@ export function roomSlug(name: string): string {
   return slug.length >= 3 ? slug : "";
 }
 
-export async function createRoom(preferredName?: string): Promise<string> {
+export async function createRoom(preferredName?: string, via?: string): Promise<string> {
   const stem = roomSlug(preferredName || "");
   // Use the name exactly when it's free ("oursky"); if it's taken, add two
   // random digits ("oursky72"). No name at all gets two random words.
@@ -172,6 +172,7 @@ export async function createRoom(preferredName?: string): Promise<string> {
   }
   const fresh = defaultState();
   fresh.createdAt = new Date().toISOString();
+  if (via) fresh.createdVia = via;
   await writeRaw(id, JSON.stringify(fresh));
   caches.set(id, fresh);
   return id;

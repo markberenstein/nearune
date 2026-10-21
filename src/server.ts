@@ -132,8 +132,16 @@ Bun.serve({
         if (verdict === "blocked") return json({ error: "inappropriate_name" }, { status: 400 });
         if (verdict === "ok") useName = rawName;
       }
-      const id = await createRoom(useName);
+      // Coarse hint about who made the room (no IP stored): device, app vs web,
+      // browser language. Lets the admin tell a real visitor from a test.
+      const ua = req.headers.get("user-agent") || "";
+      const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "other";
+      const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+      const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
+      const via = device + " " + kind + " " + lang;
+      const id = await createRoom(useName, via);
       regToday.n++;
+      console.log("[room-created] " + id + " via " + via);
       return json({ roomId: id });
     }
 
@@ -1406,6 +1414,33 @@ Bun.serve({
 
 console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
 ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));
+
+// Rooms where someone tapped "create" but nobody ever registered pile up in
+// the admin list. Once a day, remove ones that are over 7 days old with no
+// people, no answers and no puzzle. Rooms with any registered person, and the
+// original room, are never touched.
+async function purgeEmptyRooms(): Promise<void> {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let removed = 0;
+    for (const id of await listRoomIds()) {
+      if (!id) continue;
+      const st = await loadState(id);
+      if (!st.createdAt || new Date(st.createdAt).getTime() > cutoff) continue;
+      const people = Object.values(st.people || {}).filter(Boolean).length;
+      const pending = Object.keys(st.pendingInvite || {}).length + Object.keys(st.pendingConfirm || {}).length;
+      if (people > 0 || pending > 0 || Object.keys(st.answers || {}).length > 0 || st.puzzleCurrentId) continue;
+      await deleteRoom(id);
+      removed++;
+      console.log("[room-purge] removed empty room " + id + " (created " + st.createdAt + ")");
+    }
+    if (removed) regToday.day = ""; // recount today's rooms next time
+  } catch (err) {
+    console.error("[room-purge] failed", err);
+  }
+}
+setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
+setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
 
 startQaSchedule();
 startStatsSchedule();

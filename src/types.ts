@@ -99,6 +99,9 @@ export type State = {
   // rooms created after this field was added; older rooms show as unknown in
   // the admin view rather than guessing a date.
   createdAt?: string;
+  // Coarse, non-identifying hint about where the room was created (device
+  // type, app vs web, browser language) — no IP address. Shown in the logs.
+  createdVia?: string;
   relationship?: RelationshipType;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
   status: Partial<Record<PersonKey, { text: string; at: string }>>;

@@ -124,6 +124,11 @@ export type State = {
   // never sent to browsers (see forClient).
   blocked?: Partial<Record<PersonKey, boolean>>;
   reports?: { by: PersonKey; about: PersonKey; kind: string; note?: string; at: string }[];
+  // "Never Have I Ever" tab: one shared phrase per round. votes holds each
+  // person's answer ("never" = never have I, "have" = I have) and is hidden
+  // from the client until both have answered (see forClient). recent keeps
+  // the last phrases so a new round never repeats one.
+  nhie?: { round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">>; recent?: string[] };
   puzzleCurrentId?: string;
   // Server-computed on every response (not persisted) — how many pieces of
   // the current picture are unlocked, including the streak speed-up.

@@ -376,6 +376,19 @@ const RAW = String.raw`<!doctype html>
   .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
   .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
+  .tab-btn-wrap { line-height: 1.15; padding: 7px 8px; font-size: 0.78rem; }
+  .nhie-phrase { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.35rem; line-height: 1.35; margin: 0; text-align: center; }
+  .nhie-choices { display: flex; gap: 12px; }
+  .nhie-choice { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 16px 10px; font: inherit; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .nhie-choice .emo { font-size: 2.2rem; line-height: 1; }
+  .nhie-choice .lbl { font-size: 0.85rem; }
+  .nhie-choice:disabled { opacity: 0.55; cursor: default; }
+  .nhie-results { display: flex; gap: 12px; }
+  .nhie-result { flex: 1; text-align: center; border-radius: 14px; border: 1px solid var(--line); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .nhie-result .emo { font-size: 2.4rem; line-height: 1; }
+  .nhie-result .who { font-weight: 700; font-size: 0.9rem; }
+  .nhie-verdict { text-align: center; font-weight: 700; margin: 0; }
+  .nhie-note { text-align: center; color: var(--ink-soft); font-size: 0.8rem; margin: 0; }
   .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.8rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
@@ -1125,7 +1138,7 @@ const RAW = String.raw`<!doctype html>
   try {
     var storedTab = localStorage.getItem(TAB_LS_KEY);
     if (storedTab === null && !ROOM) storedTab = localStorage.getItem("sameSkyTab");
-    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local") activeTab = storedTab;
+    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local" || storedTab === "never") activeTab = storedTab;
   } catch (e) {}
   var puzzleFlashMsg = null;
 
@@ -2206,6 +2219,90 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // Never Have I Ever: both partners secretly answer the same phrase —
+  // grin = never have I, shot = I have — and the answers are revealed once
+  // both are in. The server (nhie-vote / nhie-next) owns the phrase and the
+  // votes; the other person's answer is withheld until both have voted.
+  var nhieMyChoice = {};
+  var nhieBusy = false;
+  var nhieStarted = false;
+  function nhieSection() {
+    if (isBlocked()) return blockedNote();
+    var n = state.nhie;
+    if (!n) {
+      if (!nhieStarted && viewerKey) {
+        nhieStarted = true;
+        api("/api/nhie-next", { who: viewerKey, round: 0 }).then(function () { renderApp(); }).catch(function () { nhieStarted = false; });
+      }
+      return h("div", { class: "puzzle-card" }, [h("p", { class: "puzzle-explain", text: t("Loading your first one...") })]);
+    }
+    var other = viewerKey ? otherKeyOf(viewerKey) : null;
+    var voted = n.voted || {};
+    var votes = n.votes || {};
+    var revealed = !!(votes.mark && votes.nikita);
+    var myVoted = viewerKey ? (voted[viewerKey] || !!nhieMyChoice[n.round]) : false;
+
+    var card = h("div", { class: "puzzle-card" }, [
+      h("div", { class: "puzzle-head" }, [
+        h("p", { class: "puzzle-title", text: t("Never Have I Ever") }),
+        h("span", { class: "puzzle-progress", text: tTemplate("Round {n}", { n: n.round }) })
+      ]),
+      h("p", { class: "nhie-phrase", text: n.text }),
+      uiTranslateBlock(n.text, viewerKey ? otherKeyOf(viewerKey) : null)
+    ]);
+
+    if (!revealed) {
+      if (!viewerKey) {
+        card.appendChild(h("p", { class: "nhie-note", text: t("Pick who you are at the bottom of the page to play.") }));
+      } else if (!myVoted) {
+        var neverBtn = h("button", { class: "nhie-choice" }, [h("span", { class: "emo", text: "\uD83D\uDE01" }), h("span", { class: "lbl", text: t("Never have I!") })]);
+        var haveBtn = h("button", { class: "nhie-choice" }, [h("span", { class: "emo", text: "\uD83E\uDD43" }), h("span", { class: "lbl", text: t("I have - take a shot") })]);
+        function cast(choice) {
+          if (nhieBusy) return;
+          nhieBusy = true;
+          nhieMyChoice[n.round] = choice;
+          api("/api/nhie-vote", { who: viewerKey, choice: choice, round: n.round })
+            .catch(function () { delete nhieMyChoice[n.round]; })
+            .then(function () { nhieBusy = false; renderApp(); });
+        }
+        neverBtn.addEventListener("click", function () { cast("never"); });
+        haveBtn.addEventListener("click", function () { cast("have"); });
+        card.appendChild(h("div", { class: "nhie-choices" }, [neverBtn, haveBtn]));
+        card.appendChild(h("p", { class: "nhie-note", text: t("Answers stay hidden until you both have answered.") }));
+      } else {
+        card.appendChild(h("p", { class: "nhie-verdict", text: t("Answered! \u2705") }));
+        card.appendChild(h("p", { class: "nhie-note", text: tTemplate("Waiting for {name} to answer...", { name: other ? personName(other) : "your partner" }) }));
+      }
+    } else {
+      var res = h("div", { class: "nhie-results" });
+      ["mark", "nikita"].forEach(function (key) {
+        var v = votes[key];
+        res.appendChild(h("div", { class: "nhie-result" }, [
+          h("span", { class: "emo", text: v === "have" ? "\uD83E\uDD43" : "\uD83D\uDE01" }),
+          h("span", { class: "who", style: "color:" + PEOPLE[key].color, text: personName(key) }),
+          h("span", { class: "nhie-note", text: v === "have" ? t("Has done it") : t("Never has") })
+        ]));
+      });
+      card.appendChild(res);
+      var haveCount = (votes.mark === "have" ? 1 : 0) + (votes.nikita === "have" ? 1 : 0);
+      var verdict = haveCount === 2 ? t("You both have! Cheers, take a shot together \uD83E\uDD43\uD83E\uDD43")
+        : haveCount === 0 ? t("Neither of you has! Big grins all round \uD83D\uDE01\uD83D\uDE01")
+        : tTemplate("{name} takes a shot \uD83E\uDD43", { name: personName(votes.mark === "have" ? "mark" : "nikita") });
+      card.appendChild(h("p", { class: "nhie-verdict", text: verdict }));
+      var nextBtn = h("button", { class: "mini-btn primary", text: t("Next one") });
+      nextBtn.addEventListener("click", function () {
+        if (nhieBusy || !viewerKey) return;
+        nhieBusy = true;
+        api("/api/nhie-next", { who: viewerKey, round: n.round })
+          .catch(function () {})
+          .then(function () { nhieBusy = false; renderApp(); });
+      });
+      card.appendChild(nextBtn);
+    }
+    card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
+    return card;
+  }
+
   function puzzleSection() {
     if (isBlocked()) return blockedNote();
     var inBatch = !!state.puzzleCurrentId;
@@ -2357,7 +2454,9 @@ const RAW = String.raw`<!doctype html>
       h("span", { class: "tab-badge", text: unlocked + "/" + PUZZLE_TOTAL })
     ]);
     puzzleBtn.addEventListener("click", function () { setActiveTab("puzzle"); });
-    return h("div", { class: "tab-bar" }, [todayBtn, localBtn, puzzleBtn]);
+    var neverBtn = h("button", { class: "tab-btn tab-btn-wrap" + (activeTab === "never" ? " active" : ""), text: t("Never Have I Ever") });
+    neverBtn.addEventListener("click", function () { setActiveTab("never"); });
+    return h("div", { class: "tab-bar" }, [todayBtn, localBtn, puzzleBtn, neverBtn]);
   }
 
   function puzzleFlashBanner() {
@@ -2963,6 +3062,8 @@ const RAW = String.raw`<!doctype html>
       if (moviesBlock) app.appendChild(moviesBlock);
       var photoBlock = photoCardBlock();
       if (photoBlock) app.appendChild(photoBlock);
+    } else if (activeTab === "never") {
+      app.appendChild(nhieSection());
     } else {
       app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
       if (activeTab === "puzzle") {

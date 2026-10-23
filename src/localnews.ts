@@ -20,6 +20,7 @@
 
 import { todayKeyPT } from "./util";
 import { recordClaude } from "./usage";
+import { readSideFile, writeSideFile } from "./storage";
 
 export type LocalStory = { headline: string; source: string; url: string; access?: "free" | "unverified" } | null;
 
@@ -198,8 +199,64 @@ async function checkArticleAccess(url: string): Promise<"free" | "paywalled" | "
   }
 }
 
-// Headlines already shown per place, so the same story never repeats.
+// Headlines already shown per place, so the same story never repeats. Kept in
+// storage (not just memory) because a restart used to empty it and the same
+// story came back; "daily" pins one story per place per day.
 const seenStories = new Map<string, string[]>();
+const dailyPick = new Map<string, NonNullable<LocalStory>>();
+const NEWS_STATE_KEY = "localnews-state.json";
+let newsStateLoaded: Promise<void> | null = null;
+
+function loadNewsState(): Promise<void> {
+  if (!newsStateLoaded) {
+    newsStateLoaded = (async () => {
+      try {
+        const raw = await readSideFile(NEWS_STATE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        for (const [k, v] of Object.entries(data.seen || {})) seenStories.set(k, v as string[]);
+        for (const [k, v] of Object.entries(data.daily || {})) dailyPick.set(k, v as NonNullable<LocalStory>);
+      } catch (err: any) {
+        console.log("[localnews] could not load saved state: " + (err && err.message ? err.message : String(err)));
+      }
+    })();
+  }
+  return newsStateLoaded;
+}
+
+async function saveNewsState(): Promise<void> {
+  try {
+    // Keep only the last few days of pinned picks.
+    const keep = [...dailyPick.keys()].sort().slice(-60);
+    const daily: Record<string, unknown> = {};
+    for (const k of keep) daily[k] = dailyPick.get(k);
+    await writeSideFile(NEWS_STATE_KEY, JSON.stringify({ seen: Object.fromEntries(seenStories), daily }));
+  } catch (err: any) {
+    console.log("[localnews] could not save state: " + (err && err.message ? err.message : String(err)));
+  }
+}
+
+const STOP = new Set("with from that this have been will into over after about their they them than then what when where which while would could should says said just more most some very also only"
+  .split(" "));
+function keyWords(h: string): Set<string> {
+  return new Set(
+    h.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+      .filter((w) => w.length > 3 && !STOP.has(w))
+      .map((w) => w.replace(/(ing|ed|es|s)$/, ""))
+  );
+}
+// The same news reworded by another outlet still counts as already seen.
+function alreadySeen(headline: string, seen: string[]): boolean {
+  if (seen.includes(headline)) return true;
+  const a = keyWords(headline);
+  for (const old of seen) {
+    const b = keyWords(old);
+    let shared = 0;
+    for (const w of a) if (b.has(w)) shared++;
+    if (shared >= 3 && shared / Math.min(a.size, b.size) >= 0.5) return true;
+  }
+  return false;
+}
 
 // Excluded so a story merely mentioning "event" or "festival" in passing
 // (a shooting AT an event, a crash NEAR a festival) can't sneak through —
@@ -224,7 +281,11 @@ const EXCLUDE_TERMS =
 export async function topLocalStory(location: string): Promise<LocalStory> {
   const q = (location || "").trim();
   if (!q) return null;
+  await loadNewsState();
   const theme = todaysTheme();
+  const dayKey = todayKeyPT() + "|" + q;
+  const pinned = dailyPick.get(dayKey);
+  if (pinned) return pinned;
   // Cache key includes the date + theme so a cache entry can never survive
   // across the app's day boundary and serve yesterday's story.
   const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
@@ -247,7 +308,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   ];
   for (const tier of tiers) {
     const cands = (await fetchCandidates(tier.query))
-      .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !seen.includes(c.headline));
+      .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen));
     // Pick the best story, open it, and if it turns out to be paywalled drop it and
     // pick again (up to 3 tries per tier) so a story nobody can read is never shown.
     let pool = cands;
@@ -272,7 +333,12 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     "[localnews] " + q + " (theme=" + theme.name + ") -> " +
     (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" : "no on-theme story found")
   );
-  if (value) { seenStories.set(q, [...seen, value.headline].slice(-30)); lastGood.set(q, value); }
+  if (value) {
+    seenStories.set(q, [...seen, value.headline].slice(-60));
+    lastGood.set(q, value);
+    dailyPick.set(dayKey, value);
+    await saveNewsState();
+  }
   const throttled = Date.now() - gnThrottledAt < 2 * 60 * 1000;
   if (!value && lastGood.get(q)) {
     // Fresh search found nothing (or was throttled): keep showing the last good story.

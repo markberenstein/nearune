@@ -326,3 +326,19 @@ export async function removeFromEmailIndex(hash: string, roomId: string, who: Pe
   emailIndexChain = emailIndexChain.then(run, run);
   await emailIndexChain;
 }
+
+// Small side files (not part of any room) that must survive restarts.
+// Keys must not start with "rooms/" or room listing would pick them up.
+export async function readSideFile(key: string): Promise<string | null> {
+  if (useS3 && s3) {
+    const file = s3.file(key);
+    if (await file.exists()) return await file.text();
+    return null;
+  }
+  try { return await Bun.file("./local-" + key.replace(/[\\/]/g, "-")).text(); } catch { return null; }
+}
+
+export async function writeSideFile(key: string, text: string): Promise<void> {
+  if (useS3 && s3) await s3.file(key).write(text);
+  else await Bun.write("./local-" + key.replace(/[\\/]/g, "-"), text);
+}

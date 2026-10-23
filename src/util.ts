@@ -373,14 +373,7 @@ export function forClient(state: State): State {
   // Computed fresh on every response — the client displays this number
   // as-is rather than recomputing it, so both devices always agree.
   const puzzleUnlocked = puzzleUnlockedCount(state);
-  // Never Have I Ever: nobody sees the other's answer until both are in.
-  let nhieOut: any = undefined;
-  if (state.nhie) {
-    const v = state.nhie.votes || {};
-    const both = !!(v.mark && v.nikita);
-    nhieOut = { round: state.nhie.round, text: state.nhie.text, voted: { mark: !!v.mark, nikita: !!v.nikita }, votes: both ? v : {} };
-  }
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut } as any as State;
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteAt: piAt, puzzleUnlocked } as State;
   if (withFlags.people) {
     const strippedPeople: any = {};
     for (const k of Object.keys(withFlags.people)) {

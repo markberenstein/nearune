@@ -28,7 +28,6 @@ import { regionAbbr } from "./usstates";
 import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { newRound } from "./nhie";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
 import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
@@ -1058,38 +1057,6 @@ Bun.serve({
       try { bytes = Buffer.from(m[1], "base64"); } catch { return json({ place: null }); }
       if (bytes.length < 200) return json({ place: null });
       return json({ place: await guessPlaceFromImage(bytes) });
-    }
-
-    // Never Have I Ever: answer the current phrase. "round" guards against a
-    // stale tab answering a phrase that has already moved on.
-    if (req.method === "POST" && restPath === "/api/nhie-vote") {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const { who, choice, round } = body || {};
-      if (!isPerson(who) || (choice !== "never" && choice !== "have")) return json({ error: "invalid" }, { status: 400 });
-      const state = await saveState(roomId, (s) => {
-        if (!s.nhie) s.nhie = newRound(undefined, s.relationship);
-        if (s.nhie.round !== round) return;
-        if (!s.nhie.votes) s.nhie.votes = {};
-        s.nhie.votes[who] = choice;
-      });
-      return json(forClient(state));
-    }
-
-    // Starts the next phrase. Only moves on once both have answered (or when
-    // there is no round yet), and only from the round the caller was looking
-    // at, so two quick taps never skip a phrase.
-    if (req.method === "POST" && restPath === "/api/nhie-next") {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const { who, round } = body || {};
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const state = await saveState(roomId, (s) => {
-        if (!s.nhie) { s.nhie = newRound(undefined, s.relationship); return; }
-        const v = s.nhie.votes || {};
-        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, s.relationship);
-      });
-      return json(forClient(state));
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-advance") {

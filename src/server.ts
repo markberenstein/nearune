@@ -1296,7 +1296,7 @@ Bun.serve({
       const current = await loadState(roomId);
       const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
       if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
-      const vm = current.people![who]!.voiceModel;
+      const vm = body.model === "v2" || body.model === "v4" ? body.model : current.people![who]!.voiceModel;
       const audio = await synthesizeSpeech(text, voiceId, vm === "v2" || vm === "v4" ? vm : undefined);
       if (!audio) return json({ error: "synth_failed" }, { status: 502 });
       return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });

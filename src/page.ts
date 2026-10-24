@@ -269,10 +269,18 @@ const RAW = String.raw`<!doctype html>
   .voice-card-prompt { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); margin: 2px 0 0; }
   .voice-card-status-text { font-size: 0.8rem; color: var(--ink-soft); margin: 0; }
   .voice-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-  .voice-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
-  .voice-model-label { font-size: 0.82rem; font-weight: 700; }
-  .voice-model-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
-  .voice-model-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .voice-model-label { font-size: 0.82rem; font-weight: 700; margin-top: 6px; }
+  .voice-model-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .voice-model-opt { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); background: var(--surface); border-radius: 14px; padding: 12px 14px; cursor: pointer; text-align: left; font: inherit; color: var(--ink); width: 100%; }
+  .voice-model-opt.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .voice-model-radio { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); display: flex; align-items: center; justify-content: center; }
+  .voice-model-opt.active .voice-model-radio { border-color: var(--accent); }
+  .voice-model-opt.active .voice-model-radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .voice-model-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .voice-model-name { font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .voice-model-tag { font-size: 0.68rem; font-weight: 700; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 2px 7px; }
+  .voice-model-sub { font-size: 0.78rem; color: var(--ink-soft); line-height: 1.3; }
+  .voice-model-play { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 8px 12px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
   .voice-card-actions .mini-btn { border-radius: 16px; line-height: 1.25; padding: 9px 14px; }
   .voice-card-howto { margin: 2px 0 0; }
   .voice-card-howto summary {
@@ -1631,7 +1639,7 @@ const RAW = String.raw`<!doctype html>
   // this SAME element (set its .src and play() again once the blob is
   // ready) carries the original gesture's permission forward, so the
   // delayed playback still succeeds.
-  function speakAs(text, lang, authorKey, unlockedAudio) {
+  function speakAs(text, lang, authorKey, unlockedAudio, modelOverride) {
     if (!text) return;
     if (authorKey && personHasVoice(authorKey)) {
       try { if (activeCloneAudio && activeCloneAudio !== unlockedAudio) activeCloneAudio.pause(); } catch (e) {}
@@ -1640,7 +1648,7 @@ const RAW = String.raw`<!doctype html>
       fetch(RP + "/api/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ who: authorKey, text: text }),
+        body: JSON.stringify({ who: authorKey, text: text, model: modelOverride || undefined }),
       })
         .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
         .then(function (blob) {
@@ -3583,20 +3591,43 @@ const RAW = String.raw`<!doctype html>
     }
     if (hasVoice) {
       var curModel = person && person.voiceModel === "v2" ? "v2" : "v4";
-      var modelRow = h("div", { class: "voice-model-row" });
-      modelRow.appendChild(h("span", { class: "voice-model-label", text: t("Voice version") }));
-      [["v4", t("Newest (v4)")], ["v2", t("Classic (v2)")]].forEach(function (opt) {
-        var b = h("button", { class: "voice-model-btn" + (curModel === opt[0] ? " active" : ""), type: "button", text: opt[1] });
-        b.addEventListener("click", function () {
-          if (curModel === opt[0]) return;
-          api("/api/voice-model", { who: key, model: opt[0] }).catch(function () {}).then(function () { renderApp(); });
+      wrap.appendChild(h("span", { class: "voice-model-label", text: t("Choose how your voice sounds") }));
+      var optsEl = h("div", { class: "voice-model-opts" });
+      [
+        ["v4", t("Newest"), t("Recommended"), t("Most natural and expressive")],
+        ["v2", t("Classic"), "", t("The earlier, steadier sound")],
+      ].forEach(function (opt) {
+        var isOn = curModel === opt[0];
+        var card = h("div", { class: "voice-model-opt" + (isOn ? " active" : ""), role: "radio", "aria-checked": isOn ? "true" : "false", tabindex: "0" });
+        card.appendChild(h("span", { class: "voice-model-radio" }));
+        var txt = h("span", { class: "voice-model-text" });
+        var nm = h("span", { class: "voice-model-name" });
+        nm.appendChild(document.createTextNode(opt[1]));
+        if (opt[2]) nm.appendChild(h("span", { class: "voice-model-tag", text: opt[2] }));
+        txt.appendChild(nm);
+        txt.appendChild(h("span", { class: "voice-model-sub", text: opt[3] }));
+        card.appendChild(txt);
+        var play = h("button", { class: "voice-model-play", type: "button", text: "▶ " + t("Hear") });
+        play.addEventListener("click", function (e) {
+          e.preventDefault(); e.stopPropagation();
+          var un = new Audio();
+          try { var pr = un.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (err) {}
+          speakAs("Hi, this is what my voice sounds like.", "en", key, un, opt[0]);
         });
-        modelRow.appendChild(b);
+        card.appendChild(play);
+        var choose = function () {
+          if (curModel === opt[0]) return;
+          Array.prototype.forEach.call(optsEl.children, function (c) { c.classList.remove("active"); c.setAttribute("aria-checked", "false"); });
+          card.classList.add("active");
+          card.setAttribute("aria-checked", "true");
+          api("/api/voice-model", { who: key, model: opt[0] }).catch(function () {}).then(function () { renderApp(); });
+        };
+        card.addEventListener("click", choose);
+        card.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); } });
+        optsEl.appendChild(card);
       });
-      var sampleBtn = speakButton(t("Hi, this is what my voice sounds like."), "en", t("Hear a sample of your voice"), key);
-      if (sampleBtn) modelRow.appendChild(sampleBtn);
-      wrap.appendChild(modelRow);
-      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Tap 🔊 to hear a sample, switch versions, and keep whichever sounds most like you.") }));
+      wrap.appendChild(optsEl);
+      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Tap Hear to compare, then tap a card to pick the one that sounds most like you.") }));
     }
     var btnRow = h("div", { class: "voice-card-actions" });
     // Capacitor's iOS WKWebView (the native app) has no MediaRecorder at

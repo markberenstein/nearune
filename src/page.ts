@@ -385,10 +385,10 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
 
-  .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
-  .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .tab-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
+  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
-  .tab-btn-wrap { line-height: 1.15; padding: 7px 8px; font-size: 0.78rem; }
+  .tab-ico { font-size: 1.2rem; line-height: 1; }
   .nhie-phrase { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.35rem; line-height: 1.35; margin: 0; text-align: center; }
   .nhie-choices { display: flex; gap: 12px; }
   .nhie-choice { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 16px 10px; font: inherit; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -401,7 +401,7 @@ const RAW = String.raw`<!doctype html>
   .nhie-result .who { font-weight: 700; font-size: 0.9rem; }
   .nhie-verdict { text-align: center; font-weight: 700; margin: 0; }
   .nhie-note { text-align: center; color: var(--ink-soft); font-size: 0.8rem; margin: 0; }
-  .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.8rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+  .tab-badge { background: var(--accent-2); color: #fff; position: absolute; top: 3px; right: 6px; font-size: 0.6rem; font-weight: 700; border-radius: 999px; padding: 1px 5px; line-height: 1.3; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
@@ -2457,18 +2457,19 @@ const RAW = String.raw`<!doctype html>
 
   function tabBar() {
     var unlocked = puzzleUnlockedCount();
-    var todayBtn = h("button", { class: "tab-btn" + (activeTab === "today" ? " active" : ""), text: t("Today") });
-    todayBtn.addEventListener("click", function () { setActiveTab("today"); });
-    var localBtn = h("button", { class: "tab-btn" + (activeTab === "local" ? " active" : ""), text: t("Local Feel") });
-    localBtn.addEventListener("click", function () { setActiveTab("local"); });
-    var puzzleBtn = h("button", { class: "tab-btn" + (activeTab === "puzzle" ? " active" : "") }, [
-      document.createTextNode(t("Puzzle") + " "),
-      h("span", { class: "tab-badge", text: unlocked + "/" + PUZZLE_TOTAL })
+    function mk(id, icon, label, badge) {
+      var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
+      if (badge) kids.push(h("span", { class: "tab-badge", text: badge }));
+      var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
+      btn.addEventListener("click", function () { setActiveTab(id); });
+      return btn;
+    }
+    return h("div", { class: "tab-bar" }, [
+      mk("today", "☀️", "Today"),
+      mk("local", "📍", "Local Feel"),
+      mk("puzzle", "🧩", "Puzzle", unlocked + "/" + PUZZLE_TOTAL),
+      mk("never", "🥃", "Never Have I Ever"),
     ]);
-    puzzleBtn.addEventListener("click", function () { setActiveTab("puzzle"); });
-    var neverBtn = h("button", { class: "tab-btn tab-btn-wrap" + (activeTab === "never" ? " active" : ""), text: t("Never Have I Ever") });
-    neverBtn.addEventListener("click", function () { setActiveTab("never"); });
-    return h("div", { class: "tab-bar" }, [todayBtn, localBtn, puzzleBtn, neverBtn]);
   }
 
   function puzzleFlashBanner() {

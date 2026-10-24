@@ -269,6 +269,10 @@ const RAW = String.raw`<!doctype html>
   .voice-card-prompt { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); margin: 2px 0 0; }
   .voice-card-status-text { font-size: 0.8rem; color: var(--ink-soft); margin: 0; }
   .voice-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .voice-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+  .voice-model-label { font-size: 0.82rem; font-weight: 700; }
+  .voice-model-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+  .voice-model-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   .voice-card-actions .mini-btn { border-radius: 16px; line-height: 1.25; padding: 9px 14px; }
   .voice-card-howto { margin: 2px 0 0; }
   .voice-card-howto summary {
@@ -3576,6 +3580,23 @@ const RAW = String.raw`<!doctype html>
     }));
     if (voiceRecordState.error) {
       wrap.appendChild(h("p", { class: "voice-card-error", text: voiceRecordState.error }));
+    }
+    if (hasVoice) {
+      var curModel = person && person.voiceModel === "v2" ? "v2" : "v4";
+      var modelRow = h("div", { class: "voice-model-row" });
+      modelRow.appendChild(h("span", { class: "voice-model-label", text: t("Voice version") }));
+      [["v4", t("Newest (v4)")], ["v2", t("Classic (v2)")]].forEach(function (opt) {
+        var b = h("button", { class: "voice-model-btn" + (curModel === opt[0] ? " active" : ""), type: "button", text: opt[1] });
+        b.addEventListener("click", function () {
+          if (curModel === opt[0]) return;
+          api("/api/voice-model", { who: key, model: opt[0] }).catch(function () {}).then(function () { renderApp(); });
+        });
+        modelRow.appendChild(b);
+      });
+      var sampleBtn = speakButton(t("Hi, this is what my voice sounds like."), "en", t("Hear a sample of your voice"), key);
+      if (sampleBtn) modelRow.appendChild(sampleBtn);
+      wrap.appendChild(modelRow);
+      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Tap 🔊 to hear a sample, switch versions, and keep whichever sounds most like you.") }));
     }
     var btnRow = h("div", { class: "voice-card-actions" });
     // Capacitor's iOS WKWebView (the native app) has no MediaRecorder at

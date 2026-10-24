@@ -75,6 +75,9 @@ export async function deleteVoice(voiceId: string): Promise<void> {
 // model keeps voices working rather than dropping to the browser voice.
 const PRIMARY_MODEL = (Bun.env.ELEVENLABS_MODEL || "eleven_v4").trim();
 const FALLBACK_MODEL = "eleven_multilingual_v2";
+// What a person can choose for their own voice (see PersonProfile.voiceModel).
+export type VoiceModelChoice = "v4" | "v2";
+const CHOICE_MODEL: Record<VoiceModelChoice, string> = { v4: "eleven_v4", v2: FALLBACK_MODEL };
 
 async function speakWithModel(text: string, voiceId: string, model: string, key: string): Promise<Response> {
   return fetch(ELEVENLABS_BASE + "/text-to-speech/" + encodeURIComponent(voiceId), {
@@ -95,15 +98,19 @@ async function speakWithModel(text: string, voiceId: string, model: string, key:
   });
 }
 
-export async function synthesizeSpeech(text: string, voiceId: string): Promise<Uint8Array | null> {
+export async function synthesizeSpeech(text: string, voiceId: string, choice?: VoiceModelChoice): Promise<Uint8Array | null> {
   const key = Bun.env.ELEVENLABS_API_KEY;
   if (!key || !voiceId || !text.trim()) return null;
   try {
-    let res = await speakWithModel(text, voiceId, PRIMARY_MODEL, key);
-    if (!res.ok && PRIMARY_MODEL !== FALLBACK_MODEL && res.status !== 401 && res.status !== 429) {
+    // An explicit choice wins over the server default; with no choice the
+    // default (v4, or ELEVENLABS_MODEL) applies. v4 falls back to v2 on a
+    // failure; a person who picked v2 simply gets v2.
+    const model = choice ? CHOICE_MODEL[choice] : PRIMARY_MODEL;
+    let res = await speakWithModel(text, voiceId, model, key);
+    if (!res.ok && model !== FALLBACK_MODEL && res.status !== 401 && res.status !== 429) {
       let why = "";
       try { why = (await res.text()).slice(0, 200); } catch {}
-      console.log("[voice] " + PRIMARY_MODEL + " failed -> HTTP " + res.status + " " + why + "; retrying on " + FALLBACK_MODEL);
+      console.log("[voice] " + model + " failed -> HTTP " + res.status + " " + why + "; retrying on " + FALLBACK_MODEL);
       res = await speakWithModel(text, voiceId, FALLBACK_MODEL, key);
     }
     if (!res.ok) {

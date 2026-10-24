@@ -69,33 +69,43 @@ export async function deleteVoice(voiceId: string): Promise<void> {
 // (ElevenLabs' default output format) or null on any failure — the caller
 // (the /api/speak handler) treats null the same as "no voice configured" so
 // the client's existing browser-speechSynthesis fallback just takes over.
+// The speech model. Eleven v4 by default; set ELEVENLABS_MODEL in Railway to
+// switch (for example back to "eleven_multilingual_v2") without a code change.
+// If the preferred model is refused or fails, one retry on the previous
+// model keeps voices working rather than dropping to the browser voice.
+const PRIMARY_MODEL = (Bun.env.ELEVENLABS_MODEL || "eleven_v4").trim();
+const FALLBACK_MODEL = "eleven_multilingual_v2";
+
+async function speakWithModel(text: string, voiceId: string, model: string, key: string): Promise<Response> {
+  return fetch(ELEVENLABS_BASE + "/text-to-speech/" + encodeURIComponent(voiceId), {
+    method: "POST",
+    headers: { "xi-api-key": key, "content-type": "application/json" },
+    // The cloned voice can speak any of the app's supported languages, not
+    // just whatever language the sample was recorded in (this also voices
+    // the OTHER person's translated text back in the listener's language).
+    //
+    // voice_settings: stability nudged up from the default so the voice
+    // stays close to the sample (and doesn't pick up a faint accent), but
+    // not so high that delivery goes monotone.
+    body: JSON.stringify({
+      text,
+      model_id: model,
+      voice_settings: { stability: 0.7, similarity_boost: 0.85 },
+    }),
+  });
+}
+
 export async function synthesizeSpeech(text: string, voiceId: string): Promise<Uint8Array | null> {
   const key = Bun.env.ELEVENLABS_API_KEY;
   if (!key || !voiceId || !text.trim()) return null;
   try {
-    const res = await fetch(ELEVENLABS_BASE + "/text-to-speech/" + encodeURIComponent(voiceId), {
-      method: "POST",
-      headers: { "xi-api-key": key, "content-type": "application/json" },
-      // eleven_multilingual_v2 — the cloned voice can speak any of the
-      // app's supported languages, not just whatever language the sample
-      // was recorded in (useful here since this also voices the OTHER
-      // person's translated text back in the listener's own language).
-      //
-      // voice_settings: without this, ElevenLabs falls back to defaults
-      // (stability 0.5 / similarity_boost 0.5), which leave more room for
-      // the model to "wander" away from the actual sample — including
-      // picking up a faint accent that isn't really there, since stability
-      // is literally the lever ElevenLabs' own docs point to for that
-      // ("if the voice starts to wander or produce artifacts, raise
-      // stability"). Nudged up from default rather than maxed out, since
-      // pushing stability too close to 1.0 tends to flatten delivery into
-      // a monotone instead.
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.7, similarity_boost: 0.85 },
-      }),
-    });
+    let res = await speakWithModel(text, voiceId, PRIMARY_MODEL, key);
+    if (!res.ok && PRIMARY_MODEL !== FALLBACK_MODEL && res.status !== 401 && res.status !== 429) {
+      let why = "";
+      try { why = (await res.text()).slice(0, 200); } catch {}
+      console.log("[voice] " + PRIMARY_MODEL + " failed -> HTTP " + res.status + " " + why + "; retrying on " + FALLBACK_MODEL);
+      res = await speakWithModel(text, voiceId, FALLBACK_MODEL, key);
+    }
     if (!res.ok) {
       // Logged (not sent to the client) so a failing voice shows its real reason in Railway's logs.
       let body = "";

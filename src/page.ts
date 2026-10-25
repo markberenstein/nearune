@@ -503,10 +503,16 @@ const RAW = String.raw`<!doctype html>
   // they've registered their own.
   var PEOPLE = ROOM ? {
     mark: { name: "Person A", tz: "UTC", city: "", color: "var(--accent-ink)" },
-    nikita: { name: "Person B", tz: "UTC", city: "", color: "var(--accent-2)" }
+    nikita: { name: "Person B", tz: "UTC", city: "", color: "var(--accent-2)" },
+    p3: { name: "Person C", tz: "UTC", city: "", color: "#2f9e6e" },
+    p4: { name: "Person D", tz: "UTC", city: "", color: "#c2410c" },
+    p5: { name: "Person E", tz: "UTC", city: "", color: "#6d5bd0" }
   } : {
     mark: { name: "Mark", tz: "America/Los_Angeles", city: "San Mateo", color: "var(--accent-ink)" },
-    nikita: { name: "Nikita", tz: "Asia/Kolkata", city: "Delhi", color: "var(--accent-2)" }
+    nikita: { name: "Nikita", tz: "Asia/Kolkata", city: "Delhi", color: "var(--accent-2)" },
+    p3: { name: "Person C", tz: "UTC", city: "", color: "#2f9e6e" },
+    p4: { name: "Person D", tz: "UTC", city: "", color: "#c2410c" },
+    p5: { name: "Person E", tz: "UTC", city: "", color: "#6d5bd0" }
   };
 
   // Registration supplies the real name/location/language per person — these
@@ -583,7 +589,53 @@ const RAW = String.raw`<!doctype html>
     if (!ROOM && key === "nikita") return "hi";
     return "en";
   }
-  function otherKeyOf(key) { return key === "mark" ? "nikita" : "mark"; }
+  // Rooms hold up to 5 people (slots mark, nikita, p3, p4, p5). Mirrors the
+  // server's SLOTS / requiredSlots / partnerOf in util.ts.
+  var SLOT_KEYS = ["mark", "nikita", "p3", "p4", "p5"];
+  function isSlotKey(k) { return SLOT_KEYS.indexOf(k) >= 0; }
+  // Who must answer the given day for it to count as complete: mark and
+  // nikita always (unless they left), p3-p5 only once registered, from the
+  // day they joined until the day they left (their past answers stay).
+  function requiredKeys(dayKey) {
+    return SLOT_KEYS.filter(function (k) {
+      var p = state && state.people && state.people[k];
+      if (k === "mark" || k === "nikita") return !(p && p.leftDay && dayKey >= p.leftDay);
+      if (!p) return false;
+      if (p.joinedDay && dayKey < p.joinedDay) return false;
+      if (p.leftDay && dayKey >= p.leftDay) return false;
+      return true;
+    });
+  }
+  // Everyone who has an answer on that day (includes people who have since left).
+  function answeredKeys(dayKey) {
+    var a = state.answers && state.answers[dayKey];
+    return SLOT_KEYS.filter(function (k) { return !!(a && a[k] && a[k].text); });
+  }
+  // Slots that exist in this room right now (for rows of chips etc.).
+  function roomKeys() {
+    return SLOT_KEYS.filter(function (k) {
+      if (k === "mark" || k === "nikita") return true;
+      var p = state.people && state.people[k];
+      return !!(p && !p.leftDay);
+    });
+  }
+  function namesList(keys) { return keys.map(personName).join(", "); }
+  function otherKeyOf(key) {
+    if (key === "mark") return "nikita";
+    if (key === "nikita") return "mark";
+    for (var i = 0; i < SLOT_KEYS.length; i++) {
+      var k = SLOT_KEYS[i];
+      if (k !== key && state && state.people && state.people[k]) return k;
+    }
+    return "mark";
+  }
+  // The language an author's text should be translated INTO for this reader:
+  // the viewer's own language for someone else's text; for your own text, the
+  // language your partner reads (same as the old two-person behavior).
+  function readerLangFor(authorKey) {
+    if (viewerKey && authorKey !== viewerKey) return langCodeFor(viewerKey);
+    return langCodeFor(otherKeyOf(authorKey));
+  }
   function questionTargetLang() {
     var mLang = langCodeFor("mark"), nLang = langCodeFor("nikita");
     if (mLang !== "en") return mLang;
@@ -961,7 +1013,7 @@ const RAW = String.raw`<!doctype html>
   }
   function rolloverTz(at) {
     var best = null, bestOff = -Infinity;
-    ["mark", "nikita"].forEach(function (k) {
+    SLOT_KEYS.forEach(function (k) {
       var p = state && state.people && state.people[k];
       var tz = p && p.tz;
       if (!tz) return;
@@ -1125,7 +1177,7 @@ const RAW = String.raw`<!doctype html>
     viewerKey = localStorage.getItem(VIEWER_LS_KEY);
     if (viewerKey === null && !ROOM) viewerKey = localStorage.getItem("sameSkyViewer");
   } catch (e) {}
-  if (viewerKey !== "mark" && viewerKey !== "nikita") viewerKey = null;
+  if (!isSlotKey(viewerKey)) viewerKey = null;
   // A device that already knows who it is in this room should also remember the
   // room itself, so opening the app at "/" goes straight back here.
   if (viewerKey && ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
@@ -1137,7 +1189,7 @@ const RAW = String.raw`<!doctype html>
   // they'd hit the "who's here?" picker instead.
   try {
     var viewerParam = new URLSearchParams(location.search).get("viewer");
-    if (viewerParam === "mark" || viewerParam === "nikita") {
+    if (isSlotKey(viewerParam)) {
       viewerKey = viewerParam;
       localStorage.setItem(VIEWER_LS_KEY, viewerParam);
       if (ROOM) localStorage.setItem(MY_ROOM_LS_KEY, ROOM);
@@ -1267,7 +1319,9 @@ const RAW = String.raw`<!doctype html>
 
   function isComplete(key) {
     var a = state.answers[key];
-    return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text);
+    if (!a) return false;
+    var need = requiredKeys(key);
+    return need.length > 0 && need.every(function (k) { return !!(a[k] && a[k].text); });
   }
   function totalCompleteDays() {
     return Object.keys(state.answers).filter(isComplete).length;
@@ -2347,7 +2401,7 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
-      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
+      cDiv.appendChild(translateBlock(c.text, readerLangFor(c.who), langCodeFor(c.who), c.who));
       if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
       wrap.appendChild(cDiv);
     });
@@ -2400,7 +2454,7 @@ const RAW = String.raw`<!doctype html>
     try {
       var p = new URLSearchParams(location.search);
       var iv = p.get("invite"), tk = p.get("token");
-      if ((iv === "mark" || iv === "nikita") && tk) return { who: iv, token: tk };
+      if (isSlotKey(iv) && tk) return { who: iv, token: tk };
     } catch (e) {}
     return null;
   })();
@@ -3958,7 +4012,7 @@ const RAW = String.raw`<!doctype html>
 
   function statusRow() {
     var row = h("div", { class: "status-row" });
-    ["mark", "nikita"].forEach(function (key) {
+    roomKeys().forEach(function (key) {
       var person = PEOPLE[key];
       var current = (state.status[key] && state.status[key].text) || "";
       if (key !== viewerKey && isBlocked()) current = "";
@@ -4044,7 +4098,7 @@ const RAW = String.raw`<!doctype html>
 
     if (complete) {
       var reveal = h("div", { class: "answers-reveal" });
-      ["mark", "nikita"].forEach(function (key) {
+      answeredKeys(today).forEach(function (key) {
         var person = PEOPLE[key];
         var bubble = h("div", { class: "answer-bubble", style: "background:color-mix(in srgb, " + person.color + " 10%, var(--surface))" });
         var headRow = h("div", { class: "answer-head" }, [h("span", { class: "answer-name", style: "color:" + person.color, text: personName(key) })]);
@@ -4060,7 +4114,7 @@ const RAW = String.raw`<!doctype html>
           bubble.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You've blocked {name}.", { name: personName(key) }) }));
         } else {
           bubble.appendChild(h("p", { class: "answer-text", text: entry[key].text }));
-          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key));
+          bubble.appendChild(translateBlock(entry[key].text, readerLangFor(key), langCodeFor(key), key));
           if (key !== viewerKey) bubble.appendChild(reportLink("answer"));
         }
         reveal.appendChild(bubble);
@@ -4079,15 +4133,25 @@ const RAW = String.raw`<!doctype html>
         mineWrap.appendChild(editBtn2);
         card.appendChild(mineWrap);
       }
-      card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>' + tTemplate("Sent — waiting for {name} to answer too.", { name: personName(otherKeyOf(viewerKey)) }) + '</span>' }));
+      var stillWaiting = requiredKeys(today).filter(function (k) { return k !== viewerKey && !(entry[k] && entry[k].text); });
+      if (!stillWaiting.length) stillWaiting = [otherKeyOf(viewerKey)];
+      card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + '<span>' + tTemplate("Sent — waiting for {name} to answer too.", { name: namesList(stillWaiting) }) + '</span>' }));
     } else {
       // Before you've answered yourself, say whether your partner already
       // has — so you know your answer will reveal both right away, or that
       // you're not the one holding things up.
       var otherKey = otherKeyOf(viewerKey);
+      var othersReq = requiredKeys(today).filter(function (k) { return k !== viewerKey; });
       var partnerAnswered = !!(entry[otherKey] && entry[otherKey].text);
       var partnerName = personName(otherKey);
-      if (partnerAnswered) {
+      if (othersReq.length > 1) {
+        var nAns = othersReq.filter(function (k) { return !!(entry[k] && entry[k].text); }).length;
+        if (nAns > 0) {
+          card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("{n} of {m} others have answered — send yours to see everyone's.", { n: String(nAns), m: String(othersReq.length) }) }));
+        } else {
+          card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + "<span>" + t("No one else has answered yet.") + "</span>" }));
+        }
+      } else if (partnerAnswered) {
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("{name} has already answered — send yours to see both.", { name: partnerName }) }));
       } else {
         card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + "<span>" + tTemplate("{name} hasn't answered yet either.", { name: partnerName }) + "</span>" }));
@@ -4116,7 +4180,7 @@ const RAW = String.raw`<!doctype html>
     var info = streakInfo();
     var dots = h("div", { class: "streak-dots" });
     info.last7.forEach(function (d) { dots.appendChild(h("span", { class: "streak-dot" + (d.done ? " filled" : "") })); });
-    var label = info.count === 0 ? t("Answer today to start a new streak.") : t("You've both shown up");
+    var label = info.count === 0 ? t("Answer today to start a new streak.") : t(requiredKeys(dateKey(new Date())).length > 2 ? "You've all shown up" : "You've both shown up");
     var text = h("div", { class: "streak-text" }, [
       document.createTextNode(label + " "),
       info.count > 0 ? h("strong", { text: t(info.count === 1 ? "{n} day" : "{n} days").split("{n}").join(String(info.count)) }) : null,
@@ -4143,7 +4207,7 @@ const RAW = String.raw`<!doctype html>
             h("p", { class: "journal-q", text: questionForKey(key) }),
             uiTranslateBlock(questionForKey(key), viewerKey ? otherKeyOf(viewerKey) : null)
           ]);
-          ["mark", "nikita"].forEach(function (pKey) {
+          answeredKeys(key).forEach(function (pKey) {
             if (pKey === viewerKey && editingEntry === key) { entryDiv.appendChild(ownAnswerEditor(key)); return; }
             var line = h("p", { class: "journal-a" }, [h("b", { text: personName(pKey) + ": " }), document.createTextNode(entry[pKey].text)]);
             if (pKey === viewerKey) {
@@ -4153,7 +4217,7 @@ const RAW = String.raw`<!doctype html>
               line.appendChild(ebtn);
             }
             entryDiv.appendChild(line);
-            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey), pKey));
+            entryDiv.appendChild(translateBlock(entry[pKey].text, readerLangFor(pKey), langCodeFor(pKey), pKey));
           });
           entryDiv.appendChild(commentsBlock(key));
           list.appendChild(entryDiv);
@@ -4218,8 +4282,7 @@ const RAW = String.raw`<!doctype html>
   function unansweredCountLocal(key) {
     var a = state.answers && state.answers[key];
     var n = 0;
-    if (!a || !a.mark || !a.mark.text) n++;
-    if (!a || !a.nikita || !a.nikita.text) n++;
+    requiredKeys(key).forEach(function (k) { if (!a || !a[k] || !a[k].text) n++; });
     return n;
   }
 

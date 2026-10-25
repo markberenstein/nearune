@@ -614,20 +614,31 @@ const RAW = String.raw`<!doctype html>
   // Slots that exist in this room right now (for rows of chips etc.).
   function roomKeys() {
     return SLOT_KEYS.filter(function (k) {
-      if (k === "mark" || k === "nikita") return true;
       var p = state.people && state.people[k];
+      if (k === "mark" || k === "nikita") return !(p && p.leftDay);
       return !!(p && !p.leftDay);
     });
   }
+  // A person who is registered, confirmed and hasn't left.
+  function activeKey(k) {
+    var p = state && state.people && state.people[k];
+    return !!(p && p.confirmed && !p.leftDay);
+  }
   function namesList(keys) { return keys.map(personName).join(", "); }
   function otherKeyOf(key) {
-    if (key === "mark") return "nikita";
-    if (key === "nikita") return "mark";
-    for (var i = 0; i < SLOT_KEYS.length; i++) {
-      var k = SLOT_KEYS[i];
-      if (k !== key && state && state.people && state.people[k]) return k;
+    var legacy = key === "mark" ? "nikita" : key === "nikita" ? "mark" : null;
+    if (legacy && activeKey(legacy)) return legacy;
+    var i, k;
+    for (i = 0; i < SLOT_KEYS.length; i++) {
+      k = SLOT_KEYS[i];
+      if (k !== key && activeKey(k)) return k;
     }
-    return "mark";
+    // Nobody else is in yet: prefer the slot with an invite out, if any.
+    for (i = 0; i < SLOT_KEYS.length; i++) {
+      k = SLOT_KEYS[i];
+      if (k !== key && state && state.pendingInvite && state.pendingInvite[k] && !(state.people && state.people[k] && state.people[k].leftDay)) return k;
+    }
+    return legacy || "mark";
   }
   // The language an author's text should be translated INTO for this reader:
   // the viewer's own language for someone else's text; for your own text, the
@@ -2801,13 +2812,17 @@ const RAW = String.raw`<!doctype html>
         if (!res.ok) {
           regError = res.data && res.data.error === "rate_limited"
             ? t("Too many attempts — wait a bit and try again.")
-            : t("Couldn't send invite — try again.");
+            : res.data && res.data.error === "room_full"
+              ? t("This room is full (5 people).")
+              : t("Couldn't send invite — try again.");
           renderApp(); return;
         }
         lastInviteUrl = res.data._inviteUrl || "";
         lastAppStoreUrl = res.data._appStoreUrl || "";
         state = res.data;
         showInviteForm = false;
+        showAddPeople = false;
+        inviteEmailDraft = "";
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
         renderApp();
       })
@@ -2844,6 +2859,77 @@ const RAW = String.raw`<!doctype html>
       }
     });
     return btn;
+  }
+
+  // --- Room members: see who's in, add someone (up to 5), leave -----------
+  var showAddPeople = false;
+  function membersCard() {
+    var active = SLOT_KEYS.filter(activeKey);
+    var pending = SLOT_KEYS.filter(function (k) {
+      return !activeKey(k) && state.pendingInvite && state.pendingInvite[k] && !(state.people && state.people[k] && state.people[k].leftDay);
+    });
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("People in this room") }), h("span", { text: active.length + "/5" })])
+    ]);
+    active.forEach(function (k) {
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin:4px 0;" }, [
+        h("span", { style: "color:" + PEOPLE[k].color + ";font-weight:700;", text: personName(k) }),
+        document.createTextNode(k === viewerKey ? " (" + t("you") + ")" : "")
+      ]));
+    });
+    pending.forEach(function (k) {
+      var hdl = state.pendingInviteHandle && state.pendingInviteHandle[k];
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin:4px 0;", text: (hdl ? "@" + hdl : t("Invited")) + " — " + t("waiting to join") }));
+    });
+    if (lastInviteUrl) {
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "word-break: break-all; margin-top:10px;", text: lastInviteUrl }));
+      card.appendChild(h("div", { class: "puzzle-setup-row", style: "margin-bottom: 10px;" }, [
+        shareLinkButton(lastInviteUrl, t("Share link"), "puzzle-upload-btn"),
+        copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
+      ]));
+    }
+    if (active.length + pending.length < 5) {
+      if (!showAddPeople) {
+        var add = h("button", { class: "switch-link", type: "button", text: "+ " + t("Add someone") });
+        add.addEventListener("click", function () { showAddPeople = true; regError = ""; renderApp(); });
+        card.appendChild(h("div", { class: "switch-row" }, [add]));
+      } else {
+        var form = h("div", { class: "puzzle-setup" });
+        form.appendChild(textField(inviteEmailDraft, "Their Instagram handle (or email if they don't use Instagram)", function (v) { inviteEmailDraft = v; }));
+        form.appendChild(h("p", { class: "puzzle-guess-note", text: t("With an Instagram handle, you'll get a link to send them yourself.") }));
+        if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+        var send = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
+        send.disabled = regBusy;
+        send.addEventListener("click", submitInvite);
+        var cancel = h("button", { class: "switch-link", type: "button", text: t("Cancel") });
+        cancel.addEventListener("click", function () { showAddPeople = false; regError = ""; renderApp(); });
+        form.appendChild(send);
+        form.appendChild(cancel);
+        card.appendChild(form);
+      }
+    }
+    return card;
+  }
+  function leaveRoom() {
+    if (!window.confirm(t("Leave this room? Your past answers stay visible to the others, but you won't be asked new questions. This can't be undone."))) return;
+    fetch(RP + "/api/leave", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey }) })
+      .then(function (r) {
+        if (r.status === 409) { try { window.alert(t("You're the only person left — delete the room instead.")); } catch (e) {} return null; }
+        return r.ok ? r.json() : Promise.reject(new Error("bad"));
+      })
+      .then(function (d) {
+        if (!d) return;
+        try { localStorage.removeItem(VIEWER_LS_KEY); localStorage.removeItem(MY_ROOM_LS_KEY); } catch (e) {}
+        location.href = "/new";
+      })
+      .catch(function () { try { window.alert(t("Couldn't leave — try again.")); } catch (e) {} });
+  }
+  function leftScreen() {
+    return h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("You left this room") })]),
+      h("p", { class: "question", text: t("You won't be asked new questions here. Your past answers stay in the room for the others.") }),
+      h("div", { class: "switch-row" }, [h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") })])
+    ]);
   }
 
   function inviteFlow(otherKey) {
@@ -2982,6 +3068,9 @@ const RAW = String.raw`<!doctype html>
       }
     }
 
+    var meLeft = state.people && state.people[viewerKey];
+    if (meLeft && meLeft.leftDay) { app.appendChild(leftScreen()); return; }
+
     // The legacy room (no ROOM id) predates this registration/confirm
     // system entirely — Mark and Nikita have real hardcoded placeholder
     // identities there (see PEOPLE) and have always used the app without
@@ -2989,14 +3078,14 @@ const RAW = String.raw`<!doctype html>
     // (created via /new) is registration-required from the start.
     if (ROOM) {
       var mine = state.people && state.people[viewerKey];
-      var otherKey = viewerKey === "mark" ? "nikita" : "mark";
+      var otherKey = otherKeyOf(viewerKey);
       if (mine && !mine.confirmed && state.pendingConfirm && state.pendingConfirm[viewerKey] && !showRegisterForm && !isConfirmedKey(otherKey)) {
         renderSoloHome(app, otherKey); return;
       }
       if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }
 
       var other = state.people && state.people[otherKey];
-      var otherConfirmedYet = !!(other && other.confirmed);
+      var otherConfirmedYet = isConfirmedKey(otherKey);
 
       // One-time "want a daily reminder?" dialog — shown as soon as YOUR OWN
       // registration is confirmed, which for whoever registers first is
@@ -3055,6 +3144,7 @@ const RAW = String.raw`<!doctype html>
         app.appendChild(questionCard());
         app.appendChild(streakCard());
         app.appendChild(journalSection());
+        app.appendChild(membersCard());
       }
       // Moved below the Today/Puzzle content (and "Look back at past days" on
       // the Today tab specifically) per feedback — used to sit right under
@@ -3149,7 +3239,7 @@ const RAW = String.raw`<!doctype html>
   // and Local Feel, and your partner's slot reads "Pending".
   function isConfirmedKey(key) {
     var p = state.people && state.people[key];
-    return !!(p && p.confirmed);
+    return !!(p && p.confirmed && !p.leftDay);
   }
   function soloMode() {
     return !!(ROOM && viewerKey && state.people && state.people[viewerKey] && !isConfirmedKey(otherKeyOf(viewerKey)));
@@ -4600,6 +4690,11 @@ const RAW = String.raw`<!doctype html>
     row.appendChild(privacyLink);
     var termsLink = h("a", { class: "switch-link", href: "/terms", text: t("Terms") });
     row.appendChild(termsLink);
+    if (viewerKey && SLOT_KEYS.filter(activeKey).length > 1) {
+      var leaveLink = h("button", { class: "switch-link", type: "button", text: t("Leave this room") });
+      leaveLink.addEventListener("click", leaveRoom);
+      row.appendChild(leaveLink);
+    }
     var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
     deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
     row.appendChild(deleteLink);

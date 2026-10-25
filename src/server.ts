@@ -429,6 +429,10 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 4000);
+      {
+        const lp = (await loadState(roomId)).people?.[who];
+        if (lp?.leftDay && date >= lp.leftDay) return json({ error: "left" }, { status: 403 });
+      }
       const state = await saveState(roomId, (s) => {
         if (!s.answers[date]) s.answers[date] = {};
         const prev = s.answers[date][who];
@@ -533,6 +537,31 @@ Bun.serve({
     // Report objectionable content from your partner (photo, answer,
     // comment, puzzle, …). Logged for the app owner — visible in the server
     // logs and stored (not sent to browsers) on the room.
+    // Leave the room: the person stops being asked new questions from today
+    // on, but everything they already wrote stays in the room's history.
+    // Their profile (name, colour) is kept so old answers still show who
+    // wrote them; their slot is never handed to someone else.
+    if (req.method === "POST" && restPath === "/api/leave") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      const me = cur.people?.[who];
+      if (!me || !me.confirmed || me.leftDay) return json({ error: "not_member" }, { status: 400 });
+      const active = SLOTS.filter((k) => cur.people?.[k]?.confirmed && !cur.people![k]!.leftDay);
+      if (active.length <= 1) return json({ error: "last_person" }, { status: 409 });
+      const hash = me.emailHash;
+      const state = await saveState(roomId, (s) => {
+        const p = s.people![who]!;
+        p.leftDay = todayKeyFor(s);
+        delete p.emailHash;
+        if (s.pushSubs) delete s.pushSubs[who];
+      });
+      if (hash) removeFromEmailIndex(hash, roomId, who).catch(() => {});
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/report") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
@@ -572,6 +601,10 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 300);
+      {
+        const lp = (await loadState(roomId)).people?.[who];
+        if (lp?.leftDay && date >= lp.leftDay) return json({ error: "left" }, { status: 403 });
+      }
       const state = await saveState(roomId, (s) => {
         if (!s.comments[date]) s.comments[date] = [];
         s.comments[date].push({ who, text: trimmed, at: new Date().toISOString() });
@@ -897,7 +930,7 @@ Bun.serve({
         return json({ error: "rate_limited" }, { status: 429 });
       }
       const cur = await loadState(roomId);
-      if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) {
+      if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed || cur.people[who]!.leftDay) {
         return json({ error: "not_confirmed" }, { status: 403 });
       }
       // Which slot this invite is for. A re-invite names its slot (to refresh
@@ -911,11 +944,11 @@ Bun.serve({
       if (wanted && wanted !== who && !taken(wanted) && cur.pendingInvite?.[wanted]) other = wanted;
       if (!other) {
         const first = who === "mark" ? "nikita" : who === "nikita" ? "mark" : null;
-        if (first && !taken(first)) other = first;
+        if (first && !taken(first) && !cur.people?.[first]?.leftDay) other = first;
       }
       if (!other) {
         if (headcount >= MAX_PEOPLE) return json({ error: "room_full" }, { status: 409 });
-        const free = SLOTS.find((k) => k !== who && !taken(k) && !cur.pendingInvite?.[k] && (k !== "mark" && k !== "nikita" || !cur.people?.[k]));
+        const free = SLOTS.find((k) => k !== who && !taken(k) && !cur.pendingInvite?.[k] && !cur.people?.[k]?.leftDay && (k !== "mark" && k !== "nikita" || !cur.people?.[k]));
         if (!free) return json({ error: "room_full" }, { status: 409 });
         other = free;
       }

@@ -648,9 +648,10 @@ const RAW = String.raw`<!doctype html>
     return langCodeFor(otherKeyOf(authorKey));
   }
   function questionTargetLang() {
-    var mLang = langCodeFor("mark"), nLang = langCodeFor("nikita");
-    if (mLang !== "en") return mLang;
-    if (nLang !== "en") return nLang;
+    for (var qi = 0; qi < SLOT_KEYS.length; qi++) {
+      var ql = langCodeFor(SLOT_KEYS[qi]);
+      if (ql !== "en") return ql;
+    }
     return null;
   }
 
@@ -1812,9 +1813,10 @@ const RAW = String.raw`<!doctype html>
       var mine = langCodeFor(viewerKey);
       if (mine !== "en") return mine;
     }
-    var mLang = langCodeFor("mark"), nLang = langCodeFor("nikita");
-    if (mLang !== "en") return mLang;
-    if (nLang !== "en") return nLang;
+    for (var oi = 0; oi < SLOT_KEYS.length; oi++) {
+      var ol = langCodeFor(SLOT_KEYS[oi]);
+      if (ol !== "en") return ol;
+    }
     return null;
   }
   function t(text) {
@@ -2247,7 +2249,7 @@ const RAW = String.raw`<!doctype html>
     var isSetter = viewerKey === state.puzzleSetBy;
     var wrap = h("div", { class: "puzzle-guess" });
     if (isSetter) {
-      var otherName = personName(otherKeyOf(viewerKey));
+      var otherName = namesList(SLOT_KEYS.filter(function (k) { return k !== viewerKey && activeKey(k); })) || personName(otherKeyOf(viewerKey));
       if (state.puzzleQuestion) {
         wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
       }
@@ -3531,10 +3533,19 @@ const RAW = String.raw`<!doctype html>
   function header() {
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
     var solo = soloMode();
-    var markClock = solo && !isConfirmedKey("mark") ? pendingClockBlock("mark") : clockBlock("mark");
-    var nikitaClock = solo && !isConfirmedKey("nikita") ? pendingClockBlock("nikita") : clockBlock("nikita");
-    var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
-    var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
+    // One clock per person in the room (up to 5), plus a pending stand-in for
+    // anyone invited who hasn't joined. Always at least two, as before.
+    var clockKeys = roomKeys();
+    SLOT_KEYS.forEach(function (k) {
+      if (clockKeys.indexOf(k) < 0 && state.pendingInvite && state.pendingInvite[k] && !(state.people && state.people[k])) clockKeys.push(k);
+    });
+    if (clockKeys.length < 2) { var ok = otherKeyOf(viewerKey); if (clockKeys.indexOf(ok) < 0) clockKeys.push(ok); }
+    var clockKids = [];
+    clockKeys.forEach(function (k, i) {
+      if (i > 0) clockKids.push(h("div", { class: "clock-divider", html: PLANE_SVG }));
+      clockKids.push(solo && !isConfirmedKey(k) ? pendingClockBlock(k) : clockBlock(k));
+    });
+    var clocks = h("div", { class: "clocks" }, clockKids);
     var code = ROOM || "q7mvx3ke";
     var roomLine = h("div", { class: "room-code", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
     roomLine.addEventListener("click", function () {

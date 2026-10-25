@@ -3,7 +3,7 @@
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
 import { startStatsSchedule } from "./stats";
-import { isPerson, MAX_PEOPLE, SLOTS, type PersonKey } from "./types";
+import { isPerson, MAX_PEOPLE, SLOTS, type PersonKey, type State } from "./types";
 import {
   loadState,
   saveState,
@@ -60,6 +60,12 @@ async function roomsCreatedToday(): Promise<number> {
   return regToday.n;
 }
 
+
+// Whose weather / local story / charts the feeds cover: the two original
+// slots always (as before), plus any extra person who has joined.
+function feedKeys(state: State): PersonKey[] {
+  return SLOTS.filter((k) => k === "mark" || k === "nikita" || !!state.people?.[k]);
+}
 
 const PORT = Number(Bun.env.PORT) || 3000;
 
@@ -655,11 +661,11 @@ Bun.serve({
     if (req.method === "GET" && restPath === "/api/weather") {
       const state = await loadState(roomId);
       const today = todayKeyFor(state);
-      const [markWeather, nikitaWeather] = await Promise.all([
-        currentWeather(effectiveLocation(state.people?.mark, today)),
-        currentWeather(effectiveLocation(state.people?.nikita, today)),
-      ]);
-      return json({ weather: { mark: markWeather, nikita: nikitaWeather } });
+      const keys = feedKeys(state);
+      const vals = await Promise.all(keys.map((k) => currentWeather(effectiveLocation(state.people?.[k], today))));
+      const weather: Record<string, any> = { mark: null, nikita: null };
+      keys.forEach((k, i) => { weather[k] = vals[i]; });
+      return json({ weather });
     }
 
     // SANDBOX EXPERIMENT: top local news story (biased toward genuinely
@@ -671,11 +677,11 @@ Bun.serve({
     if (req.method === "GET" && restPath === "/api/news") {
       const state = await loadState(roomId);
       const today = todayKeyFor(state);
-      const [markNews, nikitaNews] = await Promise.all([
-        topLocalStory(effectiveLocation(state.people?.mark, today)),
-        topLocalStory(effectiveLocation(state.people?.nikita, today)),
-      ]);
-      return json({ news: { mark: markNews, nikita: nikitaNews } });
+      const keys = feedKeys(state);
+      const vals = await Promise.all(keys.map((k) => topLocalStory(effectiveLocation(state.people?.[k], today))));
+      const news: Record<string, any> = { mark: null, nikita: null };
+      keys.forEach((k, i) => { news[k] = vals[i]; });
+      return json({ news });
     }
 
     // Top songs chart (see music.ts) at each person's effective location —
@@ -686,22 +692,22 @@ Bun.serve({
     if (req.method === "GET" && restPath === "/api/music") {
       const state = await loadState(roomId);
       const today = todayKeyFor(state);
-      const [markMusic, nikitaMusic] = await Promise.all([
-        topSongs(effectiveLocation(state.people?.mark, today), 5),
-        topSongs(effectiveLocation(state.people?.nikita, today), 5),
-      ]);
-      return json({ music: { mark: markMusic, nikita: nikitaMusic } });
+      const keys = feedKeys(state);
+      const vals = await Promise.all(keys.map((k) => topSongs(effectiveLocation(state.people?.[k], today), 5)));
+      const music: Record<string, any> = { mark: null, nikita: null };
+      keys.forEach((k, i) => { music[k] = vals[i]; });
+      return json({ music });
     }
 
     // Top movies chart (see movies.ts) — same shape as /api/music above.
     if (req.method === "GET" && restPath === "/api/movies") {
       const state = await loadState(roomId);
       const today = todayKeyFor(state);
-      const [markMovies, nikitaMovies] = await Promise.all([
-        topMovies(effectiveLocation(state.people?.mark, today), 5),
-        topMovies(effectiveLocation(state.people?.nikita, today), 5),
-      ]);
-      return json({ movies: { mark: markMovies, nikita: nikitaMovies } });
+      const keys = feedKeys(state);
+      const vals = await Promise.all(keys.map((k) => topMovies(effectiveLocation(state.people?.[k], today), 5)));
+      const movies: Record<string, any> = { mark: null, nikita: null };
+      keys.forEach((k, i) => { movies[k] = vals[i]; });
+      return json({ movies });
     }
 
     // Sets or clears a traveling override of where THIS person is shown as

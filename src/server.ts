@@ -3,7 +3,7 @@
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
 import { startStatsSchedule } from "./stats";
-import { isPerson, type PersonKey } from "./types";
+import { isPerson, MAX_PEOPLE, SLOTS, type PersonKey } from "./types";
 import {
   loadState,
   saveState,
@@ -30,7 +30,7 @@ import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, requiredSlots, partnerOf, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
@@ -87,7 +87,7 @@ Bun.serve({
       const [, sRoom, sToken] = shortInvite;
       const sState = await loadState(sRoom);
       let sWho = "";
-      for (const k of ["mark", "nikita"] as const) {
+      for (const k of SLOTS) {
         if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken) sWho = k;
       }
       const dest = "/r/" + sRoom + "/" + (sWho ? "?invite=" + sWho + "&token=" + sToken : "");
@@ -271,7 +271,7 @@ Bun.serve({
       let changed = 0;
       for (const id of await listRoomIds()) {
         const st = await loadState(id);
-        for (const k of ["mark", "nikita"] as PersonKey[]) {
+        for (const k of SLOTS) {
           const p: any = st.people?.[k];
           if (p && String(p.name || "").trim() === nm && String(p.location || "").trim().toLowerCase() === from) {
             await saveState(id, (s) => { const q: any = s.people?.[k]; if (q) { q.location = to; if (tz) q.tz = tz; } });
@@ -297,9 +297,9 @@ Bun.serve({
           // "Still waiting" nudge: an invite unanswered for 2+ days, at most
           // once every 3 days, pushed to whoever sent it.
           const DAY_MS = 24 * 60 * 60 * 1000;
-          for (const other of ["mark", "nikita"] as PersonKey[]) {
+          for (const other of SLOTS) {
             const inv = state.pendingInvite && state.pendingInvite[other];
-            const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
+            const inviterKey: PersonKey = (inv && inv.by) || partnerOf(state.people, other);
             const inviterSub = state.pushSubs[inviterKey];
             if (!inv || !inviterSub) continue;
             if (state.people && state.people[other] && state.people[other]!.confirmed) continue;
@@ -321,7 +321,7 @@ Bun.serve({
           if (state.pushLastMorningKey === today) continue;
           const count = unansweredCount(state, today);
           if (count > 0) {
-            for (const who of ["mark", "nikita"] as PersonKey[]) {
+            for (const who of requiredSlots(state, today)) {
               const a = state.answers[today];
               const answered = !!(a && a[who] && a[who]!.text);
               const sub = state.pushSubs[who];
@@ -371,7 +371,7 @@ Bun.serve({
       let state = await loadState(roomId);
       // Existing users: a room with anyone located in (or traveling to) a blocked country is closed.
       try {
-        for (const k of ["mark", "nikita"] as PersonKey[]) {
+        for (const k of SLOTS) {
           const p: any = state.people?.[k];
           if (!p) continue;
           if (await isBlockedLocation(String(p.location || "")) || (p.travelLocation && await isBlockedLocation(String(p.travelLocation)))) {
@@ -383,7 +383,7 @@ Bun.serve({
       // lookup failed at registration) would otherwise show UTC clocks.
       // Resolve it now, at most once every 10 minutes per room.
       try {
-        const missing = (["mark", "nikita"] as PersonKey[]).filter((k) => state.people?.[k]?.location && !state.people?.[k]?.tz);
+        const missing = SLOTS.filter((k) => state.people?.[k]?.location && !state.people?.[k]?.tz);
         const last = tzBackfillAt.get(roomId) || 0;
         if (missing.length && Date.now() - last > 10 * 60 * 1000) {
           tzBackfillAt.set(roomId, Date.now());
@@ -448,7 +448,7 @@ Bun.serve({
         const count = unansweredCount(state, date);
         if (count > 0) {
           const answererName = state.people?.[who]?.name || "Your partner";
-          for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
+          for (const other of requiredSlots(state, date).filter((k) => k !== who)) {
             const a = state.answers[date];
             const answered = !!(a && a[other] && a[other]!.text);
             const sub = state.pushSubs[other];
@@ -507,7 +507,7 @@ Bun.serve({
           // afterward doesn't pile up repeat notifications. Web
           // subscriptions already sync their own badge client-side, so this
           // only targets APNs.
-          for (const person of ["mark", "nikita"] as PersonKey[]) {
+          for (const person of requiredSlots(state, date)) {
             const sub = state.pushSubs[person];
             if (!sub || sub.kind !== "apns") continue;
             sendPush(sub, {
@@ -538,7 +538,7 @@ Bun.serve({
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const { who, kind, note } = body || {};
       if (!isPerson(who) || typeof kind !== "string") return json({ error: "invalid" }, { status: 400 });
-      const about: PersonKey = who === "mark" ? "nikita" : "mark";
+      const about: PersonKey = isPerson(body?.about) && body.about !== who ? body.about : partnerOf((await loadState(roomId)).people, who);
       const cleanKind = kind.slice(0, 30);
       const cleanNote = typeof note === "string" ? note.slice(0, 300) : undefined;
       const state = await saveState(roomId, (s) => {
@@ -900,17 +900,32 @@ Bun.serve({
       if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) {
         return json({ error: "not_confirmed" }, { status: 403 });
       }
-      const other: PersonKey = who === "mark" ? "nikita" : "mark";
-      if (cur.people[other] && cur.people[other]!.confirmed) {
-        return json({ error: "already_registered" }, { status: 409 });
+      // Which slot this invite is for. A re-invite names its slot (to refresh
+      // a still-pending link); otherwise the other original person comes
+      // first, as always, and once both of those are in, the next free extra
+      // slot is used. A room holds at most MAX_PEOPLE people.
+      const wanted: PersonKey | null = isPerson(body?.slot) ? (body.slot as PersonKey) : null;
+      const taken = (k: PersonKey) => !!(cur.people && cur.people[k] && cur.people[k]!.confirmed && !cur.people[k]!.leftDay);
+      const headcount = SLOTS.filter(taken).length;
+      let other: PersonKey | null = null;
+      if (wanted && wanted !== who && !taken(wanted) && cur.pendingInvite?.[wanted]) other = wanted;
+      if (!other) {
+        const first = who === "mark" ? "nikita" : who === "nikita" ? "mark" : null;
+        if (first && !taken(first)) other = first;
+      }
+      if (!other) {
+        if (headcount >= MAX_PEOPLE) return json({ error: "room_full" }, { status: 409 });
+        const free = SLOTS.find((k) => k !== who && !taken(k) && !cur.pendingInvite?.[k] && (k !== "mark" && k !== "nikita" || !cur.people?.[k]));
+        if (!free) return json({ error: "room_full" }, { status: 409 });
+        other = free;
       }
       // 12 hex chars keeps the shareable link short; invites are rate-limited.
       const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
-        s.pendingInvite[other] = handle
-          ? { token, at: new Date().toISOString(), instagram: handle }
-          : { token, at: new Date().toISOString() };
+        s.pendingInvite[other!] = handle
+          ? { token, at: new Date().toISOString(), instagram: handle, by: who }
+          : { token, at: new Date().toISOString(), by: who };
       });
       const inviteUrl = roomId
         ? publicOrigin + "/j/" + roomId + "/" + token
@@ -947,7 +962,7 @@ Bun.serve({
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
-      (["mark", "nikita"] as PersonKey[]).forEach((k) => {
+      SLOTS.forEach((k) => {
         if (cur.pendingInvite && cur.pendingInvite[k] && cur.pendingInvite[k]!.token === token) who = k;
       });
       if (!who) return json({ error: "invalid_token" }, { status: 400 });
@@ -956,7 +971,7 @@ Bun.serve({
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
         const invitedHandle = s.pendingInvite && s.pendingInvite[who!] && s.pendingInvite[who!]!.instagram;
-        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}) };
+        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}), ...(who === "mark" || who === "nikita" ? {} : { joinedDay: todayKeyFor(s) }) };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
       // Let the person who sent the invite know their partner is in —
@@ -964,7 +979,7 @@ Bun.serve({
       // the 6s poll happens to catch it. Push only (not email): we never
       // keep a raw email on file past sending the original invite, so
       // there's nothing to email this back to.
-      const inviter: PersonKey = who === "mark" ? "nikita" : "mark";
+      const inviter: PersonKey = (cur.pendingInvite as any)?.[who as any]?.by || partnerOf(state.people, who as any);
       const inviterSub = state.pushSubs && state.pushSubs[inviter];
       if (inviterSub) {
         const today = todayKeyFor(state);

@@ -1,6 +1,11 @@
 // Nearune — shared types.
 
-export type PersonKey = "mark" | "nikita";
+export type PersonKey = "mark" | "nikita" | "p3" | "p4" | "p5";
+// A room holds up to MAX_PEOPLE people. "mark" and "nikita" are the two
+// original slots (every room has them, registered or still waiting); p3-p5
+// are extra slots that exist only once someone has been invited into them.
+export const SLOTS: PersonKey[] = ["mark", "nikita", "p3", "p4", "p5"];
+export const MAX_PEOPLE = 5;
 // Internal slot names only — every room has two of these slots, and each
 // room's registration flow assigns the real display name/location/language
 // per slot. They don't imply the room's actual people are named Mark/Nikita.
@@ -42,6 +47,12 @@ export type Comment = { who: PersonKey; text: string; at: string };
 //   travelFrom.
 export type PersonProfile = {
   name: string;
+  // Room day keys (YYYY-MM-DD, see todayKeyFor) bounding the days this person
+  // took part in: they are only expected to answer days on/after joinedDay and
+  // before leftDay. Absent on the original two people (they count for every
+  // day) and for anyone still in the room. Past answers always stay.
+  joinedDay?: string;
+  leftDay?: string;
   location: string;
   language: string;
   tz?: string;
@@ -108,7 +119,7 @@ export type State = {
   comments: Record<string, Comment[]>;
   people?: Partial<Record<PersonKey, PersonProfile>>;
   pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string }>>;
-  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string }>>;
+  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string; by?: PersonKey }>>;
   // Server-computed on every response (never persisted, see forClient) —
   // the Instagram handle an invite was addressed to, if it went to a handle
   // rather than an email.
@@ -156,5 +167,5 @@ export type State = {
 };
 
 export function isPerson(v: unknown): v is PersonKey {
-  return v === "mark" || v === "nikita";
+  return typeof v === "string" && (SLOTS as string[]).includes(v);
 }

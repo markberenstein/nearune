@@ -1,4 +1,6 @@
 import { topLocalStory } from "./localnews";
+import { SLOTS } from "./types";
+import { partnerOf } from "./util";
 // Admin snapshot: room counts, city-level user locations (no names), and
 // ElevenLabs usage. Logged as one "[stats] {json}" line at 12:00 and 00:00
 // Pacific (and shortly after boot); a scheduled task reads the latest line
@@ -55,25 +57,25 @@ export async function computeStats() {
     try { st = await loadState(id); } catch { continue; }
     rooms++;
     try { if (Object.values(st?.answers || {}).some((day: any) => day && (day.mark || day.nikita))) answered++; } catch {}
-    const ppl = ["mark", "nikita"].map((k) => st?.people?.[k]).filter(Boolean);
+    const ppl = SLOTS.map((k) => st?.people?.[k]).filter(Boolean);
     people += ppl.length;
-    if (ppl.length === 2 && ppl.every((p: any) => p.confirmed)) active++;
-    if (ppl.length === 2 && ppl.every((p: any) => p.confirmed)) for (const p of ppl) { const l = String((p as any).location || "").trim(); if (l) newsLocs.add(l); }
+    if (ppl.length >= 2 && ppl.every((p: any) => p.confirmed)) active++;
+    if (ppl.length >= 2 && ppl.every((p: any) => p.confirmed)) for (const p of ppl) { const l = String((p as any).location || "").trim(); if (l) newsLocs.add(l); }
     try {
       const days = Object.entries(st?.answers || {}).filter(([, day]: any) => day && (day.mark || day.nikita)).map(([d]) => d).sort();
       roomList.push({
         n: rooms,
         created: st?.createdAt || null,
-        status: ppl.length === 2 && ppl.every((p: any) => p.confirmed) ? "active" : ppl.length < 2 ? "waiting for partner" : "partner not confirmed",
+        status: ppl.length >= 2 && ppl.every((p: any) => p.confirmed) ? "active" : ppl.length < 2 ? "waiting for partner" : "partner not confirmed",
         answeredDays: days.length,
         lastAnswer: days.length ? days[days.length - 1] : null,
         people: ppl.map((p: any) => ({ name: String(p.name || "(no name)").slice(0, 40), location: String(p.location || "").slice(0, 60), confirmed: !!p.confirmed })),
       });
     } catch {}
-    for (const k of ["mark", "nikita"]) {
+    for (const k of SLOTS) {
       const p = st?.people?.[k]; if (!p) continue;
       if (p.voiceId) voiceIds.push({ room: rooms, who: String(p.name || k).slice(0, 30), id: String(p.voiceId) });
-      const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
+      const o = st?.people?.[partnerOf(st?.people, k)];
       const loc = String(p.location || "").trim();
       if (!loc) continue;
       if (!coordCache.has(loc)) coordCache.set(loc, await resolveCoords(loc).catch(() => null));

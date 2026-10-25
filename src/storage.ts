@@ -8,7 +8,7 @@
 
 import { S3Client } from "bun";
 import { readdirSync } from "node:fs";
-import type { State, PersonKey } from "./types";
+import { SLOTS, type State, type PersonKey } from "./types";
 import { todayKeyFor } from "./util";
 
 const MAX_HISTORY = 400;
@@ -191,7 +191,7 @@ export async function deleteRoom(roomId: string): Promise<void> {
       else await Bun.file(localPuzzlePath(roomId, state.puzzleCurrentId)).delete();
     } catch {}
   }
-  for (const who of ["mark", "nikita"] as PersonKey[]) {
+  for (const who of SLOTS) {
     try {
       if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
       else await Bun.file(localPhotoPath(roomId, who)).delete();

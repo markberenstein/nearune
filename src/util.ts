@@ -1,6 +1,6 @@
 // Nearune — small shared helpers.
 
-import type { State, PersonKey, PersonProfile } from "./types";
+import { SLOTS, type State, type PersonKey, type PersonProfile } from "./types";
 
 export function json(data: unknown, init?: ResponseInit): Response {
   return Response.json(data, init);
@@ -139,7 +139,7 @@ function tzOffsetMinutes(tz: string, at: Date): number | null {
 
 export function rolloverTzOf(people: State["people"] | undefined, at: Date = new Date()): string {
   let best: string | null = null, bestOff = -Infinity;
-  for (const k of ["mark", "nikita"] as PersonKey[]) {
+  for (const k of SLOTS) {
     const tz = people?.[k]?.tz;
     if (!tz) continue;
     const off = tzOffsetMinutes(tz, at);
@@ -227,9 +227,36 @@ export function isTraveling(person: PersonProfile | undefined, todayKey: string)
   return travelActive(person, todayKey);
 }
 
+// Who is expected to answer the question of a given day: the two original
+// people always (as before), plus any extra person who had joined by then and
+// had not yet left. A day that was complete stays complete when someone joins
+// later, and a person who left is no longer expected from their leave day on.
+export function requiredSlots(state: State, key: string): PersonKey[] {
+  return SLOTS.filter((k) => {
+    const p = state.people?.[k];
+    if (k === "mark" || k === "nikita") return !(p?.leftDay && key >= p.leftDay);
+    if (!p) return false;
+    if (p.joinedDay && key < p.joinedDay) return false;
+    if (p.leftDay && key >= p.leftDay) return false;
+    return true;
+  });
+}
+
+// The person a given person is paired with where the app still shows one
+// "partner" (weather, clock, voice, push wording): the other original person
+// when there are only two, otherwise the first other registered person.
+export function partnerOf(people: State["people"] | undefined, who: PersonKey): PersonKey {
+  const legacy: PersonKey = who === "mark" ? "nikita" : "mark";
+  if (who === "mark" || who === "nikita") return legacy;
+  for (const k of SLOTS) if (k !== who && people?.[k]) return k;
+  return legacy;
+}
+
 export function isDayComplete(state: State, key: string): boolean {
   const a = state.answers[key];
-  return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text);
+  if (!a) return false;
+  const need = requiredSlots(state, key);
+  return need.length > 0 && need.every((k) => !!(a[k] && a[k]!.text));
 }
 
 // How many of the two people (0/1/2) have NOT yet answered the given day's
@@ -239,7 +266,7 @@ export function isDayComplete(state: State, key: string): boolean {
 export function unansweredCount(state: State, key: string): number {
   const a = state.answers[key];
   let n = 0;
-  for (const who of ["mark", "nikita"] as PersonKey[]) {
+  for (const who of requiredSlots(state, key)) {
     if (!a || !a[who] || !a[who]!.text) n++;
   }
   return n;

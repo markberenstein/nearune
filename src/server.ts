@@ -1251,6 +1251,18 @@ Bun.serve({
       }
     }
 
+    // Lets whoever recorded a voice choose which speech model voices it.
+    if (req.method === "POST" && restPath === "/api/voice-model") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, model } = body || {};
+      if (!isPerson(who) || (model !== "v4" && model !== "v2")) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who]) s.people[who]!.voiceModel = model;
+      });
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/speak") {
       // Each call is a real text-to-speech request against a paid API — cap
       // it well above normal use (someone tapping 🔊 on every line of a long
@@ -1266,7 +1278,8 @@ Bun.serve({
       const current = await loadState(roomId);
       const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
       if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
-      const audio = await synthesizeSpeech(text, voiceId);
+      const vm = body.model === "v2" || body.model === "v4" ? body.model : current.people![who]!.voiceModel;
+      const audio = await synthesizeSpeech(text, voiceId, vm === "v2" || vm === "v4" ? vm : undefined);
       if (!audio) return json({ error: "synth_failed" }, { status: 502 });
       return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
     }

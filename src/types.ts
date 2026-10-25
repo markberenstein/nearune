@@ -65,6 +65,10 @@ export type PersonProfile = {
   // recovery either).
   instagram?: string;
   voiceId?: string;
+  // Which speech model voices this person: "v4" (newest, the default) or "v2"
+  // (the classic multilingual model). Chosen by the person who recorded the
+  // voice. Not a secret, so it goes to the client as-is.
+  voiceModel?: "v4" | "v2";
   hasVoice?: boolean;
   // ISO timestamp of the last photo this person shared (see storage.ts's
   // photoKey) — absence means they haven't shared one. Doubles as a

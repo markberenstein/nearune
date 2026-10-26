@@ -30,7 +30,7 @@ import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, requiredSlots, partnerOf, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, requiredSlots, partnerOf, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
@@ -1065,7 +1065,11 @@ Bun.serve({
         parsed.push({ id: crypto.randomUUID(), answer: trimmedAnswer, question: trimmedQuestion, bytes });
       }
       const current = await loadState(roomId);
-      if (current.puzzleCurrentId || (current.puzzleQueue && current.puzzleQueue.length > 0)) {
+      // A new batch can be loaded once the current picture is finished (solved
+      // or every piece unlocked) and nothing is still queued behind it.
+      const curRevealed = !!current.puzzleCurrentId && (!!current.puzzleSolved || puzzleUnlockedCount(current) >= PUZZLE_TOTAL);
+      const curQueued = !!(current.puzzleQueue && current.puzzleQueue.length > 0);
+      if (curQueued || (current.puzzleCurrentId && !curRevealed)) {
         return json({ error: "in_progress" }, { status: 409 });
       }
       const verdicts = await Promise.all(parsed.map((p) => moderateContent({ image: p.bytes, text: p.question + " " + p.answer })));
@@ -1354,7 +1358,7 @@ Bun.serve({
 
       let rejected = false;
       const state = await saveState(roomId, (s) => {
-        if (!s.puzzleAnswer || s.puzzleSolved) return;
+        if (!s.puzzleAnswer || s.puzzleSolved || puzzleUnlockedCount(s) >= PUZZLE_TOTAL) return;
         if (s.puzzleSetBy && who === s.puzzleSetBy) { rejected = true; return; }
         if (s.puzzleLastGuessDate === today) return;
         const finalCorrect = s.puzzleAnswer === peekedAnswer ? correct : guessMatches(trimmed, s.puzzleAnswer);

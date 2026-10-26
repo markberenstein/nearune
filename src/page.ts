@@ -2316,18 +2316,25 @@ const RAW = String.raw`<!doctype html>
       }
     } else {
       card.appendChild(puzzleZoomableGrid(puzzleImgSrc()));
-      if (state.puzzleSolved) {
-        card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
+      var fullyRevealed = !!state.puzzleSolved || unlocked >= PUZZLE_TOTAL;
+      if (fullyRevealed) {
+        card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate(state.puzzleSolved ? "Solved — it was “{answer}.” ✧" : "Fully revealed — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
           card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
         }
-        var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? t("Next picture →") : t("Finish batch") });
-        nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
-        card.appendChild(nextBtn);
+        if (puzzleQueueRemaining() > 0) {
+          var nextBtn = h("button", { class: "puzzle-upload-btn", text: t("Next picture →") });
+          nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
+          card.appendChild(nextBtn);
+        } else {
+          // Nothing queued: load a fresh batch right here (replaces this picture).
+          card.appendChild(h("p", { class: "puzzle-guess-note", text: t("That's the last picture — load new ones to keep going.") }));
+          card.appendChild(puzzleBatchForm());
+        }
       } else {
         card.appendChild(puzzleGuessBlock());
+        card.appendChild(puzzleLockedNote());
       }
-      card.appendChild(puzzleLockedNote());
     }
     return card;
   }

@@ -383,7 +383,8 @@ export function forClient(state: State): State {
     }
     (withFlags as any).people = strippedPeople;
   }
-  if (withFlags.puzzleSolved) return withFlags;
+  // The answer is revealed once the puzzle is solved OR every piece is unlocked.
+  if (withFlags.puzzleSolved || puzzleUnlocked >= PUZZLE_TOTAL) return withFlags;
   const { puzzleAnswer, ...rest } = withFlags;
   return rest as State;
 }

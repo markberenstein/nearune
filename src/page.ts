@@ -3173,7 +3173,7 @@ const RAW = String.raw`<!doctype html>
     var line = h("p", { class: "music-line" });
     line.appendChild(document.createTextNode(tTemplate("🎵 Popular near {name}: ", { name: shownName })));
     line.appendChild(
-      h("a", { class: "music-link", href: "https://www.youtube.com/results?search_query=" + encodeURIComponent((top.artist ? top.artist + " - " : "") + top.title + " official video"), target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
+      h("a", { class: "music-link", href: "https://www.youtube.com/results?search_query=" + encodeURIComponent((top.artist ? top.artist + " - " : "") + top.title + " official video") + "&sp=EgIQAQ%3D%3D", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
     );
     var playBtn = chartPlayButton(top.previewUrl, "Play " + top.title, "audio");
     if (playBtn) line.appendChild(document.createTextNode(" "));

@@ -2383,6 +2383,10 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
     return null;
   })();
+  // Set by the server from the APP_STORE_URL variable (empty when unset).
+  var APP_STORE_URL = "__APP_STORE_URL__";
+  var IN_NATIVE_APP = false;
+  try { IN_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
   var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Looks up the typed location and, unless the person has already picked
@@ -2566,6 +2570,16 @@ const RAW = String.raw`<!doctype html>
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
       h("p", { class: "question", text: t("Finish setting up your Nearune.") })
     ]);
+    // In a browser (not the app): lead with the app. Tapping the button also
+    // copies this invite link, so it can be pasted on the app's first screen.
+    if (!IN_NATIVE_APP && APP_STORE_URL && !/^__APP/.test(APP_STORE_URL)) {
+      var getApp = h("a", { class: "puzzle-upload-btn", href: APP_STORE_URL, style: "display:block;text-align:center;text-decoration:none;margin:4px 0 8px;", text: t("Get the Nearune app") });
+      getApp.addEventListener("click", function () {
+        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
+      });
+      card.appendChild(getApp);
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your invite link is copied when you tap this. After installing, open Nearune and paste it into the box on the first screen. Or just continue below in your browser.") }));
+    }
     var form = h("div", { class: "puzzle-setup" });
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
@@ -4764,7 +4778,7 @@ const RAW = String.raw`<!doctype html>
 </html>`;
 
 export function buildPageHtml(roomId: string, iconV: string): string {
-  return RAW.replace(/__ICON_V__/g, iconV).replace(/__ROOM__/g, roomId);
+  return RAW.replace(/__ICON_V__/g, iconV).replace(/__ROOM__/g, roomId).replace(/__APP_STORE_URL__/g, Bun.env.APP_STORE_URL || "");
 }
 
 // Web App Manifest — lets the app be added to the home screen and, on
@@ -4865,7 +4879,7 @@ export function buildNewRoomPage(): string {
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note" id="existing" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
-  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room link or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
+  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room or invite link, or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
   <p class="note" id="roomMsg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Lost your link? Email it to me</a></p>
@@ -4874,8 +4888,12 @@ export function buildNewRoomPage(): string {
 <script>
 document.getElementById("openRoom").addEventListener("click", function () {
   var v = (document.getElementById("roomLink").value || "").trim();
+  var inv = v.match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
+  if (inv) { location.href = "/j/" + inv[1].toLowerCase() + "/" + inv[2]; return; }
   var m = v.match(new RegExp("/r/([a-z0-9]{4,20})", "i")) || v.match(new RegExp("^([a-z0-9]{4,20})$", "i"));
   if (!m) { document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent."; return; }
+  var q = v.match(new RegExp("[?&]invite=(mark|nikita)&token=([a-z0-9-]{6,64})", "i"));
+  if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return; }
   location.href = "/r/" + m[1].toLowerCase() + "/";
 });
 document.getElementById("go").addEventListener("click", function () {

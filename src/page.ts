@@ -2675,7 +2675,7 @@ const RAW = String.raw`<!doctype html>
       if (sentTo) wait.insertBefore(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: sentTo }) }), wait.children[2]);
       if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var rowBtns = [];
-      var again = h("button", { class: "switch-link", text: t("Resend confirmation") });
+      var again = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: t("Resend confirmation") });
       again.addEventListener("click", function () {
         if (!registerDraft.email) registerDraft.email = sentTo;
         if (!registerDraft.name && mine.name) registerDraft.name = mine.name;
@@ -2683,7 +2683,7 @@ const RAW = String.raw`<!doctype html>
         showRegisterForm = true; renderApp();
       });
       rowBtns.push(again);
-      var wrongEmail = h("button", { class: "switch-link", text: t("Wrong email? Use a different one") });
+      var wrongEmail = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: t("Wrong email? Use a different one") });
       wrongEmail.addEventListener("click", function () {
         registerDraft.email = "";
         if (!registerDraft.name && mine.name) registerDraft.name = mine.name;
@@ -2768,6 +2768,7 @@ const RAW = String.raw`<!doctype html>
   function copyLinkButton(url, label, cls) {
     var labelText = label || t("Copy invite link");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
+    if (!cls) btn.style.cssText = "color: var(--ink); font-size: 0.9rem; padding: 6px;";
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
       var copyText = lastAppStoreUrl && url === lastInviteUrl ? "Join me on Nearune. Get the app: " + lastAppStoreUrl + "\nThen open this link: " + url + "\nNo iPhone app? Use it in your browser at nearune.ai" : url;
@@ -2835,14 +2836,14 @@ const RAW = String.raw`<!doctype html>
       // all that's needed. The regenerate button only appears when the link
       // is gone (e.g. after a reload), since that's the only way to get it back.
       if (!(pendingHandle && lastInviteUrl)) {
-        var again = h("button", { class: "switch-link", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
+        var again = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
         again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
         row.push(again);
       }
       if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
       // Escape hatch so nobody feels stuck on this waiting screen.
-      row.push(h("a", { class: "switch-link", href: "/new", text: t("Start over with a new room") }));
-      row.push(h("a", { class: "switch-link", href: "/new#existing", text: t("Open an existing room") }));
+      row.push(h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new", text: t("Start over with a new room") }));
+      row.push(h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new#existing", text: t("Open an existing room") }));
       if (row.length) card.appendChild(h("div", { class: "switch-row" }, row));
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));

@@ -2614,6 +2614,15 @@ const RAW = String.raw`<!doctype html>
   }
 
   var lastConfirmUrl = "";
+  // The address a confirmation was sent to. The server only keeps a one-way
+  // hash of it, so it is remembered on this device only, to show "Sent to ..."
+  // and to prefill the form when fixing a typo.
+  var lastConfirmEmail = "";
+  function confirmEmailKey() { return "nearuneConfirmEmail:" + ROOM + ":" + viewerKey; }
+  function sentToEmail() {
+    if (lastConfirmEmail) return lastConfirmEmail;
+    try { return localStorage.getItem(confirmEmailKey()) || ""; } catch (e) { return ""; }
+  }
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
@@ -2642,6 +2651,8 @@ const RAW = String.raw`<!doctype html>
           renderApp(); return;
         }
         lastConfirmUrl = res.data._confirmUrl || "";
+        lastConfirmEmail = email;
+        try { localStorage.setItem(confirmEmailKey(), email); } catch (e) {}
         state = res.data;
         showRegisterForm = false;
         if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
@@ -2660,11 +2671,26 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "question", text: t("Check your email for a confirmation link.") }),
         h("p", { class: "puzzle-guess-note", text: t("Don't see it? Check your spam folder.") })
       ]);
+      var sentTo = sentToEmail();
+      if (sentTo) wait.insertBefore(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: sentTo }) }), wait.children[2]);
       if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var rowBtns = [];
       var again = h("button", { class: "switch-link", text: t("Resend confirmation") });
-      again.addEventListener("click", function () { showRegisterForm = true; renderApp(); });
+      again.addEventListener("click", function () {
+        if (!registerDraft.email) registerDraft.email = sentTo;
+        if (!registerDraft.name && mine.name) registerDraft.name = mine.name;
+        if (!registerDraft.location && mine.location) registerDraft.location = mine.location;
+        showRegisterForm = true; renderApp();
+      });
       rowBtns.push(again);
+      var wrongEmail = h("button", { class: "switch-link", text: t("Wrong email? Use a different one") });
+      wrongEmail.addEventListener("click", function () {
+        registerDraft.email = "";
+        if (!registerDraft.name && mine.name) registerDraft.name = mine.name;
+        if (!registerDraft.location && mine.location) registerDraft.location = mine.location;
+        showRegisterForm = true; renderApp();
+      });
+      rowBtns.push(wrongEmail);
       // No email provider configured (sandbox) or the email just failed to
       // send — either way this link finishes the same confirmation an email
       // would have, without waiting on one.

@@ -2237,6 +2237,46 @@ const RAW = String.raw`<!doctype html>
   var nhieMyChoice = {};
   var nhieBusy = false;
   var nhieStarted = false;
+  // Never Have I Ever how-to clip: YouTube's own player, capped at 11 seconds.
+  // The embed "end" parameter is ignored by some iOS web views, so the
+  // player API watches the clock and pauses/rewinds at the cap as well.
+  var NHIE_CLIP_END = 11;
+  var nhieYT = { el: null, player: null, timer: null, loading: false };
+  function nhieLoadYT(cb) {
+    if (window.YT && window.YT.Player) { cb(); return; }
+    var prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = function () { if (typeof prev === "function") { try { prev(); } catch (e) {} } cb(); };
+    if (!nhieYT.loading) {
+      nhieYT.loading = true;
+      var sc = document.createElement("script");
+      sc.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(sc);
+    }
+  }
+  function nhieWatchClock() {
+    if (nhieYT.timer) return;
+    nhieYT.timer = setInterval(function () {
+      try {
+        var tm = nhieYT.player.getCurrentTime();
+        if (tm >= NHIE_CLIP_END) { nhieYT.player.pauseVideo(); nhieYT.player.seekTo(0, true); }
+      } catch (e) {}
+    }, 200);
+  }
+  function nhieStopClock() { if (nhieYT.timer) { clearInterval(nhieYT.timer); nhieYT.timer = null; } }
+  function nhieVideo() {
+    if (nhieYT.el) return nhieYT.el;
+    var ifr = h("iframe", { src: "https://www.youtube.com/embed/jqci-XEAbE0?start=0&end=" + NHIE_CLIP_END + "&rel=0&playsinline=1&modestbranding=1&enablejsapi=1&origin=" + encodeURIComponent(location.origin), title: "Never Have I Ever - the funny version", allow: "encrypted-media; picture-in-picture", allowfullscreen: "true", style: "width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000;" });
+    nhieYT.el = ifr;
+    setTimeout(function () {
+      nhieLoadYT(function () {
+        try {
+          nhieYT.player = new YT.Player(ifr, { events: { onStateChange: function (ev) { if (ev.data === 1) nhieWatchClock(); else nhieStopClock(); } } });
+        } catch (e) {}
+      });
+    }, 0);
+    return ifr;
+  }
+
   function nhieSection() {
     if (isBlocked()) return blockedNote();
     var n = state.nhie;
@@ -2325,7 +2365,7 @@ const RAW = String.raw`<!doctype html>
       ])
     ]);
     card.appendChild(howto);
-    card.appendChild(h("iframe", { src: "https://www.youtube.com/embed/jqci-XEAbE0?start=0&end=53&rel=0&playsinline=1&modestbranding=1", title: "Never Have I Ever - the funny version", loading: "lazy", allow: "encrypted-media; picture-in-picture", allowfullscreen: "true", style: "width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000;" }));
+    card.appendChild(nhieVideo());
     card.appendChild(h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: block; text-align: center; font-weight: 700; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") }));
     card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
     return card;

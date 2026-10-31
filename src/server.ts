@@ -31,6 +31,7 @@ import { topLocalStory } from "./localnews";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
 import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { APP_STORE_BADGE_B64 } from "./badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
@@ -927,7 +928,13 @@ Bun.serve({
         "<p>" + inviterName + " invited you to Nearune.</p>" +
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
           "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
-          (Bun.env.APP_STORE_URL ? "<p>Get the Nearune app: <a href=\"" + Bun.env.APP_STORE_URL + "\">Download on the App Store</a></p>" : "") +
+          (Bun.env.APP_STORE_URL
+            ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
+              "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
+              "<td style=\"vertical-align:middle\"><div style=\"font-size:15px;margin-bottom:8px\">Get the Nearune app</div>" +
+              "<a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a></td>" +
+              "</tr></table>"
+            : "") +
           "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
@@ -1390,6 +1397,12 @@ Bun.serve({
         await Bun.write("./local-icon-" + key + ".png", bytes);
       }
       return json({ ok: true });
+    }
+
+    if (req.method === "GET" && url.pathname === "/app-store-badge.png") {
+      return new Response(Buffer.from(APP_STORE_BADGE_B64, "base64"), {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
     }
 
     if (req.method === "GET" && (url.pathname === "/favicon.png" || url.pathname === "/favicon.ico" || url.pathname === "/apple-touch-icon.png")) {

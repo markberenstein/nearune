@@ -2814,6 +2814,9 @@ const RAW = String.raw`<!doctype html>
         row.push(again);
       }
       if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
+      // Escape hatch so nobody feels stuck on this waiting screen.
+      row.push(h("a", { class: "switch-link", href: "/new", text: t("Start over with a new room") }));
+      row.push(h("a", { class: "switch-link", href: "/new#existing", text: t("Open an existing room") }));
       if (row.length) card.appendChild(h("div", { class: "switch-row" }, row));
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
@@ -4820,7 +4823,7 @@ export function buildNewRoomPage(): string {
   <p class="note" style="margin:0 0 14px">Your room code is built from this name (for example oursky), so it's easy to remember. Leave it blank and we'll pick two friendly words for you.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
-  <p class="note" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
+  <p class="note" id="existing" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
   <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room link or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
   <p class="note" id="roomMsg"></p>

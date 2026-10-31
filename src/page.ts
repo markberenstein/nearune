@@ -2237,13 +2237,13 @@ const RAW = String.raw`<!doctype html>
   var nhieMyChoice = {};
   var nhieBusy = false;
   var nhieStarted = false;
-  // Never Have I Ever how-to clip: YouTube's own player, capped at 15 seconds.
+  // Never Have I Ever how-to clip: YouTube's own player, capped at 12 seconds.
   // The app re-renders (and wipes) its whole page every few seconds, which
   // would restart an inline video, so the player lives in a full-screen
   // overlay attached to the page body instead, outside what gets re-rendered.
   // The embed "end" setting is ignored by some iOS web views, so the player
   // API watches the clock and closes the overlay at the cap as well.
-  var NHIE_CLIP_END = 15;
+  var NHIE_CLIP_END = 12;
   var nhieYT = { player: null, timer: null, loading: false };
   function nhieLoadYT(cb) {
     if (window.YT && window.YT.Player) { cb(); return; }

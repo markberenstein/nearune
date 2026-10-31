@@ -195,6 +195,7 @@ const RAW = String.raw`<!doctype html>
      night, which made Hindi translations and eyebrows near-invisible. Use the
      normal soft ink on card surfaces. */
   body.weather-active .card .translate-inline,
+  body.weather-active .puzzle-card .translate-inline,
   body.weather-active .streak-card .translate-inline,
   body.weather-active .voice-card .translate-inline,
   body.weather-active .status-chip .translate-inline { color: var(--ink-soft); border-left-color: var(--line); }
@@ -377,6 +378,7 @@ const RAW = String.raw`<!doctype html>
   .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
   .tab-ico { font-size: 1.2rem; line-height: 1; }
+  .puzzle-card .translate-inline { color: #5a4a3f; }
   .nhie-phrase { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.35rem; line-height: 1.35; margin: 0; text-align: center; }
   .nhie-choices { display: flex; gap: 12px; }
   .nhie-choice { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 16px 10px; font: inherit; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -2267,6 +2269,7 @@ const RAW = String.raw`<!doctype html>
           if (nhieBusy) return;
           nhieBusy = true;
           nhieMyChoice[n.round] = choice;
+          try { localStorage.setItem("nearuneNhie:" + ROOM + ":" + viewerKey + ":" + n.round, choice); } catch (e) {}
           api("/api/nhie-vote", { who: viewerKey, choice: choice, round: n.round })
             .catch(function () { delete nhieMyChoice[n.round]; })
             .then(function () { nhieBusy = false; renderApp(); });
@@ -2276,7 +2279,10 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(h("div", { class: "nhie-choices" }, [neverBtn, haveBtn]));
         card.appendChild(h("p", { class: "nhie-note", text: t("Answers stay hidden until you both have answered.") }));
       } else {
-        card.appendChild(h("p", { class: "nhie-verdict", text: t("Answered! \u2705") }));
+        var mine = nhieMyChoice[n.round];
+        if (!mine) { try { mine = localStorage.getItem("nearuneNhie:" + ROOM + ":" + viewerKey + ":" + n.round) || ""; } catch (e) { mine = ""; } }
+        var mineIcon = mine === "have" ? "\uD83E\uDD43 " : mine ? "\uD83D\uDE01 " : "";
+        card.appendChild(h("p", { class: "nhie-verdict", text: mineIcon + t("Answered! \u2705") }));
         card.appendChild(h("p", { class: "nhie-note", text: tTemplate("Waiting for {name} to answer...", { name: other ? personName(other) : "your partner" }) }));
       }
     } else {

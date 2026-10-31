@@ -123,15 +123,18 @@ Bun.serve({
         return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
       }
       // Optional room name from the first partner ("Our Sky" -> oursky, or oursky47 if taken).
-      // Screened like any other user text; if screening is down the name is
-      // simply skipped and a random two-word code is used instead.
+      // Screened like any other user text; only an explicit block refuses it.
       const reqBody = await readJson(req);
       const rawName = typeof reqBody?.name === "string" ? reqBody.name.trim().slice(0, 40) : "";
       let useName = "";
       if (rawName) {
         const verdict = await moderateContent({ text: rawName });
+        console.log("[room-name] \"" + rawName + "\" screening=" + verdict);
         if (verdict === "blocked") return json({ error: "inappropriate_name" }, { status: 400 });
-        if (verdict === "ok") useName = rawName;
+        // Only an explicit BLOCK refuses the name. If screening is down or gave
+        // no clear answer, still honor the name — it only becomes this room's
+        // own link, so a failed check shouldn't silently swap in random words.
+        useName = rawName;
       }
       // Coarse hint about who made the room (no IP stored): device, app vs web,
       // browser language. Lets the admin tell a real visitor from a test.

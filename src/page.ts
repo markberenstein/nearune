@@ -2387,6 +2387,37 @@ const RAW = String.raw`<!doctype html>
   var APP_STORE_URL = "__APP_STORE_URL__";
   var IN_NATIVE_APP = false;
   try { IN_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+  // Universal links: when the app is opened from an invite or confirmation
+  // link, load that link inside the app instead of a browser.
+  (function () {
+    try {
+      var CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (!CapApp || !CapApp.addListener) return;
+      var handleAppUrl = function (raw, fromLaunch) {
+        try {
+          var u = new URL(raw);
+          if (u.hostname !== "nearune.ai") return;
+          if (fromLaunch) {
+            var seen = ""; try { seen = localStorage.getItem("nearuneLastLaunchUrl") || ""; } catch (e) {}
+            if (seen === raw) return;
+            try { localStorage.setItem("nearuneLastLaunchUrl", raw); } catch (e) {}
+          }
+          var conf = u.pathname.match(new RegExp("^/r/([a-z0-9]+)/api/confirm$", "i"));
+          if (conf) {
+            var cwho = u.searchParams.get("who") || "";
+            fetch(u.pathname + u.search).then(
+              function () { location.href = "/r/" + conf[1] + "/?viewer=" + encodeURIComponent(cwho); },
+              function () { location.href = u.pathname + u.search; }
+            );
+            return;
+          }
+          location.href = u.pathname + u.search;
+        } catch (e) {}
+      };
+      CapApp.addListener("appUrlOpen", function (ev) { if (ev && ev.url) handleAppUrl(ev.url, false); });
+      if (CapApp.getLaunchUrl) CapApp.getLaunchUrl().then(function (r) { if (r && r.url) handleAppUrl(r.url, true); }, function () {});
+    } catch (e) {}
+  })();
   var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Looks up the typed location and, unless the person has already picked
@@ -4879,6 +4910,8 @@ export function buildNewRoomPage(): string {
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
   <p class="note" id="existing" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
+  <button id="pasteInvite" type="button" style="margin-top:6px">Paste my invite</button>
+  <p class="note" style="margin-top:6px">Got an invite? Copy the link from your email, then tap above. Nearune only reads the link you just copied.</p>
   <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room or invite link, or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
   <p class="note" id="roomMsg"></p>
@@ -4886,15 +4919,31 @@ export function buildNewRoomPage(): string {
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a> &nbsp;·&nbsp; <a href="/support" style="color:var(--ink-soft)">Support</a></p>
 </div>
 <script>
-document.getElementById("openRoom").addEventListener("click", function () {
-  var v = (document.getElementById("roomLink").value || "").trim();
+function routeFromText(v) {
+  v = (v || "").trim();
   var inv = v.match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
-  if (inv) { location.href = "/j/" + inv[1].toLowerCase() + "/" + inv[2]; return; }
+  if (inv) { location.href = "/j/" + inv[1].toLowerCase() + "/" + inv[2]; return true; }
   var m = v.match(new RegExp("/r/([a-z0-9]{4,20})", "i")) || v.match(new RegExp("^([a-z0-9]{4,20})$", "i"));
-  if (!m) { document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent."; return; }
+  if (!m) return false;
   var q = v.match(new RegExp("[?&]invite=(mark|nikita)&token=([a-z0-9-]{6,64})", "i"));
-  if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return; }
+  if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return true; }
   location.href = "/r/" + m[1].toLowerCase() + "/";
+  return true;
+}
+document.getElementById("openRoom").addEventListener("click", function () {
+  if (!routeFromText(document.getElementById("roomLink").value)) {
+    document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent.";
+  }
+});
+document.getElementById("pasteInvite").addEventListener("click", function () {
+  var msg = document.getElementById("roomMsg");
+  function fail() { msg.textContent = "Couldn't read what you copied. Touch and hold the box below, tap Paste, then tap Open my room."; }
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) { fail(); return; }
+    navigator.clipboard.readText().then(function (txt) {
+      if (!routeFromText(txt)) msg.textContent = "No Nearune invite found in what you copied. Copy the invite link from your email first, then tap Paste my invite.";
+    }, fail);
+  } catch (e) { fail(); }
 });
 document.getElementById("go").addEventListener("click", function () {
   var btn = document.getElementById("go");

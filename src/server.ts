@@ -951,6 +951,7 @@ Bun.serve({
               "<a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a></td>" +
               "</tr></table>"
             : "") +
+          "<p style=\"font-size:14px\">Already have the app? Copy the link above, open Nearune and tap <b>Paste my invite</b>. Nearune only reads the link you just copied.</p>" +
           "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
@@ -1413,6 +1414,22 @@ Bun.serve({
         await Bun.write("./local-icon-" + key + ".png", bytes);
       }
       return json({ ok: true });
+    }
+
+    // Universal links: tells iOS that invite links (/j/...) and confirmation
+    // links belong to the Nearune app. Must be served as plain JSON at exactly
+    // this path, with no redirect. The Team ID comes from existing Apple vars.
+    if (req.method === "GET" && url.pathname === "/.well-known/apple-app-site-association") {
+      const teamId = Bun.env.APPLE_TEAM_ID || Bun.env.APNS_TEAM_ID || Bun.env.APPLE_WEATHERKIT_TEAM_ID || "";
+      if (!teamId) return new Response("Not found", { status: 404 });
+      const body = {
+        applinks: {
+          details: [
+            { appIDs: [teamId + ".com.nearune.app"], components: [{ "/": "/j/*" }, { "/": "/r/*/api/confirm" }] },
+          ],
+        },
+      };
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
     }
 
     if (req.method === "GET" && url.pathname === "/app-store-badge.png") {

@@ -3155,6 +3155,9 @@ const RAW = String.raw`<!doctype html>
     }
     return list;
   }
+  // The song/movie titles link to a plain YouTube search, NOT Apple's own
+  // page (that opens Apple Music / Apple TV, which needs an Apple ID setup
+  // and has caused trouble for people without one).
   // SANDBOX EXPERIMENT: collapsed line — "🎵 Popular near <name>: <title> —
   // <artist>" with a play button for the #1 song's 30s preview, plus a
   // "Show top 5"/"Show less" toggle that expands into the full chart (see
@@ -3170,7 +3173,7 @@ const RAW = String.raw`<!doctype html>
     var line = h("p", { class: "music-line" });
     line.appendChild(document.createTextNode(tTemplate("🎵 Popular near {name}: ", { name: shownName })));
     line.appendChild(
-      h("a", { class: "music-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
+      h("a", { class: "music-link", href: "https://www.youtube.com/results?search_query=" + encodeURIComponent(top.title + (top.artist ? " " + top.artist : "")), target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
     );
     var playBtn = chartPlayButton(top.previewUrl, "Play " + top.title, "audio");
     if (playBtn) line.appendChild(document.createTextNode(" "));
@@ -3199,7 +3202,7 @@ const RAW = String.raw`<!doctype html>
     var line = h("p", { class: "movie-line" });
     line.appendChild(document.createTextNode(tTemplate("🎬 Popular near {name}: ", { name: shownName })));
     line.appendChild(
-      h("a", { class: "movie-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title })
+      h("a", { class: "movie-link", href: top.previewUrl || ("https://www.youtube.com/results?search_query=" + encodeURIComponent(top.title + " trailer")), target: "_blank", rel: "noopener noreferrer", text: top.title })
     );
     var playBtn = chartPlayButton(top.previewUrl, "Watch trailer for " + top.title, "video");
     if (playBtn) line.appendChild(document.createTextNode(" "));

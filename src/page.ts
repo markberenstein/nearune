@@ -2279,7 +2279,7 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(h("div", { class: "nhie-choices" }, [neverBtn, haveBtn]));
         card.appendChild(h("p", { class: "nhie-note", text: t("Answers stay hidden until you both have answered.") }));
       } else {
-        var mine = nhieMyChoice[n.round];
+        var mine = nhieMyChoice[n.round] || n.mine;
         if (!mine) { try { mine = localStorage.getItem("nearuneNhie:" + ROOM + ":" + viewerKey + ":" + n.round) || ""; } catch (e) { mine = ""; } }
         var mineIcon = mine === "have" ? "\uD83E\uDD43 " : mine ? "\uD83D\uDE01 " : "";
         card.appendChild(h("p", { class: "nhie-verdict", text: mineIcon + t("Answered! \u2705") }));
@@ -4791,7 +4791,7 @@ const RAW = String.raw`<!doctype html>
   async function initialLoad() {
     if (redirectToMyRoom()) return;
     try {
-      var res = await fetch(RP + "/api/state");
+      var res = await fetch(RP + "/api/state" + (viewerKey ? "?who=" + encodeURIComponent(viewerKey) : ""));
       state = await res.json();
       online = true;
     } catch (e) { online = false; }
@@ -4924,7 +4924,7 @@ const RAW = String.raw`<!doctype html>
 
   async function poll() {
     try {
-      var res = await fetch(RP + "/api/state");
+      var res = await fetch(RP + "/api/state" + (viewerKey ? "?who=" + encodeURIComponent(viewerKey) : ""));
       var next = await res.json();
       online = true;
       if (Date.now() < suppressPollUntil) return;

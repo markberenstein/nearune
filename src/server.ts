@@ -407,7 +407,14 @@ Bun.serve({
         }
       } catch (e) { /* never block state on a timezone lookup */ }
       try { roomQaOnce(roomId, state); } catch (e) {}
-      return json(forClient(state));
+      const out: any = forClient(state);
+      // Never Have I Ever: a viewer may always see their OWN answer (never the partner's).
+      try {
+        const who = url.searchParams.get("who");
+        const mine = (who === "mark" || who === "nikita") ? (state as any).nhie?.votes?.[who] : undefined;
+        if (mine && out.nhie) out.nhie.mine = mine;
+      } catch {}
+      return json(out);
     }
 
     if (req.method === "POST" && restPath === "/api/delete-room") {

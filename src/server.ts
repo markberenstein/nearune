@@ -28,10 +28,10 @@ import { regionAbbr } from "./usstates";
 import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { newRound } from "./nhie";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { APP_STORE_BADGE_B64 } from "./badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
@@ -123,15 +123,18 @@ Bun.serve({
         return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
       }
       // Optional room name from the first partner ("Our Sky" -> oursky, or oursky47 if taken).
-      // Screened like any other user text; if screening is down the name is
-      // simply skipped and a random two-word code is used instead.
+      // Screened like any other user text; only an explicit block refuses it.
       const reqBody = await readJson(req);
       const rawName = typeof reqBody?.name === "string" ? reqBody.name.trim().slice(0, 40) : "";
       let useName = "";
       if (rawName) {
         const verdict = await moderateContent({ text: rawName });
+        console.log("[room-name] \"" + rawName + "\" screening=" + verdict);
         if (verdict === "blocked") return json({ error: "inappropriate_name" }, { status: 400 });
-        if (verdict === "ok") useName = rawName;
+        // Only an explicit BLOCK refuses the name. If screening is down or gave
+        // no clear answer, still honor the name — it only becomes this room's
+        // own link, so a failed check shouldn't silently swap in random words.
+        useName = rawName;
       }
       // Coarse hint about who made the room (no IP stored): device, app vs web,
       // browser language. Lets the admin tell a real visitor from a test.
@@ -928,7 +931,13 @@ Bun.serve({
         "<p>" + inviterName + " invited you to Nearune.</p>" +
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
           "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
-          (Bun.env.APP_STORE_URL ? "<p>Get the Nearune app: <a href=\"" + Bun.env.APP_STORE_URL + "\">Download on the App Store</a></p>" : "") +
+          (Bun.env.APP_STORE_URL
+            ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
+              "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
+              "<td style=\"vertical-align:middle\"><div style=\"font-size:15px;margin-bottom:8px\">Get the Nearune app</div>" +
+              "<a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a></td>" +
+              "</tr></table>"
+            : "") +
           "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
@@ -1012,7 +1021,11 @@ Bun.serve({
         parsed.push({ id: crypto.randomUUID(), answer: trimmedAnswer, question: trimmedQuestion, bytes });
       }
       const current = await loadState(roomId);
-      if (current.puzzleCurrentId || (current.puzzleQueue && current.puzzleQueue.length > 0)) {
+      // A new batch can be loaded once the current picture is finished (solved
+      // or every piece unlocked) and nothing is still queued behind it.
+      const curRevealed = !!current.puzzleCurrentId && (!!current.puzzleSolved || puzzleUnlockedCount(current) >= PUZZLE_TOTAL);
+      const curQueued = !!(current.puzzleQueue && current.puzzleQueue.length > 0);
+      if (curQueued || (current.puzzleCurrentId && !curRevealed)) {
         return json({ error: "in_progress" }, { status: 409 });
       }
       const verdicts = await Promise.all(parsed.map((p) => moderateContent({ image: p.bytes, text: p.question + " " + p.answer })));
@@ -1058,38 +1071,6 @@ Bun.serve({
       try { bytes = Buffer.from(m[1], "base64"); } catch { return json({ place: null }); }
       if (bytes.length < 200) return json({ place: null });
       return json({ place: await guessPlaceFromImage(bytes) });
-    }
-
-    // Never Have I Ever: answer the current phrase. "round" guards against a
-    // stale tab answering a phrase that has already moved on.
-    if (req.method === "POST" && restPath === "/api/nhie-vote") {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const { who, choice, round } = body || {};
-      if (!isPerson(who) || (choice !== "never" && choice !== "have")) return json({ error: "invalid" }, { status: 400 });
-      const state = await saveState(roomId, (s) => {
-        if (!s.nhie) s.nhie = newRound(undefined, s.relationship);
-        if (s.nhie.round !== round) return;
-        if (!s.nhie.votes) s.nhie.votes = {};
-        s.nhie.votes[who] = choice;
-      });
-      return json(forClient(state));
-    }
-
-    // Starts the next phrase. Only moves on once both have answered (or when
-    // there is no round yet), and only from the round the caller was looking
-    // at, so two quick taps never skip a phrase.
-    if (req.method === "POST" && restPath === "/api/nhie-next") {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const { who, round } = body || {};
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const state = await saveState(roomId, (s) => {
-        if (!s.nhie) { s.nhie = newRound(undefined, s.relationship); return; }
-        const v = s.nhie.votes || {};
-        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, s.relationship);
-      });
-      return json(forClient(state));
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-advance") {
@@ -1269,18 +1250,6 @@ Bun.serve({
       }
     }
 
-    // Lets whoever recorded a voice choose which speech model voices it.
-    if (req.method === "POST" && restPath === "/api/voice-model") {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const { who, model } = body || {};
-      if (!isPerson(who) || (model !== "v4" && model !== "v2")) return json({ error: "invalid" }, { status: 400 });
-      const state = await saveState(roomId, (s) => {
-        if (s.people && s.people[who]) s.people[who]!.voiceModel = model;
-      });
-      return json(forClient(state));
-    }
-
     if (req.method === "POST" && restPath === "/api/speak") {
       // Each call is a real text-to-speech request against a paid API — cap
       // it well above normal use (someone tapping 🔊 on every line of a long
@@ -1296,8 +1265,7 @@ Bun.serve({
       const current = await loadState(roomId);
       const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
       if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
-      const vm = body.model === "v2" || body.model === "v4" ? body.model : current.people![who]!.voiceModel;
-      const audio = await synthesizeSpeech(text, voiceId, vm === "v2" || vm === "v4" ? vm : undefined);
+      const audio = await synthesizeSpeech(text, voiceId);
       if (!audio) return json({ error: "synth_failed" }, { status: 502 });
       return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
     }
@@ -1333,7 +1301,7 @@ Bun.serve({
 
       let rejected = false;
       const state = await saveState(roomId, (s) => {
-        if (!s.puzzleAnswer || s.puzzleSolved) return;
+        if (!s.puzzleAnswer || s.puzzleSolved || puzzleUnlockedCount(s) >= PUZZLE_TOTAL) return;
         if (s.puzzleSetBy && who === s.puzzleSetBy) { rejected = true; return; }
         if (s.puzzleLastGuessDate === today) return;
         const finalCorrect = s.puzzleAnswer === peekedAnswer ? correct : guessMatches(trimmed, s.puzzleAnswer);
@@ -1432,6 +1400,12 @@ Bun.serve({
         await Bun.write("./local-icon-" + key + ".png", bytes);
       }
       return json({ ok: true });
+    }
+
+    if (req.method === "GET" && url.pathname === "/app-store-badge.png") {
+      return new Response(Buffer.from(APP_STORE_BADGE_B64, "base64"), {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
     }
 
     if (req.method === "GET" && (url.pathname === "/favicon.png" || url.pathname === "/favicon.ico" || url.pathname === "/apple-touch-icon.png")) {

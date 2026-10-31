@@ -2818,8 +2818,8 @@ const RAW = String.raw`<!doctype html>
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
       var form = h("div", { class: "puzzle-setup" });
-      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s Instagram handle (or email if they don't use Instagram)", function (v) { inviteEmailDraft = v; }));
-      form.appendChild(h("p", { class: "puzzle-guess-note", text: t("With an Instagram handle, you'll get a link to send them yourself.") }));
+      form.appendChild(textField(inviteEmailDraft, t("Nearune partner email"), function (v) { inviteEmailDraft = v; }));
+      form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Prefer Instagram? Enter their handle instead and you'll get a link to send them yourself.") }));
       if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
       btn.disabled = regBusy;

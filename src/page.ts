@@ -2322,10 +2322,11 @@ const RAW = String.raw`<!doctype html>
         h("li", { text: t("Answers stay hidden until you both have answered.") }),
         h("li", { text: t("Then you see each other's answers. Whoever has done it takes a sip!") }),
         h("li", { text: t("Tap Next one for a new phrase.") })
-      ]),
-      h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: inline-block; margin-top: 10px; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") })
+      ])
     ]);
     card.appendChild(howto);
+    card.appendChild(h("iframe", { src: "https://www.youtube.com/embed/jqci-XEAbE0?start=0&end=10&rel=0&playsinline=1&modestbranding=1", title: "Never Have I Ever - the funny version", loading: "lazy", allow: "encrypted-media; picture-in-picture", allowfullscreen: "true", style: "width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000;" }));
+    card.appendChild(h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: block; text-align: center; font-weight: 700; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") }));
     card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
     return card;
   }

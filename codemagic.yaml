@@ -47,7 +47,11 @@ workflows:
         script: |
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" || {
+              echo "=== xcodebuild errors (shown so the real cause is visible) ==="
+              grep -h -i -E "error:|requires a provisioning profile|doesn't include|entitlement" /tmp/xcodebuild_logs/*.log | sort -u | head -40
+              exit 1
+            }
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log

@@ -379,6 +379,9 @@ const RAW = String.raw`<!doctype html>
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
   .tab-ico { font-size: 1.2rem; line-height: 1; }
   .puzzle-card .translate-inline { color: #5a4a3f; }
+  .nhie-howto { font-size: 0.92rem; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 10px; }
+  .nhie-howto summary { cursor: pointer; font-weight: 700; color: var(--ink); }
+  .nhie-howto ol { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
   .nhie-phrase { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.35rem; line-height: 1.35; margin: 0; text-align: center; }
   .nhie-choices { display: flex; gap: 12px; }
   .nhie-choice { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 16px 10px; font: inherit; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -2311,6 +2314,18 @@ const RAW = String.raw`<!doctype html>
       });
       card.appendChild(nextBtn);
     }
+    var howto = h("details", { class: "nhie-howto" }, [
+      h("summary", { text: t("How to play") }),
+      h("ol", {}, [
+        h("li", { text: t("You both see the same phrase.") }),
+        h("li", { text: t("Tap \uD83D\uDE01 if you have never done it, or \uD83E\uDD43 if you have.") }),
+        h("li", { text: t("Answers stay hidden until you both have answered.") }),
+        h("li", { text: t("Then you see each other's answers. Whoever has done it takes a sip!") }),
+        h("li", { text: t("Tap Next one for a new phrase.") })
+      ]),
+      h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: inline-block; margin-top: 10px; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") })
+    ]);
+    card.appendChild(howto);
     card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
     return card;
   }

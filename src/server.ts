@@ -890,7 +890,7 @@ Bun.serve({
       // picker instead of straight into their next step.
       const backUrl = publicOrigin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
       const html = ok
-        ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Nearune</a></p></body></html>"
+        ? "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Confirmed</title></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 24px;color:#2B211B\"><h1>Confirmed 🎉</h1><p style=\"font-size:1.15rem;line-height:1.5\">You're all set. Switch back to the <strong>Nearune app</strong> to keep going.</p><p style=\"margin-top:40px;font-size:0.9rem;color:#6F6054\">Using Nearune in your browser instead? <a href=\"" + backUrl + "\" style=\"color:#6F6054\">Continue in browser</a></p></body></html>"
         : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }

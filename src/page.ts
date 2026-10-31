@@ -373,10 +373,23 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
 
-  .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
-  .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .tab-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
+  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
-  .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.8rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+  .tab-ico { font-size: 1.2rem; line-height: 1; }
+  .nhie-phrase { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.35rem; line-height: 1.35; margin: 0; text-align: center; }
+  .nhie-choices { display: flex; gap: 12px; }
+  .nhie-choice { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 16px 10px; font: inherit; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .nhie-choice .emo { font-size: 2.2rem; line-height: 1; }
+  .nhie-choice .lbl { font-size: 0.85rem; }
+  .nhie-choice:disabled { opacity: 0.55; cursor: default; }
+  .nhie-results { display: flex; gap: 12px; }
+  .nhie-result { flex: 1; text-align: center; border-radius: 14px; border: 1px solid var(--line); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .nhie-result .emo { font-size: 2.4rem; line-height: 1; }
+  .nhie-result .who { font-weight: 700; font-size: 0.9rem; }
+  .nhie-verdict { text-align: center; font-weight: 700; margin: 0; }
+  .nhie-note { text-align: center; color: var(--ink-soft); font-size: 0.8rem; margin: 0; }
+  .tab-badge { background: var(--accent-2); color: #fff; position: absolute; top: 3px; right: 6px; font-size: 0.6rem; font-weight: 700; border-radius: 999px; padding: 1px 5px; line-height: 1.3; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
@@ -400,6 +413,12 @@ const RAW = String.raw`<!doctype html>
   .picker-btn:hover { border-color: var(--accent); }
 
   .switch-row { text-align: center; }
+  .foot-links { margin-top: 8px; }
+  .foot-group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 6px; margin: 2px 0; }
+  .foot-group .switch-link { font-size: 0.85rem; padding: 6px 4px; }
+  .foot-sep { opacity: 0.55; font-size: 0.85rem; }
+  .foot-quiet .switch-link { font-size: 0.75rem; opacity: 0.8; }
+  body.weather-active .foot-sep { color: var(--weather-ink, #2B211B); }
   .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; padding: 4px; }
   /* The traveling button and (under it) the notifications link now sit
      right at the top of the page, directly over the full-height weather
@@ -1125,7 +1144,7 @@ const RAW = String.raw`<!doctype html>
   try {
     var storedTab = localStorage.getItem(TAB_LS_KEY);
     if (storedTab === null && !ROOM) storedTab = localStorage.getItem("sameSkyTab");
-    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local") activeTab = storedTab;
+    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local" || storedTab === "never") activeTab = storedTab;
   } catch (e) {}
   var puzzleFlashMsg = null;
 
@@ -2206,6 +2225,90 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // Never Have I Ever: both partners secretly answer the same phrase —
+  // grin = never have I, shot = I have — and the answers are revealed once
+  // both are in. The server (nhie-vote / nhie-next) owns the phrase and the
+  // votes; the other person's answer is withheld until both have voted.
+  var nhieMyChoice = {};
+  var nhieBusy = false;
+  var nhieStarted = false;
+  function nhieSection() {
+    if (isBlocked()) return blockedNote();
+    var n = state.nhie;
+    if (!n) {
+      if (!nhieStarted && viewerKey) {
+        nhieStarted = true;
+        api("/api/nhie-next", { who: viewerKey, round: 0 }).then(function () { renderApp(); }).catch(function () { nhieStarted = false; });
+      }
+      return h("div", { class: "puzzle-card" }, [h("p", { class: "puzzle-explain", text: t("Loading your first one...") })]);
+    }
+    var other = viewerKey ? otherKeyOf(viewerKey) : null;
+    var voted = n.voted || {};
+    var votes = n.votes || {};
+    var revealed = !!(votes.mark && votes.nikita);
+    var myVoted = viewerKey ? (voted[viewerKey] || !!nhieMyChoice[n.round]) : false;
+
+    var card = h("div", { class: "puzzle-card" }, [
+      h("div", { class: "puzzle-head" }, [
+        h("p", { class: "puzzle-title", text: t("Never Have I Ever") }),
+        h("span", { class: "puzzle-progress", text: tTemplate("Round {n}", { n: n.round }) })
+      ]),
+      h("p", { class: "nhie-phrase", text: n.text }),
+      uiTranslateBlock(n.text, viewerKey ? otherKeyOf(viewerKey) : null)
+    ]);
+
+    if (!revealed) {
+      if (!viewerKey) {
+        card.appendChild(h("p", { class: "nhie-note", text: t("Pick who you are at the bottom of the page to play.") }));
+      } else if (!myVoted) {
+        var neverBtn = h("button", { class: "nhie-choice" }, [h("span", { class: "emo", text: "\uD83D\uDE01" }), h("span", { class: "lbl", text: t("Never have I!") })]);
+        var haveBtn = h("button", { class: "nhie-choice" }, [h("span", { class: "emo", text: "\uD83E\uDD43" }), h("span", { class: "lbl", text: t("I have - take a shot") })]);
+        function cast(choice) {
+          if (nhieBusy) return;
+          nhieBusy = true;
+          nhieMyChoice[n.round] = choice;
+          api("/api/nhie-vote", { who: viewerKey, choice: choice, round: n.round })
+            .catch(function () { delete nhieMyChoice[n.round]; })
+            .then(function () { nhieBusy = false; renderApp(); });
+        }
+        neverBtn.addEventListener("click", function () { cast("never"); });
+        haveBtn.addEventListener("click", function () { cast("have"); });
+        card.appendChild(h("div", { class: "nhie-choices" }, [neverBtn, haveBtn]));
+        card.appendChild(h("p", { class: "nhie-note", text: t("Answers stay hidden until you both have answered.") }));
+      } else {
+        card.appendChild(h("p", { class: "nhie-verdict", text: t("Answered! \u2705") }));
+        card.appendChild(h("p", { class: "nhie-note", text: tTemplate("Waiting for {name} to answer...", { name: other ? personName(other) : "your partner" }) }));
+      }
+    } else {
+      var res = h("div", { class: "nhie-results" });
+      ["mark", "nikita"].forEach(function (key) {
+        var v = votes[key];
+        res.appendChild(h("div", { class: "nhie-result" }, [
+          h("span", { class: "emo", text: v === "have" ? "\uD83E\uDD43" : "\uD83D\uDE01" }),
+          h("span", { class: "who", style: "color:" + PEOPLE[key].color, text: personName(key) }),
+          h("span", { class: "nhie-note", text: v === "have" ? t("Has done it") : t("Never has") })
+        ]));
+      });
+      card.appendChild(res);
+      var haveCount = (votes.mark === "have" ? 1 : 0) + (votes.nikita === "have" ? 1 : 0);
+      var verdict = haveCount === 2 ? t("You both have! Cheers, take a shot together \uD83E\uDD43\uD83E\uDD43")
+        : haveCount === 0 ? t("Neither of you has! Big grins all round \uD83D\uDE01\uD83D\uDE01")
+        : tTemplate("{name} takes a shot \uD83E\uDD43", { name: personName(votes.mark === "have" ? "mark" : "nikita") });
+      card.appendChild(h("p", { class: "nhie-verdict", text: verdict }));
+      var nextBtn = h("button", { class: "mini-btn primary", text: t("Next one") });
+      nextBtn.addEventListener("click", function () {
+        if (nhieBusy || !viewerKey) return;
+        nhieBusy = true;
+        api("/api/nhie-next", { who: viewerKey, round: n.round })
+          .catch(function () {})
+          .then(function () { nhieBusy = false; renderApp(); });
+      });
+      card.appendChild(nextBtn);
+    }
+    card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
+    return card;
+  }
+
   function puzzleSection() {
     if (isBlocked()) return blockedNote();
     var inBatch = !!state.puzzleCurrentId;
@@ -2355,16 +2458,19 @@ const RAW = String.raw`<!doctype html>
 
   function tabBar() {
     var unlocked = puzzleUnlockedCount();
-    var todayBtn = h("button", { class: "tab-btn" + (activeTab === "today" ? " active" : ""), text: t("Today") });
-    todayBtn.addEventListener("click", function () { setActiveTab("today"); });
-    var localBtn = h("button", { class: "tab-btn" + (activeTab === "local" ? " active" : ""), text: t("Local Feel") });
-    localBtn.addEventListener("click", function () { setActiveTab("local"); });
-    var puzzleBtn = h("button", { class: "tab-btn" + (activeTab === "puzzle" ? " active" : "") }, [
-      document.createTextNode(t("Puzzle") + " "),
-      h("span", { class: "tab-badge", text: unlocked + "/" + PUZZLE_TOTAL })
+    function mk(id, icon, label, badge) {
+      var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
+      if (badge) kids.push(h("span", { class: "tab-badge", text: badge }));
+      var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
+      btn.addEventListener("click", function () { setActiveTab(id); });
+      return btn;
+    }
+    return h("div", { class: "tab-bar" }, [
+      mk("today", "☀️", "Today"),
+      mk("local", "📍", "Local Feel"),
+      mk("puzzle", "🧩", "Puzzle", unlocked + "/" + PUZZLE_TOTAL),
+      mk("never", "🥃", "Never Have I Ever"),
     ]);
-    puzzleBtn.addEventListener("click", function () { setActiveTab("puzzle"); });
-    return h("div", { class: "tab-bar" }, [todayBtn, localBtn, puzzleBtn]);
   }
 
   function puzzleFlashBanner() {
@@ -2663,6 +2769,14 @@ const RAW = String.raw`<!doctype html>
   // hash of it, so it is remembered on this device only, to show "Sent to ..."
   // and to prefill the form when fixing a typo.
   var lastConfirmEmail = "";
+  function capFirst(str) { str = String(str || ""); return str.charAt(0).toUpperCase() + str.slice(1); }
+  // Same idea for the partner invite: only this device remembers where it went.
+  var lastInviteEmail = "";
+  function inviteEmailKey() { return "nearuneInviteEmail:" + ROOM + ":" + viewerKey; }
+  function sentInviteEmail() {
+    if (lastInviteEmail) return lastInviteEmail;
+    try { return localStorage.getItem(inviteEmailKey()) || ""; } catch (e) { return ""; }
+  }
   function confirmEmailKey() { return "nearuneConfirmEmail:" + ROOM + ":" + viewerKey; }
   function sentToEmail() {
     if (lastConfirmEmail) return lastConfirmEmail;
@@ -2757,13 +2871,13 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
-    var regEmailInput = textField(registerDraft.email, "Your email (or Instagram handle if you don't use email)", function (v) { registerDraft.email = v; });
+    var regEmailInput = textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; });
     regEmailInput.setAttribute("inputmode", "email");
     regEmailInput.setAttribute("autocapitalize", "off");
     regEmailInput.setAttribute("autocorrect", "off");
     regEmailInput.setAttribute("autocomplete", "email");
     form.appendChild(regEmailInput);
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Prefer Instagram? Enter your handle instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No email? Enter your Instagram handle instead. Registered with an email? Tap Find your room below if you ever lose your link. With an Instagram handle we can't look your room up, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
     // (questionPoolFor() uses it for both people's daily question), so
@@ -2783,7 +2897,7 @@ const RAW = String.raw`<!doctype html>
       sw.addEventListener("click", function () { viewerKey = null; previewKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
-    var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
+    var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Find your room") })]);
     card.appendChild(lost);
     return card;
   }
@@ -2807,6 +2921,10 @@ const RAW = String.raw`<!doctype html>
         }
         lastInviteUrl = res.data._inviteUrl || "";
         lastAppStoreUrl = res.data._appStoreUrl || "";
+        if (!res.data._viaHandle) {
+          lastInviteEmail = email;
+          try { localStorage.setItem(inviteEmailKey(), email); } catch (e) {}
+        }
         state = res.data;
         showInviteForm = false;
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
@@ -2870,6 +2988,8 @@ const RAW = String.raw`<!doctype html>
         }
       } else {
         card.appendChild(h("p", { class: "question", text: tTemplate("Invite emailed — waiting for {name} to accept.", { name: otherLabel }) }));
+        var invSentTo = sentInviteEmail();
+        if (invSentTo) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: invSentTo }) }));
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
         if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
       }
@@ -2892,11 +3012,13 @@ const RAW = String.raw`<!doctype html>
       }
       if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
       // Escape hatch so nobody feels stuck on this waiting screen.
-      row.push(h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new", text: t("Start over with a new room") }));
-      row.push(h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new#existing", text: t("Open an existing room") }));
       if (row.length) card.appendChild(h("div", { class: "switch-row" }, row));
+      card.appendChild(h("div", { class: "switch-row", style: "margin-top: 4px;" }, [
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new", text: t("Start over with a new room") }),
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new#existing", text: t("Open an existing room") })
+      ]));
     } else {
-      card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
+      card.appendChild(h("p", { class: "question", text: capFirst(tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel })) }));
       var form = h("div", { class: "puzzle-setup" });
       var invInput = textField(inviteEmailDraft, t("Nearune partner email"), function (v) { inviteEmailDraft = v; });
       invInput.setAttribute("inputmode", "email");
@@ -2912,8 +3034,8 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(form);
       // Escape hatches so nobody feels stuck on this screen.
       card.appendChild(h("div", { class: "switch-row", style: "margin-top: 10px;" }, [
-        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new", text: t("Start over with a new room") }),
-        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new#existing", text: t("Open an existing room") })
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new", text: t("Start over with a new room") }),
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new#existing", text: t("Open an existing room") })
       ]));
     }
     return card;
@@ -2955,14 +3077,7 @@ const RAW = String.raw`<!doctype html>
     if (moviesBlock) app.appendChild(moviesBlock);
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
-    var foot = h("div", { class: "switch-row" });
-    foot.appendChild(h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") }));
-    foot.appendChild(h("a", { class: "switch-link", href: "/support", text: t("Support") }));
-    foot.appendChild(h("a", { class: "switch-link", href: "/terms", text: t("Terms") }));
-    var del = h("button", { class: "switch-link", text: t("Delete my data") });
-    del.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
-    foot.appendChild(del);
-    app.appendChild(foot);
+    app.appendChild(footerLinks({ room: false, block: false }));
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
@@ -3059,6 +3174,8 @@ const RAW = String.raw`<!doctype html>
       if (moviesBlock) app.appendChild(moviesBlock);
       var photoBlock = photoCardBlock();
       if (photoBlock) app.appendChild(photoBlock);
+    } else if (activeTab === "never") {
+      app.appendChild(nhieSection());
     } else {
       app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
       if (activeTab === "puzzle") {
@@ -4551,32 +4668,49 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
-  function switchRow() {
-    var row = h("div", { class: "switch-row" });
-    var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-    link.addEventListener("click", function () {
-      viewerKey = null;
-      previewKey = null;
-      weatherExpanded = false;
-      try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
-      renderApp();
-    });
-    row.appendChild(link);
-    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") });
-    row.appendChild(newRoomLink);
-    var privacyLink = h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") });
-    row.appendChild(privacyLink);
-    var termsLink = h("a", { class: "switch-link", href: "/terms", text: t("Terms") });
-    row.appendChild(termsLink);
-    var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
-    deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
-    row.appendChild(deleteLink);
-    if (viewerKey) {
+  // One tidy footer for every screen: room actions, then Privacy / Terms /
+  // Support, then the quieter account actions (Block, Delete my data).
+  function footSepEl() { return h("span", { class: "foot-sep", text: "·" }); }
+  function footerLinks(opts) {
+    opts = opts || {};
+    var wrap = h("div", { class: "foot-links" });
+    if (opts.room) {
+      var room = h("div", { class: "switch-row foot-group" });
+      var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
+      link.addEventListener("click", function () {
+        viewerKey = null;
+        previewKey = null;
+        weatherExpanded = false;
+        try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
+        renderApp();
+      });
+      room.appendChild(link);
+      room.appendChild(h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") }));
+      wrap.appendChild(room);
+    }
+    var legal = h("div", { class: "switch-row foot-group" });
+    legal.appendChild(h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") }));
+    legal.appendChild(footSepEl());
+    legal.appendChild(h("a", { class: "switch-link", href: "/terms", text: t("Terms") }));
+    legal.appendChild(footSepEl());
+    legal.appendChild(h("a", { class: "switch-link", href: "/support", text: t("Support") }));
+    wrap.appendChild(legal);
+    var quiet = h("div", { class: "switch-row foot-group foot-quiet" });
+    if (opts.block && viewerKey && state.people && state.people[otherKeyOf(viewerKey)] && state.people[otherKeyOf(viewerKey)].confirmed) {
       var blockLink = h("button", { class: "switch-link", type: "button", text: isBlocked() ? tTemplate("Unblock {name}", { name: personName(otherKeyOf(viewerKey)) }) : tTemplate("Block {name}", { name: personName(otherKeyOf(viewerKey)) }) });
       blockLink.addEventListener("click", function () { setBlocked(!isBlocked()); });
-      row.appendChild(blockLink);
+      quiet.appendChild(blockLink);
+      quiet.appendChild(footSepEl());
     }
-    return row;
+    var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
+    deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
+    quiet.appendChild(deleteLink);
+    wrap.appendChild(quiet);
+    return wrap;
+  }
+
+  function switchRow() {
+    return footerLinks({ room: true, block: true });
   }
 
   function deleteConfirmScreen() {
@@ -4915,7 +5049,7 @@ export function buildNewRoomPage(): string {
   <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room or invite link, or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
   <p class="note" id="roomMsg"></p>
-  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Lost your link? Email it to me</a></p>
+  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Find your room (email me my link)</a></p>
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a> &nbsp;·&nbsp; <a href="/support" style="color:var(--ink-soft)">Support</a></p>
 </div>
 <script>
@@ -4981,7 +5115,7 @@ export function buildRecoverPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recover your Nearune link</title>
+<title>Find your room — Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
   :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; }
@@ -5001,7 +5135,7 @@ export function buildRecoverPage(): string {
 </head>
 <body>
 <div class="card">
-  <h1>Lost your link?</h1>
+  <h1>Find your room</h1>
   <p>Enter the email you used when you registered, and if it matches, we'll send you your Nearune room link. (Signed up with an Instagram handle instead? We have no email on file for you, so ask your partner to send you the room link again.)</p>
   <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
   <button id="go">Send my link</button>
@@ -5054,14 +5188,17 @@ function legalPageShell(title, bodyHtml) {
   a { color:var(--accent); }
   ul { padding-left:20px; margin:8px 0; }
   .back { display:inline-block; margin-top:28px; color:var(--ink-soft); font-size:0.85rem; text-decoration:none; }
+  .foot-nav { text-align:center; margin:18px 0 0; font-size:0.85rem; }
+  .foot-nav a { color:var(--ink-soft); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     ${bodyHtml}
-    <a class="back" href="/new">&larr; Back to Nearune</a>
+    <a class="back" href="/new" onclick="if (history.length > 1) { history.back(); return false; }">&larr; Back</a>
   </div>
+  <p class="foot-nav"><a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/support">Support</a></p>
 </div>
 </body>
 </html>`;
@@ -5185,7 +5322,6 @@ export function buildSupportPage() {
       <li><strong>Report or block something.</strong> Use the report and block options next to your partner's photo, answer or comment.</li>
     </ul>
 
-    <h2>More</h2>
-    <p><a href="/privacy">Privacy Policy</a> &nbsp;·&nbsp; <a href="/terms">Terms of Use</a></p>`
+    `
   );
 }

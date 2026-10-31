@@ -2627,7 +2627,7 @@ const RAW = String.raw`<!doctype html>
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
     if (locCityError) { regError = locCityError; renderApp(); return; }
-    if (!name || !email) { regError = t("Name and Instagram handle (or email) required."); renderApp(); return; }
+    if (!name || !email) { regError = t("Name and email (or Instagram handle) required."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
@@ -2712,8 +2712,13 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
-    form.appendChild(textField(registerDraft.email, "Your Instagram handle (or email if you don't use Instagram)", function (v) { registerDraft.email = v; }));
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No Instagram? Use your email instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));
+    var regEmailInput = textField(registerDraft.email, "Your email (or Instagram handle if you don't use email)", function (v) { registerDraft.email = v; });
+    regEmailInput.setAttribute("inputmode", "email");
+    regEmailInput.setAttribute("autocapitalize", "off");
+    regEmailInput.setAttribute("autocorrect", "off");
+    regEmailInput.setAttribute("autocomplete", "email");
+    form.appendChild(regEmailInput);
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Prefer Instagram? Enter your handle instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
     // (questionPoolFor() uses it for both people's daily question), so
@@ -2742,7 +2747,7 @@ const RAW = String.raw`<!doctype html>
   var lastAppStoreUrl = "";
   function submitInvite() {
     var email = inviteEmailDraft.trim();
-    if (!email) { regError = t("Enter an Instagram handle (or email) first."); renderApp(); return; }
+    if (!email) { regError = t("Enter an email (or Instagram handle) first."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, contact: email })
@@ -2848,7 +2853,11 @@ const RAW = String.raw`<!doctype html>
     } else {
       card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
       var form = h("div", { class: "puzzle-setup" });
-      form.appendChild(textField(inviteEmailDraft, t("Nearune partner email"), function (v) { inviteEmailDraft = v; }));
+      var invInput = textField(inviteEmailDraft, t("Nearune partner email"), function (v) { inviteEmailDraft = v; });
+      invInput.setAttribute("inputmode", "email");
+      invInput.setAttribute("autocapitalize", "off");
+      invInput.setAttribute("autocorrect", "off");
+      form.appendChild(invInput);
       form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Prefer Instagram? Enter their handle instead and you'll get a link to send them yourself.") }));
       if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
@@ -2856,6 +2865,11 @@ const RAW = String.raw`<!doctype html>
       btn.addEventListener("click", submitInvite);
       form.appendChild(btn);
       card.appendChild(form);
+      // Escape hatches so nobody feels stuck on this screen.
+      card.appendChild(h("div", { class: "switch-row", style: "margin-top: 10px;" }, [
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new", text: t("Start over with a new room") }),
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", href: "/new#existing", text: t("Open an existing room") })
+      ]));
     }
     return card;
   }

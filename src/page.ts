@@ -2238,10 +2238,13 @@ const RAW = String.raw`<!doctype html>
   var nhieBusy = false;
   var nhieStarted = false;
   // Never Have I Ever how-to clip: YouTube's own player, capped at 11 seconds.
-  // The embed "end" parameter is ignored by some iOS web views, so the
-  // player API watches the clock and pauses/rewinds at the cap as well.
+  // The app re-renders (and wipes) its whole page every few seconds, which
+  // would restart an inline video, so the player lives in a full-screen
+  // overlay attached to the page body instead, outside what gets re-rendered.
+  // The embed "end" setting is ignored by some iOS web views, so the player
+  // API watches the clock and closes the overlay at the cap as well.
   var NHIE_CLIP_END = 11;
-  var nhieYT = { el: null, player: null, timer: null, loading: false };
+  var nhieYT = { player: null, timer: null, loading: false };
   function nhieLoadYT(cb) {
     if (window.YT && window.YT.Player) { cb(); return; }
     var prev = window.onYouTubeIframeAPIReady;
@@ -2253,28 +2256,53 @@ const RAW = String.raw`<!doctype html>
       document.head.appendChild(sc);
     }
   }
-  function nhieWatchClock() {
-    if (nhieYT.timer) return;
-    nhieYT.timer = setInterval(function () {
+  function nhieOpenClip() {
+    if (document.getElementById("nhie-clip-modal")) return;
+    var ov = document.createElement("div");
+    ov.id = "nhie-clip-modal";
+    ov.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; gap: 16px;";
+    var ifr = document.createElement("iframe");
+    ifr.src = "https://www.youtube.com/embed/jqci-XEAbE0?start=0&end=" + NHIE_CLIP_END + "&autoplay=1&rel=0&playsinline=1&modestbranding=1&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
+    ifr.title = "Never Have I Ever - the funny version";
+    ifr.allow = "autoplay; encrypted-media; picture-in-picture";
+    ifr.style.cssText = "width: 100%; max-width: 560px; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000;";
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = t("Close");
+    closeBtn.style.cssText = "border: 0; border-radius: 999px; padding: 12px 28px; font: inherit; font-weight: 700; background: #fff; color: #2B211B; cursor: pointer;";
+    function shut() {
+      if (nhieYT.timer) { clearInterval(nhieYT.timer); nhieYT.timer = null; }
+      try { if (nhieYT.player && nhieYT.player.destroy) nhieYT.player.destroy(); } catch (e) {}
+      nhieYT.player = null;
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+    }
+    closeBtn.addEventListener("click", shut);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
+    ov.appendChild(ifr);
+    ov.appendChild(closeBtn);
+    document.body.appendChild(ov);
+    nhieLoadYT(function () {
+      if (!document.getElementById("nhie-clip-modal")) return;
       try {
-        var tm = nhieYT.player.getCurrentTime();
-        if (tm >= NHIE_CLIP_END) { nhieYT.player.pauseVideo(); nhieYT.player.seekTo(0, true); }
+        nhieYT.player = new YT.Player(ifr, { events: {
+          onReady: function () { try { nhieYT.player.playVideo(); } catch (e) {} },
+          onStateChange: function (ev) {
+            if (ev.data === 1 && !nhieYT.timer) {
+              nhieYT.timer = setInterval(function () {
+                try { if (nhieYT.player.getCurrentTime() >= NHIE_CLIP_END) shut(); } catch (e) {}
+              }, 200);
+            }
+          }
+        } });
       } catch (e) {}
-    }, 200);
+    });
   }
-  function nhieStopClock() { if (nhieYT.timer) { clearInterval(nhieYT.timer); nhieYT.timer = null; } }
   function nhieVideo() {
-    if (nhieYT.el) return nhieYT.el;
-    var ifr = h("iframe", { src: "https://www.youtube.com/embed/jqci-XEAbE0?start=0&end=" + NHIE_CLIP_END + "&rel=0&playsinline=1&modestbranding=1&enablejsapi=1&origin=" + encodeURIComponent(location.origin), title: "Never Have I Ever - the funny version", allow: "encrypted-media; picture-in-picture", allowfullscreen: "true", style: "width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000;" });
-    nhieYT.el = ifr;
-    setTimeout(function () {
-      nhieLoadYT(function () {
-        try {
-          nhieYT.player = new YT.Player(ifr, { events: { onStateChange: function (ev) { if (ev.data === 1) nhieWatchClock(); else nhieStopClock(); } } });
-        } catch (e) {}
-      });
-    }, 0);
-    return ifr;
+    var btn = h("button", { type: "button", "aria-label": "Play the funny version", style: "position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; cursor: pointer; background: #000 url('https://i.ytimg.com/vi/jqci-XEAbE0/hqdefault.jpg') center / cover no-repeat; padding: 0;" }, [
+      h("span", { text: "\u25B6", style: "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; font-size: 28px; line-height: 64px; text-align: center;" })
+    ]);
+    btn.addEventListener("click", nhieOpenClip);
+    return btn;
   }
 
   function nhieSection() {

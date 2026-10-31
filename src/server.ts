@@ -808,7 +808,13 @@ Bun.serve({
       // geocoding lookup being unreachable).
       const resolvedTz = await resolveTimezoneFromLocation(location);
       const tz = resolvedTz || browserTz;
-      const token = crypto.randomUUID();
+      // Re-registering with the same address (Resend confirmation) keeps the
+      // same token, so an earlier email's link keeps working instead of
+      // being cut off by the newer one.
+      const emailHash0 = await hashEmail(email);
+      const sameEmailPending =
+        cur.people && cur.people[who] && cur.people[who]!.emailHash === emailHash0 && cur.pendingConfirm && cur.pendingConfirm[who];
+      const token = sameEmailPending ? cur.pendingConfirm![who]!.token : crypto.randomUUID();
       // Keyed hash only — the address itself is never stored on the person's
       // profile, just this one-way fingerprint (see hashEmail).
       const emailHash = await hashEmail(email);
@@ -865,7 +871,11 @@ Bun.serve({
       let ok = false;
       if (isPerson(who)) {
         const cur = await loadState(roomId);
-        if (cur.pendingConfirm && cur.pendingConfirm[who] && cur.pendingConfirm[who]!.token === token) {
+        if (cur.people && cur.people[who] && cur.people[who]!.confirmed) {
+          // Already confirmed (link clicked twice, or an email app pre-opened
+          // it): that's a success, not an expired link.
+          ok = true;
+        } else if (cur.pendingConfirm && cur.pendingConfirm[who] && cur.pendingConfirm[who]!.token === token) {
           await saveState(roomId, (s) => {
             if (s.people && s.people[who]) s.people[who]!.confirmed = true;
             if (s.pendingConfirm) delete s.pendingConfirm[who];
@@ -909,7 +919,10 @@ Bun.serve({
         return json({ error: "already_registered" }, { status: 409 });
       }
       // 12 hex chars keeps the shareable link short; invites are rate-limited.
-      const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      // A resend keeps the same token, so the link in an earlier email or
+      // message never stops working just because a newer one was sent.
+      const priorInvite = cur.pendingInvite && cur.pendingInvite[other];
+      const token = priorInvite && priorInvite.token ? priorInvite.token : crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
         s.pendingInvite[other] = handle

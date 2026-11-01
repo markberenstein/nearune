@@ -369,6 +369,9 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-list { display: flex; flex-direction: column; gap: 12px; }
   .puzzle-batch-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .puzzle-batch-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .puzzle-batch-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; border: 1px solid var(--line); }
+  .puzzle-batch-head { justify-content: flex-start; }
+  .puzzle-batch-head .puzzle-batch-name { flex: 1; min-width: 0; }
   .puzzle-batch-name { font-size: 0.8rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .puzzle-batch-row input { width: 100%; box-sizing: border-box; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--ink); font: inherit; font-size: 0.82rem; outline: none; }
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
@@ -2021,7 +2024,9 @@ const RAW = String.raw`<!doctype html>
   }
 
   var puzzleGuessDraft = "";
-  var puzzleBatchItems = []; // { file, answer }
+  var puzzleBatchItems = []; // { file, answer, question, thumb }
+  var puzzleFileInputEl = null; // one persistent picker so a re-render while the photo sheet is open can't orphan it
+  var puzzleBatchRender = null; // redraws whichever batch form is currently on screen
 
   function puzzleAdvance() {
     fetch(RP + "/api/puzzle-advance", {
@@ -2037,7 +2042,7 @@ const RAW = String.raw`<!doctype html>
   function puzzleBatchForm() {
     var wrap = h("div", { class: "puzzle-setup" });
 
-    var fileInput = document.createElement("input");
+    var fileInput = puzzleFileInputEl || (puzzleFileInputEl = document.createElement("input"));
     fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.multiple = true; fileInput.style.display = "none";
     var chooseBtn = h("button", { class: "puzzle-choose-btn", text: t("Choose up to 10 photos") });
     chooseBtn.addEventListener("click", function () { fileInput.click(); });
@@ -2064,6 +2069,13 @@ const RAW = String.raw`<!doctype html>
       puzzleBatchItems.forEach(function (item, i) {
         var row = h("div", { class: "puzzle-batch-row" });
         var head = h("div", { class: "puzzle-batch-head" });
+        if (!item.thumb) { try { item.thumb = URL.createObjectURL(item.file); } catch (e) { item.thumb = ""; } }
+        if (item.thumb) {
+          var th = document.createElement("img");
+          th.className = "puzzle-batch-thumb"; th.alt = ""; th.src = item.thumb;
+          th.addEventListener("error", function () { th.style.display = "none"; });
+          head.appendChild(th);
+        }
         head.appendChild(h("span", { class: "puzzle-batch-name", text: item.file.name }));
         var rm = h("button", { class: "puzzle-batch-remove", text: "✕" });
         rm.addEventListener("click", function () { puzzleBatchItems.splice(i, 1); renderList(); refreshSubmit(); });
@@ -2083,7 +2095,8 @@ const RAW = String.raw`<!doctype html>
       });
     }
 
-    fileInput.addEventListener("change", function () {
+    puzzleBatchRender = function () { renderList(); refreshSubmit(); };
+    fileInput.onchange = function () {
       var room = 10 - puzzleBatchItems.length;
       var files = Array.prototype.slice.call(fileInput.files || [], 0, room);
       files.forEach(function (f) {
@@ -2095,7 +2108,7 @@ const RAW = String.raw`<!doctype html>
             readAndCompressImage(f, 700, 0.7, function (small) {
               fetch(RP + "/api/puzzle-place", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dataUrl: small }) })
                 .then(function (r) { return r.json(); })
-                .then(function (b) { if (b && b.place && !item.answer.trim()) { item.answer = b.place; renderList(); refreshSubmit(); } })
+                .then(function (b) { if (b && b.place && !item.answer.trim()) { item.answer = b.place; if (puzzleBatchRender) puzzleBatchRender(); } })
                 .catch(function () {});
             });
             return;
@@ -2103,16 +2116,21 @@ const RAW = String.raw`<!doctype html>
           lookupPlaceName(coords.lat, coords.lon, function (place) {
             if (place && !item.answer) {
               item.answer = place;
-              renderList();
-              refreshSubmit();
+              if (puzzleBatchRender) puzzleBatchRender();
             }
           });
         });
       });
       fileInput.value = "";
-      renderList();
-      refreshSubmit();
-    });
+      // Full re-render (the form may have been rebuilt while the photo sheet
+      // was open), then bring the new question/answer boxes into view — on a
+      // phone the form sits low on the page and they were easy to miss.
+      renderApp();
+      setTimeout(function () {
+        var firstRow = document.querySelector(".puzzle-batch-row");
+        if (firstRow && firstRow.scrollIntoView) firstRow.scrollIntoView({ block: "center", behavior: "smooth" });
+      }, 150);
+    };
 
     refreshSubmit();
     submitBtn.addEventListener("click", function () {
@@ -2474,7 +2492,7 @@ const RAW = String.raw`<!doctype html>
     if (!inBatch) {
       card.appendChild(puzzleBatchForm());
       if (state.puzzleQueueBy) {
-        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
+        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate((state.puzzleQueueTotal || 0) === 1 ? "Last loaded by {name} ({total} picture)." : "Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
       }
     } else {
       card.appendChild(puzzleZoomableGrid(puzzleImgSrc()));

@@ -1140,7 +1140,7 @@ Bun.serve({
       const sub = cur.pushSubs && cur.pushSubs[who];
       if (!anyPushConfigured || !sub || sub.kind !== "apns") return json({ ok: true, skipped: true });
       const count = unansweredCount(cur, todayKeyFor(cur));
-      sendPush(sub, { title: "Nearune", body: "", badge: count, tag: "badge-sync" })
+      sendPush(sub, { title: "", body: "", badge: count, tag: "badge-sync", silent: true })
         .then((res) => {
           if (res.gone) {
             saveState(roomId, (s) => { if (s.pushSubs) delete s.pushSubs[who]; }).catch(() => {});

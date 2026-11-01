@@ -138,5 +138,7 @@ export function drawPhrase(rel: RelationshipType | undefined, recent: string[]):
 
 export function newRound(prev: State["nhie"], rel: RelationshipType | undefined): NhieRound {
   const recent = [...(prev?.recent || []), ...(prev?.text ? [prev.text] : [])].slice(-30);
-  return { round: (prev?.round || 0) + 1, text: drawPhrase(rel, recent), votes: {}, recent };
+  const finished = !!(prev && prev.text && prev.votes && prev.votes.mark && prev.votes.nikita);
+  const history = [...(prev?.history || []), ...(finished ? [{ round: prev!.round, text: prev!.text, votes: prev!.votes }] : [])].slice(-100);
+  return { round: (prev?.round || 0) + 1, text: drawPhrase(rel, recent), votes: {}, recent, history, comments: prev?.comments || {} };
 }

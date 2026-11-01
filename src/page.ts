@@ -369,6 +369,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-list { display: flex; flex-direction: column; gap: 12px; }
   .puzzle-batch-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .puzzle-batch-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .nhie-past-row { padding: 10px 0; border-top: 1px solid var(--line); }
+  .nhie-past-title { margin: 0 0 6px; font-weight: 700; font-size: 0.9rem; }
   .puzzle-batch-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; border: 1px solid var(--line); }
   .puzzle-batch-head { justify-content: flex-start; }
   .puzzle-batch-head .puzzle-batch-name { flex: 1; min-width: 0; }
@@ -2384,6 +2386,74 @@ const RAW = String.raw`<!doctype html>
     return btn;
   }
 
+  var nhieDrafts = {};
+  var nhiePastOpen = false;
+  function nhieCommentsBlock(round) {
+    var n = state.nhie || {};
+    var wrap = h("div", { class: "comments" });
+    var list = (n.comments && n.comments[String(round)]) || [];
+    list.forEach(function (c) {
+      if (c.who !== viewerKey && isBlocked()) return;
+      var person = PEOPLE[c.who] ? { name: personName(c.who), color: PEOPLE[c.who].color } : { name: t("Someone"), color: "var(--ink-soft)" };
+      var cDiv = h("div", { class: "comment" }, [
+        h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
+        h("span", { text: c.text })
+      ]);
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
+      if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
+      wrap.appendChild(cDiv);
+    });
+    if (viewerKey) {
+      var key = String(round);
+      var form = h("div", { class: "comment-form" });
+      var input = document.createElement("input");
+      input.type = "text"; input.maxLength = 200; input.placeholder = t("Add a comment…");
+      input.value = nhieDrafts[key] || "";
+      input.addEventListener("input", function () { nhieDrafts[key] = input.value; });
+      function post() {
+        var txt = (nhieDrafts[key] || "").trim();
+        if (!txt) return;
+        nhieDrafts[key] = "";
+        api("/api/nhie-comment", { who: viewerKey, round: round, text: txt })
+          .catch(function () { nhieDrafts[key] = txt; })
+          .then(function () { renderApp(); });
+      }
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); post(); } });
+      var send = h("button", { class: "comment-send", text: t("Reply") });
+      send.addEventListener("click", post);
+      form.appendChild(input); form.appendChild(send);
+      wrap.appendChild(form);
+    }
+    return wrap;
+  }
+
+  function nhiePastRounds() {
+    var n = state.nhie || {};
+    var past = (n.history || []).slice().reverse();
+    if (!past.length) return null;
+    var det = h("details", { class: "nhie-howto" });
+    if (nhiePastOpen) det.setAttribute("open", "");
+    det.addEventListener("toggle", function () { nhiePastOpen = det.open; });
+    det.appendChild(h("summary", { text: tTemplate("Past rounds ({n})", { n: past.length }) }));
+    past.forEach(function (r) {
+      var row = h("div", { class: "nhie-past-row" });
+      row.appendChild(h("p", { class: "nhie-past-title", text: tTemplate("Round {n}", { n: r.round }) + " \u2014 " + r.text }));
+      var res = h("div", { class: "nhie-results" });
+      ["mark", "nikita"].forEach(function (key) {
+        var v = r.votes && r.votes[key];
+        res.appendChild(h("div", { class: "nhie-result" }, [
+          h("span", { class: "emo", text: v === "have" ? "\uD83E\uDD43" : "\uD83D\uDE01" }),
+          h("span", { class: "who", style: "color:" + PEOPLE[key].color, text: personName(key) }),
+          h("span", { class: "nhie-note", text: v === "have" ? t("Has done it") : t("Never has") })
+        ]));
+      });
+      row.appendChild(res);
+      row.appendChild(nhieCommentsBlock(r.round));
+      det.appendChild(row);
+    });
+    return det;
+  }
+
   function nhieSection() {
     if (isBlocked()) return blockedNote();
     var n = state.nhie;
@@ -2451,6 +2521,7 @@ const RAW = String.raw`<!doctype html>
         : haveCount === 0 ? t("Neither of you has! Big grins all round \uD83D\uDE01\uD83D\uDE01")
         : tTemplate("{name} takes a shot \uD83E\uDD43", { name: personName(votes.mark === "have" ? "mark" : "nikita") });
       card.appendChild(h("p", { class: "nhie-verdict", text: verdict }));
+      card.appendChild(nhieCommentsBlock(n.round));
       var nextBtn = h("button", { class: "mini-btn primary", text: t("Next one") });
       nextBtn.addEventListener("click", function () {
         if (nhieBusy || !viewerKey) return;
@@ -2472,6 +2543,8 @@ const RAW = String.raw`<!doctype html>
       ])
     ]);
     card.appendChild(howto);
+    var pastEl = nhiePastRounds();
+    if (pastEl) card.appendChild(pastEl);
     card.appendChild(nhieVideo());
     card.appendChild(h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: block; text-align: center; font-weight: 700; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") }));
     card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));

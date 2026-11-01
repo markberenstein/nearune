@@ -1127,6 +1127,26 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    // Never Have I Ever: a short note on a revealed round (current one once
+    // both have answered, or any past one).
+    if (req.method === "POST" && restPath === "/api/nhie-comment") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, round, text } = body || {};
+      const trimmed = typeof text === "string" ? text.trim().slice(0, 300) : "";
+      if (!isPerson(who) || !Number.isInteger(round) || round < 1 || !trimmed) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie || round > s.nhie.round) return;
+        const v = s.nhie.votes || {};
+        if (round === s.nhie.round && !(v.mark && v.nikita)) return;
+        if (!s.nhie.comments) s.nhie.comments = {};
+        const list = s.nhie.comments[String(round)] || (s.nhie.comments[String(round)] = []);
+        if (list.length >= 50) return;
+        list.push({ who, text: trimmed, at: new Date().toISOString() });
+      });
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/badge-sync") {
       // Self-heal for the native app-icon badge: the clear/set push is only
       // sent at the moment an answer lands, and if it is missed the icon

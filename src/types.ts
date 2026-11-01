@@ -128,7 +128,13 @@ export type State = {
   // person's answer ("never" = never have I, "have" = I have) and is hidden
   // from the client until both have answered (see forClient). recent keeps
   // the last phrases so a new round never repeats one.
-  nhie?: { round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">>; recent?: string[] };
+  // history = finished rounds (both answered), comments = per-round notes
+  // keyed by round number; both only shown once a round is revealed.
+  nhie?: {
+    round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">>; recent?: string[];
+    history?: { round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">> }[];
+    comments?: Record<string, { who: PersonKey; text: string; at: string }[]>;
+  };
   puzzleCurrentId?: string;
   // Server-computed on every response (not persisted) — how many pieces of
   // the current picture are unlocked, including the streak speed-up.

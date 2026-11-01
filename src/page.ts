@@ -2187,6 +2187,54 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // Setter-only: fix the current picture's question/answer (the answer is
+  // secret server-side, so it has to be typed again).
+  var puzzleEditOpen = false, puzzleEditQ = "", puzzleEditA = "", puzzleEditMsg = "", puzzleEditBusy = false;
+  function puzzleEditBlock() {
+    var box = h("div", { class: "puzzle-setup", style: "margin-top: 10px;" });
+    if (!puzzleEditOpen) {
+      var open = h("button", { type: "button", class: "switch-link", style: "background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font: inherit; color: inherit;", text: t("Edit question and answer") });
+      open.addEventListener("click", function () { puzzleEditOpen = true; puzzleEditQ = state.puzzleQuestion || ""; puzzleEditA = ""; puzzleEditMsg = ""; renderApp(); });
+      if (puzzleEditMsg) box.appendChild(h("p", { class: "puzzle-guess-note", text: puzzleEditMsg }));
+      box.appendChild(open);
+      return box;
+    }
+    var qi = document.createElement("input");
+    qi.type = "text"; qi.maxLength = 120; qi.placeholder = t("Question (required)"); qi.value = puzzleEditQ;
+    qi.addEventListener("input", function () { puzzleEditQ = qi.value; });
+    var ai = document.createElement("input");
+    ai.type = "text"; ai.maxLength = 120; ai.placeholder = t("Answer (required) — type it again"); ai.value = puzzleEditA;
+    ai.addEventListener("input", function () { puzzleEditA = ai.value; });
+    var save = h("button", { class: "puzzle-upload-btn", text: puzzleEditBusy ? t("Saving…") : t("Save") });
+    save.disabled = puzzleEditBusy;
+    save.addEventListener("click", function () {
+      var q = puzzleEditQ.trim(), a = puzzleEditA.trim();
+      if (!q || !a) { puzzleEditMsg = t("Add a question and an answer."); renderApp(); return; }
+      puzzleEditBusy = true; puzzleEditMsg = ""; renderApp();
+      fetch(RP + "/api/puzzle-edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, question: q, answer: a }) })
+        .then(function (res) { return res.json().then(function (b) { return { ok: res.ok, body: b }; }); })
+        .then(function (r) {
+          puzzleEditBusy = false;
+          if (!r.ok || (r.body && r.body.error)) {
+            var er = r.body && r.body.error;
+            puzzleEditMsg = er === "inappropriate" ? t("That question or answer can't be used here. Please change it.")
+              : er === "already_solved" ? t("This puzzle is already solved.")
+              : t("Couldn't save that — try again.");
+            renderApp();
+            return;
+          }
+          state = r.body; puzzleEditOpen = false; puzzleEditMsg = t("Saved."); renderApp();
+        })
+        .catch(function () { puzzleEditBusy = false; puzzleEditMsg = t("Couldn't save that — try again."); renderApp(); });
+    });
+    var cancel = h("button", { type: "button", class: "switch-link", style: "background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font: inherit; color: inherit;", text: t("Cancel") });
+    cancel.addEventListener("click", function () { puzzleEditOpen = false; puzzleEditMsg = ""; renderApp(); });
+    box.appendChild(qi); box.appendChild(ai);
+    if (puzzleEditMsg) box.appendChild(h("p", { class: "puzzle-guess-note", text: puzzleEditMsg }));
+    box.appendChild(h("div", { class: "puzzle-setup-row" }, [save, cancel]));
+    return box;
+  }
+
   function puzzleGuessBlock() {
     var today = dateKey(new Date());
     var guessedToday = state.puzzleLastGuessDate === today;
@@ -2198,6 +2246,7 @@ const RAW = String.raw`<!doctype html>
         wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
       }
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You set this one — waiting for {name} to guess.", { name: otherName }) }));
+      if (!state.puzzleSolved) wrap.appendChild(puzzleEditBlock());
       return wrap;
     }
     if (guessedToday) {

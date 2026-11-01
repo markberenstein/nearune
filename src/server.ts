@@ -1127,6 +1127,30 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    if (req.method === "POST" && restPath === "/api/puzzle-edit") {
+      // The person who set the current picture can fix its question/answer
+      // until it is solved. The answer stays server-side (never sent back).
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const q = typeof body?.question === "string" ? body.question.trim().slice(0, 200) : "";
+      const a = typeof body?.answer === "string" ? body.answer.trim().slice(0, 200) : "";
+      if (!isPerson(who) || !q || !a) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (!cur.puzzleCurrentId || cur.puzzleSetBy !== who) return json({ error: "not_setter" }, { status: 403 });
+      if (cur.puzzleSolved) return json({ error: "already_solved" }, { status: 409 });
+      const verdict = await moderateContent({ text: q + " " + a });
+      if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+      if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      const state = await saveState(roomId, (s) => {
+        if (s.puzzleCurrentId && s.puzzleSetBy === who && !s.puzzleSolved) {
+          s.puzzleQuestion = q;
+          s.puzzleAnswer = a;
+        }
+      });
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/puzzle-advance") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });

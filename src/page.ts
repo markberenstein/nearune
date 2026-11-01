@@ -2430,11 +2430,11 @@ const RAW = String.raw`<!doctype html>
   function nhiePastRounds() {
     var n = state.nhie || {};
     var past = (n.history || []).slice().reverse();
-    if (!past.length) return null;
     var det = h("details", { class: "nhie-howto" });
     if (nhiePastOpen) det.setAttribute("open", "");
     det.addEventListener("toggle", function () { nhiePastOpen = det.open; });
     det.appendChild(h("summary", { text: tTemplate("Past rounds ({n})", { n: past.length }) }));
+    if (!past.length) det.appendChild(h("p", { class: "nhie-note", text: t("Finished rounds will show up here, with comments you can add.") }));
     past.forEach(function (r) {
       var row = h("div", { class: "nhie-past-row" });
       row.appendChild(h("p", { class: "nhie-past-title", text: tTemplate("Round {n}", { n: r.round }) + " \u2014 " + r.text }));
@@ -2504,6 +2504,7 @@ const RAW = String.raw`<!doctype html>
         var mineIcon = mine === "have" ? "\uD83E\uDD43 " : mine ? "\uD83D\uDE01 " : "";
         card.appendChild(h("p", { class: "nhie-verdict", text: mineIcon + t("Answered! \u2705") }));
         card.appendChild(h("p", { class: "nhie-note", text: tTemplate("Waiting for {name} to answer...", { name: other ? personName(other) : "your partner" }) }));
+        card.appendChild(h("p", { class: "nhie-note", text: t("Comments open once you have both answered.") }));
       }
     } else {
       var res = h("div", { class: "nhie-results" });

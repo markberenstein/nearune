@@ -77,13 +77,13 @@ const RAW = String.raw`<!doctype html>
   body.weather-active .room-code { color: var(--weather-ink, #2B211B); }
 
   .clocks {
-    display: flex; align-items: center; justify-content: center; gap: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 14px 18px; box-shadow: 0 1px 2px var(--shadow); flex-wrap: wrap;
+    padding: 14px 10px; box-shadow: 0 1px 2px var(--shadow); flex-wrap: nowrap;
   }
-  .clock-block { text-align: center; min-width: 108px; }
-  .clock-block.clock-me { border: 2px solid #8C6FA8; border-radius: 6px; padding: 6px 10px; }
-  .clock-city { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
+  .clock-block { text-align: center; min-width: 0; flex: 0 1 auto; }
+  .clock-block.clock-me { border: 2px solid #8C6FA8; border-radius: 6px; padding: 6px 8px; }
+  .clock-city { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); white-space: nowrap; }
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }

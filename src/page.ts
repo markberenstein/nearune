@@ -2989,6 +2989,7 @@ const RAW = String.raw`<!doctype html>
     }
     var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Find your room") })]);
     card.appendChild(lost);
+    card.appendChild(h("div", { class: "switch-row" }, [h("a", { href: "/new", class: "switch-link", text: t("Open an existing room") })]));
     return card;
   }
 
@@ -5242,6 +5243,7 @@ export function buildRecoverPage(): string {
   <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
   <button id="go">Send my link</button>
   <p class="note" id="msg"></p>
+  <p class="note"><a href="/new" style="color:var(--ink-soft)">Open an existing room (paste a link, or type original)</a></p>
 </div>
 <script>
 document.getElementById("go").addEventListener("click", function () {

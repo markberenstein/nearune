@@ -2045,8 +2045,19 @@ const RAW = String.raw`<!doctype html>
     var list = h("div", { class: "puzzle-batch-list" });
     var submitBtn = h("button", { class: "puzzle-upload-btn", text: t("Load pictures") });
 
+    var needNote = h("p", { class: "puzzle-guess-note", text: t("Add a question and an answer for every photo to continue.") });
+    function batchComplete() {
+      if (!puzzleBatchItems.length) return false;
+      for (var bi = 0; bi < puzzleBatchItems.length; bi++) {
+        var it0 = puzzleBatchItems[bi];
+        if (!String(it0.question || "").trim() || !String(it0.answer || "").trim()) return false;
+      }
+      return true;
+    }
     function refreshSubmit() {
-      submitBtn.disabled = puzzleBatchItems.length === 0;
+      var ok = batchComplete();
+      submitBtn.disabled = !ok;
+      needNote.style.display = (puzzleBatchItems.length && !ok) ? "" : "none";
     }
     function renderList() {
       list.innerHTML = "";
@@ -2059,12 +2070,12 @@ const RAW = String.raw`<!doctype html>
         head.appendChild(rm);
         row.appendChild(head);
         var q = document.createElement("input");
-        q.type = "text"; q.maxLength = 120; q.placeholder = t("Question (optional — defaults to \"where is this?\")");
+        q.type = "text"; q.maxLength = 120; q.placeholder = t("Question (required) — e.g. Where is this?");
         q.value = item.question || "";
-        q.addEventListener("input", function () { item.question = q.value; });
+        q.addEventListener("input", function () { item.question = q.value; refreshSubmit(); });
         row.appendChild(q);
         var ans = document.createElement("input");
-        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer (optional — defaults to \"Somewhere special\")");
+        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer (required)");
         ans.value = item.answer;
         ans.addEventListener("input", function () { item.answer = ans.value; refreshSubmit(); });
         row.appendChild(ans);
@@ -2105,12 +2116,12 @@ const RAW = String.raw`<!doctype html>
 
     refreshSubmit();
     submitBtn.addEventListener("click", function () {
-      if (!puzzleBatchItems.length) return;
+      if (!batchComplete()) { refreshSubmit(); return; }
       submitBtn.disabled = true;
       submitBtn.textContent = "Loading…";
       Promise.all(puzzleBatchItems.map(function (it) {
         return new Promise(function (resolve) {
-          readAndCompressImage(it.file, 900, 0.82, function (dataUrl) { resolve({ dataUrl: dataUrl, answer: it.answer.trim() || "Somewhere special", question: (it.question || "").trim() }); });
+          readAndCompressImage(it.file, 900, 0.82, function (dataUrl) { resolve({ dataUrl: dataUrl, answer: it.answer.trim(), question: (it.question || "").trim() }); });
         });
       })).then(function (items) {
         return fetch(RP + "/api/puzzle-batch", {
@@ -2156,6 +2167,7 @@ const RAW = String.raw`<!doctype html>
     wrap.appendChild(chooseBtn);
     wrap.appendChild(fileInput);
     wrap.appendChild(list);
+    wrap.appendChild(needNote);
     wrap.appendChild(submitBtn);
     return wrap;
   }

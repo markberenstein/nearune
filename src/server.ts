@@ -1032,7 +1032,7 @@ Bun.serve({
         const match = typeof dataUrl === "string" ? dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
         const trimmedAnswer = typeof answer === "string" ? answer.trim().slice(0, 200) : "";
         const trimmedQuestion = typeof question === "string" ? question.trim().slice(0, 200) : "";
-        if (!match || !trimmedAnswer) return json({ error: "invalid" }, { status: 400 });
+        if (!match || !trimmedAnswer || !trimmedQuestion) return json({ error: "invalid" }, { status: 400 });
         let bytes: Uint8Array;
         try {
           bytes = Buffer.from(match[1], "base64");

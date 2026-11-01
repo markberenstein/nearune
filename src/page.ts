@@ -4848,6 +4848,13 @@ const RAW = String.raw`<!doctype html>
   // if it redirected away — callers should stop and not render/fetch.
   function redirectToMyRoom() {
     if (ROOM) return false;
+    // /?legacy=1 : deliberately return this device to the original (main) room.
+    try {
+      if (new URLSearchParams(location.search).get("legacy") === "1") {
+        localStorage.setItem(MY_ROOM_LS_KEY, "");
+        return false;
+      }
+    } catch (e) {}
     var myRoom = null;
     try { myRoom = localStorage.getItem(MY_ROOM_LS_KEY); } catch (e) {}
     if (myRoom) { location.href = "/r/" + myRoom; return true; }
@@ -5136,7 +5143,7 @@ export function buildNewRoomPage(): string {
   <p class="note" id="existing" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
   <button id="pasteInvite" type="button" style="margin-top:6px">Paste my invite</button>
   <p class="note" style="margin-top:6px">Got an invite? Copy the link from your email, then tap above. Nearune only reads the link you just copied.</p>
-  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room or invite link, or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
+  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room or invite link, or code (type original for the first room)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
   <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
   <p class="note" id="roomMsg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Find your room (email me my link)</a></p>
@@ -5145,6 +5152,11 @@ export function buildNewRoomPage(): string {
 <script>
 function routeFromText(v) {
   v = (v || "").trim();
+  if (v.toLowerCase() === "original") {
+    try { localStorage.setItem("nearuneMyRoom", ""); } catch (e) {}
+    location.href = "/";
+    return true;
+  }
   var inv = v.match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
   if (inv) { location.href = "/j/" + inv[1].toLowerCase() + "/" + inv[2]; return true; }
   var m = v.match(new RegExp("/r/([a-z0-9]{4,20})", "i")) || v.match(new RegExp("^([a-z0-9]{4,20})$", "i"));

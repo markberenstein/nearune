@@ -4493,7 +4493,21 @@ const RAW = String.raw`<!doctype html>
   // devices show, regardless of which of you has or hasn't answered. Works
   // while the app is open; the service worker handles it the rest of the
   // time via incoming pushes.
+  var lastNativeBadgeSync = 0;
+  function nativeBadgeSync() {
+    // Native app has no client-side badge API, so ask the server to push the
+    // true count to this device (rate-limited here and on the server).
+    if (!isNativeApp() || !viewerKey) return;
+    var now = Date.now();
+    if (now - lastNativeBadgeSync < 120000) return;
+    lastNativeBadgeSync = now;
+    try {
+      fetch(RP + "/api/badge-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey }) }).catch(function () {});
+    } catch (e) {}
+  }
+
   function syncAppBadge() {
+    nativeBadgeSync();
     if (!("setAppBadge" in navigator)) return;
     var today = todayKeyStr();
     var count = unansweredCountLocal(today);

@@ -1127,6 +1127,29 @@ Bun.serve({
       return json(forClient(state));
     }
 
+    if (req.method === "POST" && restPath === "/api/badge-sync") {
+      // Self-heal for the native app-icon badge: the clear/set push is only
+      // sent at the moment an answer lands, and if it is missed the icon
+      // stays wrong. The open app asks for a resend of the true count.
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      if (!rateLimit("badge-sync:" + roomId + ":" + who, 4, 10 * 60 * 1000)) return json({ ok: true, skipped: true });
+      const cur = await loadState(roomId);
+      const sub = cur.pushSubs && cur.pushSubs[who];
+      if (!anyPushConfigured || !sub || sub.kind !== "apns") return json({ ok: true, skipped: true });
+      const count = unansweredCount(cur, todayKeyFor(cur));
+      sendPush(sub, { title: "Nearune", body: "", badge: count, tag: "badge-sync" })
+        .then((res) => {
+          if (res.gone) {
+            saveState(roomId, (s) => { if (s.pushSubs) delete s.pushSubs[who]; }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+      return json({ ok: true, count });
+    }
+
     if (req.method === "POST" && restPath === "/api/puzzle-edit") {
       // The person who set the current picture can fix its question/answer
       // until it is solved. The answer stays server-side (never sent back).

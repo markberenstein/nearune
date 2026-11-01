@@ -2504,7 +2504,7 @@ const RAW = String.raw`<!doctype html>
         var mineIcon = mine === "have" ? "\uD83E\uDD43 " : mine ? "\uD83D\uDE01 " : "";
         card.appendChild(h("p", { class: "nhie-verdict", text: mineIcon + t("Answered! \u2705") }));
         card.appendChild(h("p", { class: "nhie-note", text: tTemplate("Waiting for {name} to answer...", { name: other ? personName(other) : "your partner" }) }));
-        card.appendChild(h("p", { class: "nhie-note", text: t("Comments open once you have both answered.") }));
+        card.appendChild(nhieCommentsBlock(n.round));
       }
     } else {
       var res = h("div", { class: "nhie-results" });

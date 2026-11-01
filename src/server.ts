@@ -1138,7 +1138,7 @@ Bun.serve({
       const state = await saveState(roomId, (s) => {
         if (!s.nhie || round > s.nhie.round) return;
         const v = s.nhie.votes || {};
-        if (round === s.nhie.round && !(v.mark && v.nikita)) return;
+        if (round === s.nhie.round && !v[who as PersonKey]) return;
         if (!s.nhie.comments) s.nhie.comments = {};
         const list = s.nhie.comments[String(round)] || (s.nhie.comments[String(round)] = []);
         if (list.length >= 50) return;

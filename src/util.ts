@@ -378,12 +378,9 @@ export function forClient(state: State): State {
   if (state.nhie) {
     const v = state.nhie.votes || {};
     const both = !!(v.mark && v.nikita);
-    // Comments on the current round stay hidden until it is revealed too.
-    const allComments = state.nhie.comments || {};
-    const comments: Record<string, any> = {};
-    for (const k of Object.keys(allComments)) {
-      if (Number(k) < state.nhie.round || both) comments[k] = allComments[k];
-    }
+    // Comments are open as soon as someone has answered; the page only shows
+    // the current round's comments to a person once they have answered too.
+    const comments: Record<string, any> = state.nhie.comments || {};
     nhieOut = { round: state.nhie.round, text: state.nhie.text, voted: { mark: !!v.mark, nikita: !!v.nikita }, votes: both ? v : {}, history: state.nhie.history || [], comments };
   }
   const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut } as any as State;

@@ -147,6 +147,7 @@ async function pickQuirkiest(place: string, headlines: string[], strict = true):
         system:
           "You pick one news headline for two people who live far apart to smile over together. " +
           "Choose the headline that is funniest: absurd, deadpan, delightfully odd or a charming local mishap, with a wink of humor. Prefer humor over merely sweet; heartwarming is the tiebreaker. It must be about something that actually happened near " + place + ". " +
+          "It must be in " + place + " itself: if the headline or the outlet suggests a different city with the same name (for example Fremont, Washington versus Fremont, California) or a city far from " + place + ", do not choose it, and if you cannot tell where it happened, prefer a different headline. " +
           "It must be lighthearted and safe: no death, injury, crime, politics, disasters, ads, listicles, sports results or weather alerts. " +
           (strict
             ? "Reply with only the number of the best headline, or NONE if none is genuinely fun."
@@ -295,6 +296,9 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   let value: LocalStory = null;
   const idx = THEMES.findIndex((t) => t.name === theme.name);
   const city = q.split(",")[0].trim() || q;
+  // Keep the state/region with the city so "Fremont, CA" never matches Fremont, WA.
+  const region = q.split(",").slice(1).join(" ").trim();
+  const cityRegion = region ? city + " " + region : city;
   // Tiers, strictest first, so every place still gets a story most days:
   // today's theme, a second theme, then looser "quirky" searches that go back
   // a month and use just the city name (a long "City, State, Country" label
@@ -303,8 +307,8 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   const tiers: { query: string; strict: boolean }[] = [
     { query: q + " " + theme.terms + " " + EXCLUDE_TERMS + " when:14d", strict: true },
     { query: q + " " + THEMES[(idx + 3) % THEMES.length].terms + " " + EXCLUDE_TERMS + " when:14d", strict: true },
-    { query: city + " (viral OR quirky OR unusual OR funny OR bizarre OR heartwarming OR adorable) " + EXCLUDE_TERMS + " when:30d", strict: false },
-    { query: city + " (festival OR tradition OR \"local favorite\" OR \"first-ever\" OR unveils OR celebrates) " + EXCLUDE_TERMS + " when:30d", strict: false },
+    { query: cityRegion + " (viral OR quirky OR unusual OR funny OR bizarre OR heartwarming OR adorable) " + EXCLUDE_TERMS + " when:30d", strict: false },
+    { query: cityRegion + " (festival OR tradition OR \"local favorite\" OR \"first-ever\" OR unveils OR celebrates) " + EXCLUDE_TERMS + " when:30d", strict: false },
   ];
   for (const tier of tiers) {
     const cands = (await fetchCandidates(tier.query))
@@ -315,7 +319,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
       let pick: number | null;
       if (!Bun.env.ANTHROPIC_API_KEY) pick = 0; // No Claude key: take the first candidate.
-      else pick = await pickQuirkiest(q, pool.map((c) => c.headline), tier.strict);
+      else pick = await pickQuirkiest(q, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), tier.strict);
       if (pick === null) break; // Claude said NONE: move to the next tier.
       const cand = pool[pick];
       const access = await checkArticleAccess(cand.url);

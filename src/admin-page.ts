@@ -25,7 +25,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
   const rows = rooms
     .map((r) => {
       const label = r.roomId ? adminEsc(r.roomId) : "(main room)";
-      const created = r.createdAt ? adminEsc(new Date(r.createdAt).toLocaleString("en-US")) : "<span class=\"muted\">unknown</span>";
+      const created = r.createdAt ? "<span class=\"local-time\" data-ts=\"" + adminEsc(r.createdAt) + "\">" + adminEsc(new Date(r.createdAt).toLocaleString("en-US")) + " UTC</span>" : "<span class=\"muted\">unknown</span>";
       const people =
         r.people.length === 0
           ? "<span class=\"muted\">no one registered</span>"
@@ -59,7 +59,14 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin — Nearune</title>
+<title>Nearune Admin</title>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest?${secretQS}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Nearune Admin">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FBF3EC">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
   :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
@@ -84,19 +91,44 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
     .pill-active { background:#1E3A1B; color:#8FD98A; }
     .pill-joined { background:#3A2E12; color:#E8B75A; }
   }
+  .head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .refresh-btn { background:var(--surface); color:var(--accent); border:1px solid var(--line); border-radius:999px; padding:8px 16px; font-family:inherit; font-size:0.85rem; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .refresh-btn:active { opacity:0.6; }
+  .updated { color:var(--ink-soft); font-size:0.75rem; margin:-16px 0 16px; }
+  .tblwrap { overflow-x:auto; border-radius:12px; }
   .del-btn { background:none; border:1px solid var(--line); color:#B3442F; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Rooms</h1>
+  <div class="head">
+    <h1>Rooms</h1>
+    <button type="button" class="refresh-btn" id="refresh-btn">&#8635; Refresh</button>
+  </div>
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>
-  <table>
+  <p class="updated" id="updated"></p>
+  <div class="tblwrap"><table>
     <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
-  </table>
+  </table></div>
 </div>
+<script>
+  (function () {
+    document.getElementById("refresh-btn").addEventListener("click", function () {
+      this.textContent = "Refreshing\u2026";
+      location.reload();
+    });
+    var u = document.getElementById("updated");
+    if (u) u.textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    // Show creation times in this device's own time zone.
+    var els = document.querySelectorAll(".local-time");
+    for (var i = 0; i < els.length; i++) {
+      var d = new Date(els[i].getAttribute("data-ts"));
+      if (!isNaN(d.getTime())) els[i].textContent = d.toLocaleString([], { month: "numeric", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+  })();
+</script>
 </body>
 </html>`;
 }

@@ -10,6 +10,7 @@
 import { listRoomIds, loadState, deleteRoom, removeFromEmailIndex } from "../../src/storage";
 import { buildAdminPage, type AdminRoomSummary } from "../../src/admin-page";
 import type { PersonKey } from "../../src/types";
+import { ICON_180_B64, ICON_512_B64 } from "./icon";
 
 const PORT = Number(Bun.env.PORT) || 3000;
 const ADMIN_SECRET = Bun.env.ADMIN_SECRET || "";
@@ -26,6 +27,31 @@ Bun.serve({
 
     if (req.method === "GET" && url.pathname === "/healthz") {
       return new Response("ok");
+    }
+
+    // Home-screen install support. The icon is public (it has to load without
+    // the secret); the manifest carries the secret in its start_url, so it is
+    // gated like the page itself.
+    if (req.method === "GET" && (url.pathname === "/apple-touch-icon.png" || url.pathname === "/icon-512.png")) {
+      const b64 = url.pathname === "/icon-512.png" ? ICON_512_B64 : ICON_180_B64;
+      return new Response(Buffer.from(b64, "base64"), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+    }
+    if (req.method === "GET" && url.pathname === "/manifest.webmanifest") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      const start = "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "");
+      return new Response(JSON.stringify({
+        name: "Nearune Admin",
+        short_name: "Nearune Admin",
+        start_url: start,
+        scope: "/",
+        display: "standalone",
+        background_color: "#FBF3EC",
+        theme_color: "#FBF3EC",
+        icons: [
+          { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      }), { headers: { "content-type": "application/manifest+json", "cache-control": "no-store" } });
     }
 
     if (req.method === "GET" && url.pathname === "/") {

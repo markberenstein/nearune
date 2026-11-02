@@ -64,7 +64,7 @@ Bun.serve({
           const people = (["mark", "nikita"] as PersonKey[])
             .map((k) => state.people?.[k])
             .filter((p): p is NonNullable<typeof p> => !!p)
-            .map((p) => ({ name: p.name, confirmed: p.confirmed }));
+            .map((p) => ({ name: p.name, confirmed: p.confirmed, location: p.location || "" }));
           const answerKeys = Object.keys(state.answers).sort();
           const lastActive = answerKeys.length > 0 ? answerKeys[answerKeys.length - 1] : null;
           const pushCount = (["mark", "nikita"] as PersonKey[]).filter((k) => !!state.pushSubs?.[k]).length;
@@ -72,6 +72,7 @@ Bun.serve({
             roomId: id,
             createdAt: state.createdAt || null,
             people,
+            via: state.createdVia || null,
             lastActive,
             daysAnswered: answerKeys.length,
             pushCount,

@@ -85,10 +85,39 @@ function parseRoom(pathname: string): { roomId: string; restPath: string } {
   return { roomId: "", restPath: pathname };
 }
 
+// Sign-up trouble log. Any failed (4xx/5xx) call on the create / register /
+// invite / accept steps is written as one line with the room, step, status,
+// the error code, and the coarse device + language — never names, emails,
+// locations or other request content. Lets us see where a visitor stalled.
+const SIGNUP_PATHS = new Set(["/api/create-room", "/api/register", "/api/invite", "/api/accept-invite", "/api/confirm", "/api/geo"]);
+function logSignupFailure(req: Request, pathname: string, res: Response): void {
+  try {
+    const { roomId, restPath } = parseRoom(pathname);
+    const step = pathname === "/api/create-room" ? pathname : restPath;
+    if (!SIGNUP_PATHS.has(step) || res.status < 400) return;
+    const ua = req.headers.get("user-agent") || "";
+    const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "other";
+    const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+    const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
+    res.clone().json().then((b: any) => {
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " error=" + ((b && b.error) || "?") + " via=" + device + " " + kind + " " + lang);
+    }).catch(() => {
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " via=" + device + " " + kind + " " + lang);
+    });
+  } catch {}
+}
+
 Bun.serve({
   port: PORT,
   idleTimeout: 60,
   async fetch(req, server) {
+    const res = await handleRequest(req, server);
+    logSignupFailure(req, new URL(req.url).pathname, res);
+    return res;
+  },
+});
+
+async function handleRequest(req: Request, server: any): Promise<Response> {
     const url = new URL(req.url);
     // Behind Railway's proxy req.url is plain http; links we hand out (invite,
     // confirm, etc.) must use the public https origin instead.
@@ -1613,8 +1642,7 @@ Bun.serve({
     }
 
     return new Response("Not found", { status: 404 });
-  },
-});
+}
 
 console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
 ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));

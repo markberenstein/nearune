@@ -46,6 +46,19 @@ const regToday = { day: "", n: 0 };
 function pacificDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
+// Slack heads-up at every 10th new room of the day (10, 20, ... 100). Needs a
+// Slack "Incoming Webhook" URL in SLACK_WEBHOOK_URL; without one this does
+// nothing. Fire-and-forget so it can never slow down or break room creation.
+function notifyRoomMilestone(n: number): void {
+  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  if (!hook || n < 10 || n % 10 !== 0) return;
+  const cap = parseInt(Bun.env.REGISTRATION_DAILY_CAP || "50", 10) || 50;
+  const text = ":tada: Nearune: " + n + " new rooms created today (" + pacificDay(new Date()) + ")." + (n >= cap ? " Daily cap of " + cap + " reached \u2014 new rooms are paused until tomorrow." : "");
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] milestone post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] milestone post error", e));
+}
+
 async function roomsCreatedToday(): Promise<number> {
   const day = pacificDay(new Date());
   if (regToday.day !== day) {
@@ -148,6 +161,7 @@ Bun.serve({
       const id = await createRoom(useName, via);
       regToday.n++;
       console.log("[room-created] " + id + " via " + via);
+      notifyRoomMilestone(regToday.n);
       return json({ roomId: id });
     }
 
@@ -917,9 +931,12 @@ Bun.serve({
       const contact =
         typeof body?.contact === "string" ? body.contact.trim().slice(0, 200)
         : typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
-      const email = isValidEmail(contact) ? contact : "";
-      const handle = email ? null : normalizeInstagramHandle(contact);
-      if (!isPerson(who) || (!email && !handle)) {
+      // via === "link": no email or handle — just hand back a link (with the
+      // room code) for the inviter to send by text, WhatsApp, etc.
+      const viaLink = body && body.via === "link";
+      const email = viaLink ? "" : isValidEmail(contact) ? contact : "";
+      const handle = viaLink || email ? null : normalizeInstagramHandle(contact);
+      if (!isPerson(who) || (!viaLink && !email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
       if (!rateLimit("invite-ip:" + clientIp(req, server), 10, HOUR) || (email && !rateLimit("invite-email:" + email.toLowerCase(), 3, HOUR))) {
@@ -942,11 +959,16 @@ Bun.serve({
         if (!s.pendingInvite) s.pendingInvite = {};
         s.pendingInvite[other] = handle
           ? { token, at: new Date().toISOString(), instagram: handle }
-          : { token, at: new Date().toISOString() };
+          : viaLink
+            ? { token, at: new Date().toISOString(), link: true }
+            : { token, at: new Date().toISOString() };
       });
       const inviteUrl = roomId
         ? publicOrigin + "/j/" + roomId + "/" + token
         : publicOrigin + roomPrefix + "/?invite=" + other + "&token=" + token;
+      if (viaLink) {
+        return json({ ...forClient(state), _viaHandle: true, _viaLink: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
+      }
       if (handle) {
         // Nothing to email — the link goes back to this browser and the
         // inviter sends it themselves (e.g. as an Instagram DM).
@@ -959,6 +981,7 @@ Bun.serve({
         "<p>" + inviterName + " invited you to Nearune.</p>" +
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
           "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
+          (roomId ? "<p style=\"font-size:15px\">Your room code: <b>" + roomId + "</b><br><span style=\"font-size:14px\">If the link doesn't open the app, open Nearune, tap <b>Open an existing room</b> and enter this code.</span></p>" : "") +
           (Bun.env.APP_STORE_URL
             ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
               "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
@@ -1544,6 +1567,23 @@ Bun.serve({
         },
       };
       return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
+    }
+
+    // The Never Have I Ever how-to clip. iOS needs Range support to play video.
+    if (req.method === "GET" && url.pathname === "/nhie-howto.mp4") {
+      const f = Bun.file(import.meta.dir + "/nhie-howto.mp4");
+      if (!(await f.exists())) return new Response("Not found", { status: 404 });
+      const size = f.size;
+      const base = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=86400" };
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") || "");
+      if (m && (m[1] || m[2])) {
+        let start = m[1] ? parseInt(m[1], 10) : Math.max(0, size - parseInt(m[2], 10));
+        let end = m[1] && m[2] ? parseInt(m[2], 10) : size - 1;
+        if (end >= size) end = size - 1;
+        if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size } });
+        return new Response(f.slice(start, end + 1), { status: 206, headers: { ...base, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
+      }
+      return new Response(f, { headers: { ...base, "content-length": String(size) } });
     }
 
     if (req.method === "GET" && url.pathname === "/app-store-badge.png") {

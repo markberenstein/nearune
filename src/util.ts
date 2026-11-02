@@ -363,11 +363,13 @@ export function forClient(state: State): State {
   // When each pending invite was sent (a timestamp, not a secret) — lets the
   // client nudge the inviter after a couple of days with no sign-up.
   const piAt: Record<string, string> = {};
+  const piLink: Record<string, boolean> = {};
   if (pendingInvite) {
     for (const k of Object.keys(pendingInvite)) {
       pi[k] = true;
       if (pendingInvite[k] && pendingInvite[k].at) piAt[k] = pendingInvite[k].at;
       if (pendingInvite[k] && pendingInvite[k].instagram) piHandle[k] = pendingInvite[k].instagram;
+      if (pendingInvite[k] && pendingInvite[k].link) piLink[k] = true;
     }
   }
   // Computed fresh on every response — the client displays this number
@@ -383,7 +385,7 @@ export function forClient(state: State): State {
     const comments: Record<string, any> = state.nhie.comments || {};
     nhieOut = { round: state.nhie.round, text: state.nhie.text, voted: { mark: !!v.mark, nikita: !!v.nikita }, votes: both ? v : {}, history: state.nhie.history || [], comments };
   }
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut } as any as State;
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteLink: piLink, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut } as any as State;
   if (withFlags.people) {
     const strippedPeople: any = {};
     for (const k of Object.keys(withFlags.people)) {

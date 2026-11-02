@@ -2318,65 +2318,35 @@ const RAW = String.raw`<!doctype html>
   var nhieMyChoice = {};
   var nhieBusy = false;
   var nhieStarted = false;
-  // Never Have I Ever how-to clip: YouTube's own player, capped at 12 seconds.
-  // The app re-renders (and wipes) its whole page every few seconds, which
-  // would restart an inline video, so the player lives in a full-screen
-  // overlay attached to the page body instead, outside what gets re-rendered.
-  // The embed "end" setting is ignored by some iOS web views, so the player
-  // API watches the clock and closes the overlay at the cap as well.
-  var NHIE_CLIP_END = 12;
-  var nhieYT = { player: null, timer: null, loading: false };
-  function nhieLoadYT(cb) {
-    if (window.YT && window.YT.Player) { cb(); return; }
-    var prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = function () { if (typeof prev === "function") { try { prev(); } catch (e) {} } cb(); };
-    if (!nhieYT.loading) {
-      nhieYT.loading = true;
-      var sc = document.createElement("script");
-      sc.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(sc);
-    }
-  }
+  // Never Have I Ever how-to clip: the full ~1 minute video, served from our
+  // own server (/nhie-howto.mp4). The app re-renders (and wipes) its whole
+  // page every few seconds, which would restart an inline video, so the
+  // player lives in a full-screen overlay attached to the page body instead,
+  // outside what gets re-rendered.
   function nhieOpenClip() {
     if (document.getElementById("nhie-clip-modal")) return;
     var ov = document.createElement("div");
     ov.id = "nhie-clip-modal";
     ov.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; gap: 16px;";
-    var ifr = document.createElement("iframe");
-    ifr.src = "https://www.youtube.com/embed/jqci-XEAbE0?start=0&end=" + NHIE_CLIP_END + "&autoplay=1&rel=0&playsinline=1&modestbranding=1&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
-    ifr.title = "Never Have I Ever - the funny version";
-    ifr.allow = "autoplay; encrypted-media; picture-in-picture";
-    ifr.style.cssText = "width: 100%; max-width: 560px; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000;";
+    var vid = document.createElement("video");
+    vid.src = "/nhie-howto.mp4";
+    vid.controls = true; vid.autoplay = true; vid.playsInline = true;
+    vid.setAttribute("playsinline", ""); vid.setAttribute("webkit-playsinline", "");
+    vid.style.cssText = "max-width: 100%; max-height: 78vh; border-radius: 12px; background: #000;";
     var closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.textContent = t("Close");
     closeBtn.style.cssText = "border: 0; border-radius: 999px; padding: 12px 28px; font: inherit; font-weight: 700; background: #fff; color: #2B211B; cursor: pointer;";
     function shut() {
-      if (nhieYT.timer) { clearInterval(nhieYT.timer); nhieYT.timer = null; }
-      try { if (nhieYT.player && nhieYT.player.destroy) nhieYT.player.destroy(); } catch (e) {}
-      nhieYT.player = null;
+      try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch (e) {}
       if (ov.parentNode) ov.parentNode.removeChild(ov);
     }
     closeBtn.addEventListener("click", shut);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
-    ov.appendChild(ifr);
+    ov.appendChild(vid);
     ov.appendChild(closeBtn);
     document.body.appendChild(ov);
-    nhieLoadYT(function () {
-      if (!document.getElementById("nhie-clip-modal")) return;
-      try {
-        nhieYT.player = new YT.Player(ifr, { events: {
-          onReady: function () { try { nhieYT.player.playVideo(); } catch (e) {} },
-          onStateChange: function (ev) {
-            if (ev.data === 1 && !nhieYT.timer) {
-              nhieYT.timer = setInterval(function () {
-                try { if (nhieYT.player.getCurrentTime() >= NHIE_CLIP_END) shut(); } catch (e) {}
-              }, 200);
-            }
-          }
-        } });
-      } catch (e) {}
-    });
+    try { var pr = vid.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) {}
   }
   function nhieVideo() {
     var btn = h("button", { type: "button", "aria-label": "Play the funny version", style: "position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; cursor: pointer; background: #000 url('https://i.ytimg.com/vi/jqci-XEAbE0/hqdefault.jpg') center / cover no-repeat; padding: 0;" }, [
@@ -3177,13 +3147,51 @@ const RAW = String.raw`<!doctype html>
       .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
 
+  function inviteStoreUrl() {
+    if (lastAppStoreUrl) return lastAppStoreUrl;
+    return APP_STORE_URL && !/^__APP/.test(APP_STORE_URL) ? APP_STORE_URL : "";
+  }
+  // The text a person sends: app link, invite link, and the room code so the
+  // partner can still get in by typing it if the link gets lost.
+  function inviteMessage(url) {
+    var store = inviteStoreUrl();
+    var lines = [t("Join me on Nearune!")];
+    if (store) lines.push("1. " + t("Get the app:") + " " + store);
+    lines.push((store ? "2. " : "") + t("Open this link:") + " " + url);
+    if (ROOM) lines.push(t("Or open the app, tap Open an existing room, and enter the room code:") + " " + ROOM);
+    lines.push(t("No iPhone? Use it in your browser at nearune.ai"));
+    return lines.join("\n");
+  }
+  function submitInviteLink() {
+    regBusy = true; regError = ""; renderApp();
+    fetch(RP + "/api/invite", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, via: "link" })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        regBusy = false;
+        if (!res.ok) {
+          regError = res.data && res.data.error === "rate_limited"
+            ? t("Too many attempts — wait a bit and try again.")
+            : t("Couldn't get an invite link — try again.");
+          renderApp(); return;
+        }
+        lastInviteUrl = res.data._inviteUrl || "";
+        lastAppStoreUrl = res.data._appStoreUrl || "";
+        state = res.data;
+        showInviteForm = false;
+        regError = "";
+        renderApp();
+      })
+      .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
+  }
+
   function copyLinkButton(url, label, cls) {
     var labelText = label || t("Copy invite link");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     if (!cls) btn.style.cssText = "color: var(--ink); font-size: 0.9rem; padding: 6px;";
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
-      var copyText = lastAppStoreUrl && url === lastInviteUrl ? "Join me on Nearune. Get the app: " + lastAppStoreUrl + "\nThen open this link: " + url + "\nNo iPhone app? Use it in your browser at nearune.ai" : url;
+      var copyText = url === lastInviteUrl ? inviteMessage(url) : url;
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
@@ -3198,13 +3206,12 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       if (navigator.share) {
-        var shareObj = { title: "Nearune", url: url };
-        if (lastAppStoreUrl) shareObj.text = "Join me on Nearune. Get the app: " + lastAppStoreUrl + " — then open this link (or use it in your browser at nearune.ai):";
+        var shareObj = url === lastInviteUrl ? { title: "Nearune", text: inviteMessage(url) } : { title: "Nearune", url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
-        window.prompt(t("Copy this link:"), url);
+        window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
     });
     return btn;
@@ -3212,14 +3219,15 @@ const RAW = String.raw`<!doctype html>
 
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
-    var pendingHandle = state.pendingInviteHandle && state.pendingInviteHandle[otherKey];
+    var pendingLink = !!(state.pendingInviteLink && state.pendingInviteLink[otherKey]);
+    var pendingHandle = (state.pendingInviteHandle && state.pendingInviteHandle[otherKey]) || (pendingLink ? "link" : "");
     var otherLabel = inviteeLabel(otherKey);
     var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: otherLabel }) })])]);
     if (pending && !showInviteForm) {
       if (pendingHandle) {
         // Instagram-handle invite: nothing was sent anywhere — the link is
         // the invite, and the inviter delivers it themselves.
-        card.appendChild(h("p", { class: "question", text: tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
+        card.appendChild(h("p", { class: "question", text: pendingLink ? tTemplate("Send {name} this link by text, WhatsApp or any app.", { name: otherLabel }) : tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
         if (!lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Tap below to get a fresh link to send.") }));
         if (lastInviteUrl) {
           // Show the link itself, with real buttons and a next-step hint.
@@ -3228,14 +3236,19 @@ const RAW = String.raw`<!doctype html>
             shareLinkButton(lastInviteUrl, t("Share link"), "puzzle-upload-btn"),
             copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
           ]));
-          card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Paste it into an Instagram message to {name}. They tap it and set up their side.", { name: "@" + pendingHandle }) }));
+          card.appendChild(h("p", { class: "puzzle-guess-note", text: pendingLink ? capFirst(tTemplate("{name} taps the link and sets up their side.", { name: otherLabel })) : tTemplate("Paste it into an Instagram message to {name}. They tap it and set up their side.", { name: "@" + pendingHandle }) }));
         }
+        if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: t("Room code:") + " " + ROOM }));
       } else {
         card.appendChild(h("p", { class: "question", text: tTemplate("Invite emailed — waiting for {name} to accept.", { name: otherLabel }) }));
         var invSentTo = sentInviteEmail();
         if (invSentTo) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: invSentTo }) }));
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
         if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
+        if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: t("Room code:") + " " + ROOM }));
+        var textInstead = h("button", { class: "puzzle-choose-btn", style: "margin-top: 6px;", text: t("Send by text instead") });
+        textInstead.addEventListener("click", submitInviteLink);
+        card.appendChild(textInstead);
       }
       // After two days with no sign-up, nudge the inviter to send the link
       // themselves (text, Instagram or email) — emails can sit in spam.
@@ -3251,7 +3264,7 @@ const RAW = String.raw`<!doctype html>
       // is gone (e.g. after a reload), since that's the only way to get it back.
       if (!(pendingHandle && lastInviteUrl)) {
         var again = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
-        again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
+        again.addEventListener("click", function () { if (pendingLink) { submitInviteLink(); return; } showInviteForm = true; renderApp(); });
         row.push(again);
       }
       if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
@@ -3275,6 +3288,11 @@ const RAW = String.raw`<!doctype html>
       btn.disabled = regBusy;
       btn.addEventListener("click", submitInvite);
       form.appendChild(btn);
+      var textBtn = h("button", { class: "puzzle-choose-btn", style: "margin-top: 8px;", text: t("Or send a link by text") });
+      textBtn.disabled = regBusy;
+      textBtn.addEventListener("click", submitInviteLink);
+      form.appendChild(textBtn);
+      if (ROOM) form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Room code:") + " " + ROOM }));
       card.appendChild(form);
       // Escape hatches so nobody feels stuck on this screen.
       card.appendChild(h("div", { class: "switch-row", style: "margin-top: 10px;" }, [

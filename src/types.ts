@@ -108,11 +108,13 @@ export type State = {
   comments: Record<string, Comment[]>;
   people?: Partial<Record<PersonKey, PersonProfile>>;
   pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string }>>;
-  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string }>>;
+  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string; link?: boolean }>>;
   // Server-computed on every response (never persisted, see forClient) —
   // the Instagram handle an invite was addressed to, if it went to a handle
   // rather than an email.
   pendingInviteHandle?: Partial<Record<PersonKey, string>>;
+  // true when the invite was made as a plain link to send by text/WhatsApp/etc.
+  pendingInviteLink?: Partial<Record<PersonKey, boolean>>;
   // Server-computed on every response (not persisted) — ISO time each
   // pending invite was sent, for the "still waiting" nudge.
   pendingInviteAt?: Partial<Record<PersonKey, string>>;

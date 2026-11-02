@@ -5,7 +5,9 @@
 export type AdminRoomSummary = {
   roomId: string;
   createdAt: string | null;
-  people: { name: string; confirmed: boolean }[];
+  people: { name: string; confirmed: boolean; location?: string }[];
+  // Device, app-or-web and language the room was created from (no IP kept).
+  via?: string | null;
   lastActive: string | null;
   daysAnswered: number;
   pushCount: number;
@@ -30,6 +32,12 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
         r.people.length === 0
           ? "<span class=\"muted\">no one registered</span>"
           : r.people.map((p) => adminEsc(p.name) + (p.confirmed ? "" : " <span class=\"muted\">(pending)</span>")).join(", ");
+      // Where: each registered person's own location, plus how the room was
+      // created (device and language) — the only origin hints that are kept.
+      const locs = r.people.filter((p) => p.location).map((p) => adminEsc(p.name) + ": " + adminEsc(p.location || ""));
+      const where =
+        (locs.length ? locs.join("<br>") : "<span class=\"muted\">no location yet</span>") +
+        (r.via ? "<br><span class=\"muted\">via " + adminEsc(r.via) + "</span>" : "");
       const active = r.lastActive ? adminEsc(r.lastActive) : "<span class=\"muted\">no answers yet</span>";
       const status = r.daysAnswered > 0 ? "active" : r.people.length > 0 ? "joined" : "empty";
       // The legacy "main room" (empty roomId) has no delete control here —
@@ -46,6 +54,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
         <td><span class="pill pill-${status}">${status}</span></td>
         <td>${created}</td>
         <td>${people}</td>
+        <td class="where">${where}</td>
         <td>${active}</td>
         <td>${r.daysAnswered}</td>
         <td>${r.pushCount}</td>
@@ -95,6 +104,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
   .refresh-btn { background:var(--surface); color:var(--accent); border:1px solid var(--line); border-radius:999px; padding:8px 16px; font-family:inherit; font-size:0.85rem; font-weight:700; cursor:pointer; white-space:nowrap; }
   .refresh-btn:active { opacity:0.6; }
   .updated { color:var(--ink-soft); font-size:0.75rem; margin:-16px 0 16px; }
+  td.where { min-width:150px; }
   .tblwrap { overflow-x:auto; border-radius:12px; }
   .del-btn { background:none; border:1px solid var(--line); color:#B3442F; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
@@ -109,7 +119,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>
   <p class="updated" id="updated"></p>
   <div class="tblwrap"><table>
-    <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
+    <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Where</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>
 </div>

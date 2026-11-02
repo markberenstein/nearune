@@ -35,6 +35,7 @@ import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEm
 import { APP_STORE_BADGE_B64 } from "./badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
+import { buildGetPage } from "./get-page";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
@@ -186,6 +187,12 @@ Bun.serve({
         );
       }
       return json(generic);
+    }
+
+    if (req.method === "GET" && (url.pathname === "/get" || url.pathname === "/get/")) {
+      return new Response(buildGetPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
     }
 
     if (req.method === "GET" && url.pathname === "/privacy") {

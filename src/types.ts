@@ -107,6 +107,9 @@ export type State = {
   // type, app vs web, browser language) — no IP address. Shown in the logs.
   createdVia?: string;
   relationship?: RelationshipType;
+  // The room name the first person typed, in any language (shown as the
+  // room's title). The room code/link is built separately from a-z/0-9.
+  roomName?: string;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
   status: Partial<Record<PersonKey, { text: string; at: string }>>;
   comments: Record<string, Comment[]>;

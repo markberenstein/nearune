@@ -187,7 +187,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
       const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
       const via = device + " " + kind + " " + lang;
-      const id = await createRoom(useName, via);
+      const id = await createRoom(useName, via, useName || undefined);
       regToday.n++;
       console.log("[room-created] " + id + " via " + via);
       notifyRoomMilestone(regToday.n);

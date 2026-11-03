@@ -3379,6 +3379,8 @@ const RAW = String.raw`<!doctype html>
     var count = 0;
     var cursor = answered(today) ? today : keyOffsetDays(today, -1);
     while (answered(cursor)) { count++; cursor = keyOffsetDays(cursor, -1); }
+    // Hidden until there's a real streak (2+ days); empty dots are noise.
+    if (count < 2) return null;
     var dots = h("div", { class: "streak-dots" });
     for (var i = 6; i >= 0; i--) dots.appendChild(h("span", { class: "streak-dot" + (answered(keyOffsetDays(today, -i)) ? " filled" : "") }));
     var label = count === 0 ? t("Answer today to start your streak.") : t("You've shown up");
@@ -3407,6 +3409,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Their answer shows in your language, and you can hear it read aloud, in their own voice once they record a sample.") }));
     return card;
   }
+  var soloFeedOpen = false;
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
@@ -3421,27 +3424,28 @@ const RAW = String.raw`<!doctype html>
     // only lets confirmed people send invites).
     if (!confirmed) app.appendChild(registrationFlow());
     else {
-      app.appendChild(inviteFlow(otherKey));
-      app.appendChild(h("div", { class: "card" }, [
-        h("div", { class: "eyebrow" }, [h("span", { text: t("More when they join") })]),
-        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 6px;", text: t("Local Feel: their weather, top songs and a funny local story, from where they are.") }),
-        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 6px;", text: t("Puzzle: a shared picture you unlock together, one piece each day you both answer.") }),
-        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0;", text: t("Never Have I Ever: a quick game for two.") })
-      ]));
+      var invCard = inviteFlow(otherKey);
+      invCard.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 12px 0 0;", text: t("When they join: Local Feel from their city, a shared Puzzle, and Never Have I Ever.") }));
+      app.appendChild(invCard);
     }
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {
       app.appendChild(soloQuestionCard(otherKey));
-      app.appendChild(soloStreakCard());
-      app.appendChild(sampleAnswerCard());
+      var streak = soloStreakCard();
+      if (streak) app.appendChild(streak);
+      // The example only helps until they've answered once themselves.
+      var everAnswered = Object.keys(state.answers || {}).some(function (k) { var a = state.answers[k]; return !!(a && a[viewerKey] && a[viewerKey].text); });
+      if (!everAnswered) app.appendChild(sampleAnswerCard());
     }
-    var newsBlock = newsLineBlock();
-    if (newsBlock) app.appendChild(newsBlock);
-    var musicBlock = musicLineBlock();
-    if (musicBlock) app.appendChild(musicBlock);
-    var moviesBlock = moviesLineBlock();
-    if (moviesBlock) app.appendChild(moviesBlock);
+    // Local Feel collapsed to one line while solo; tap to open.
+    var feedBlocks = [newsLineBlock(), musicLineBlock(), moviesLineBlock()].filter(Boolean);
+    if (feedBlocks.length) {
+      var feedToggle = h("button", { class: "journal-toggle" + (soloFeedOpen ? " open" : ""), html: '<span class="chevron">›</span><span>' + t(soloFeedOpen ? "Hide your city" : "See what's happening in your city") + "</span>" });
+      feedToggle.addEventListener("click", function () { soloFeedOpen = !soloFeedOpen; renderApp(); });
+      app.appendChild(feedToggle);
+      if (soloFeedOpen) feedBlocks.forEach(function (b) { app.appendChild(b); });
+    }
     var meNow = state.people && state.people[viewerKey];
     if (confirmed && meNow && meNow.emailVerified === false) {
       app.appendChild(h("div", { class: "card" }, [

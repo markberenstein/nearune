@@ -525,7 +525,7 @@ const RAW = String.raw`<!doctype html>
   // name on file, that's used instead.
   function inviteeLabel(key) {
     var p = state.people && state.people[key];
-    return (p && p.name) || t("your Nearune partner");
+    return (p && p.name) || "your partner";
   }
   function personLocation(key) {
     var p = state.people && state.people[key];
@@ -3220,6 +3220,7 @@ const RAW = String.raw`<!doctype html>
     return btn;
   }
 
+  var showEmailInvite = false;
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
     var pendingLink = !!(state.pendingInviteLink && state.pendingInviteLink[otherKey]);
@@ -3278,30 +3279,32 @@ const RAW = String.raw`<!doctype html>
         h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new#existing", text: t("Open an existing room") })
       ]));
     } else {
-      card.appendChild(h("p", { class: "question", text: capFirst(tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel })) }));
-      var form = h("div", { class: "puzzle-setup" });
-      var invInput = textField(inviteEmailDraft, t("Nearune partner email"), function (v) { inviteEmailDraft = v; });
-      invInput.setAttribute("inputmode", "email");
-      invInput.setAttribute("autocapitalize", "off");
-      invInput.setAttribute("autocorrect", "off");
-      form.appendChild(invInput);
-      form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Prefer Instagram? Enter their handle instead and you'll get a link to send them yourself.") }));
-      if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-      var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
-      btn.disabled = regBusy;
-      btn.addEventListener("click", submitInvite);
-      form.appendChild(btn);
-      var textBtn = h("button", { class: "puzzle-choose-btn", style: "margin-top: 8px;", text: t("Or send a link by text") });
+      // Kept short on purpose: one clear action (send a link), with email
+      // or Instagram tucked behind a small toggle.
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 12px;", text: t("Send a link to the one person you want to share Nearune with.") }));
+      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+      var textBtn = h("button", { class: "puzzle-upload-btn", style: "width: 100%;", text: regBusy ? t("Sending…") : t("Get invite link") });
       textBtn.disabled = regBusy;
       textBtn.addEventListener("click", submitInviteLink);
-      form.appendChild(textBtn);
-      if (ROOM) form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Room code:") + " " + ROOM }));
-      card.appendChild(form);
-      // Escape hatches so nobody feels stuck on this screen.
-      card.appendChild(h("div", { class: "switch-row", style: "margin-top: 10px;" }, [
-        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new", text: t("Start over with a new room") }),
-        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new#existing", text: t("Open an existing room") })
-      ]));
+      card.appendChild(textBtn);
+      if (showEmailInvite) {
+        var form = h("div", { class: "puzzle-setup", style: "margin-top: 12px;" });
+        var invInput = textField(inviteEmailDraft, t("Their email or Instagram handle"), function (v) { inviteEmailDraft = v; });
+        invInput.setAttribute("inputmode", "email");
+        invInput.setAttribute("autocapitalize", "off");
+        invInput.setAttribute("autocorrect", "off");
+        form.appendChild(invInput);
+        var btn = h("button", { class: "puzzle-choose-btn", text: regBusy ? t("Sending…") : t("Send invite") });
+        btn.disabled = regBusy;
+        btn.addEventListener("click", submitInvite);
+        form.appendChild(btn);
+        card.appendChild(form);
+      } else {
+        var emailToggle = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 8px 6px 0; display: block; margin: 0 auto;", text: t("Invite by email or Instagram instead") });
+        emailToggle.addEventListener("click", function () { showEmailInvite = true; renderApp(); });
+        card.appendChild(emailToggle);
+      }
+      if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 10px 0 0;", text: t("Room code:") + " " + ROOM }));
     }
     return card;
   }
@@ -3407,34 +3410,45 @@ const RAW = String.raw`<!doctype html>
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
+    // Solo order (per Mark): clocks, traveling, partner invite, weather,
+    // daily question, Local Feel, and the email-confirm reminder last.
     app.appendChild(header());
     var travelRow = travelBlock();
     if (travelRow) app.appendChild(travelRow);
-    // Registered by email but not yet confirmed: show your own sky right
-    // away, with the "check your email" card where the invite card will go
-    // (the server only lets confirmed people send invites).
-    if (!isConfirmedKey(viewerKey)) app.appendChild(registrationFlow());
+    var confirmed = isConfirmedKey(viewerKey);
+    // Registered by email under the old flow and not yet confirmed: the
+    // "check your email" card stands in for the invite card (the server
+    // only lets confirmed people send invites).
+    if (!confirmed) app.appendChild(registrationFlow());
     else {
-      var meNow = state.people && state.people[viewerKey];
-      if (meNow && meNow.emailVerified === false) {
-        app.appendChild(h("div", { class: "card" }, [
-          h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
-          h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that, and Nearune doesn't save your email address.") })
-        ]));
-      }
-      app.appendChild(soloQuestionCard(otherKey));
-      app.appendChild(soloStreakCard());
       app.appendChild(inviteFlow(otherKey));
-      app.appendChild(sampleAnswerCard());
+      app.appendChild(h("div", { class: "card" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("More when they join") })]),
+        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 6px;", text: t("Local Feel: their weather, top songs and a funny local story, from where they are.") }),
+        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 6px;", text: t("Puzzle: a shared picture you unlock together, one piece each day you both answer.") }),
+        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0;", text: t("Never Have I Ever: a quick game for two.") })
+      ]));
     }
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
+    if (confirmed) {
+      app.appendChild(soloQuestionCard(otherKey));
+      app.appendChild(soloStreakCard());
+      app.appendChild(sampleAnswerCard());
+    }
     var newsBlock = newsLineBlock();
     if (newsBlock) app.appendChild(newsBlock);
     var musicBlock = musicLineBlock();
     if (musicBlock) app.appendChild(musicBlock);
     var moviesBlock = moviesLineBlock();
     if (moviesBlock) app.appendChild(moviesBlock);
+    var meNow = state.people && state.people[viewerKey];
+    if (confirmed && meNow && meNow.emailVerified === false) {
+      app.appendChild(h("div", { class: "card" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
+        h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that, and Nearune doesn't save your email address.") })
+      ]));
+    }
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(footerLinks({ room: false, block: false }));

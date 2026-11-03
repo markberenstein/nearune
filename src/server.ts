@@ -858,7 +858,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return json({ error: "rate_limited" }, { status: 429 });
       }
       const cur = await loadState(roomId);
-      if (cur.people && cur.people[who] && cur.people[who]!.confirmed) {
+      if (cur.people && cur.people[who] && cur.people[who]!.confirmed && cur.people[who]!.emailVerified !== false) {
         return json({ error: "already_registered" }, { status: 409 });
       }
       // The typed location is the source of truth for timezone when it
@@ -879,7 +879,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false, emailHash };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         s.pendingConfirm[who] = { token, at: new Date().toISOString() };
         // Only whoever registers first sets this for the room — the second
@@ -930,15 +930,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       let ok = false;
       if (isPerson(who)) {
         const cur = await loadState(roomId);
-        if (cur.people && cur.people[who] && cur.people[who]!.confirmed) {
-          // Already confirmed (link clicked twice, or an email app pre-opened
-          // it): that's a success, not an expired link.
-          ok = true;
-        } else if (cur.pendingConfirm && cur.pendingConfirm[who] && cur.pendingConfirm[who]!.token === token) {
+        if (cur.pendingConfirm && cur.pendingConfirm[who] && cur.pendingConfirm[who]!.token === token) {
           await saveState(roomId, (s) => {
-            if (s.people && s.people[who]) s.people[who]!.confirmed = true;
+            if (s.people && s.people[who]) { s.people[who]!.confirmed = true; s.people[who]!.emailVerified = true; }
             if (s.pendingConfirm) delete s.pendingConfirm[who];
           });
+          ok = true;
+        } else if (cur.people && cur.people[who] && cur.people[who]!.confirmed && cur.people[who]!.emailVerified !== false) {
+          // Already confirmed (link clicked twice, or an email app pre-opened
+          // it): that's a success, not an expired link.
           ok = true;
         }
       }
@@ -975,6 +975,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const cur = await loadState(roomId);
       if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) {
         return json({ error: "not_confirmed" }, { status: 403 });
+      }
+      // Sending an invite BY EMAIL waits until this person's own email is
+      // confirmed (keeps unverified sign-ups from emailing strangers).
+      // Link and Instagram-handle invites work right away.
+      if (email && cur.people[who]!.emailVerified === false) {
+        return json({ error: "email_unverified" }, { status: 403 });
       }
       const other: PersonKey = who === "mark" ? "nikita" : "mark";
       if (cur.people[other] && cur.people[other]!.confirmed) {

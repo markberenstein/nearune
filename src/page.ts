@@ -3090,6 +3090,7 @@ const RAW = String.raw`<!doctype html>
     regEmailInput.setAttribute("autocorrect", "off");
     regEmailInput.setAttribute("autocomplete", "email");
     form.appendChild(regEmailInput);
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your email is used only to confirm your account and help you get back into your room. Nearune doesn't save your email address.") }));
     form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No email? Enter your Instagram handle instead. Registered with an email? Tap Find your room below if you ever lose your link. With an Instagram handle we can't look your room up, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
@@ -3130,6 +3131,8 @@ const RAW = String.raw`<!doctype html>
         if (!res.ok) {
           regError = res.data && res.data.error === "rate_limited"
             ? t("Too many attempts — wait a bit and try again.")
+            : res.data && res.data.error === "email_unverified"
+            ? t("Confirm your own email first to send an invite by email. Or use \"Send a link by text\" below.")
             : t("Couldn't send invite — try again.");
           renderApp(); return;
         }
@@ -3412,6 +3415,13 @@ const RAW = String.raw`<!doctype html>
     // (the server only lets confirmed people send invites).
     if (!isConfirmedKey(viewerKey)) app.appendChild(registrationFlow());
     else {
+      var meNow = state.people && state.people[viewerKey];
+      if (meNow && meNow.emailVerified === false) {
+        app.appendChild(h("div", { class: "card" }, [
+          h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
+          h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that, and Nearune doesn't save your email address.") })
+        ]));
+      }
       app.appendChild(soloQuestionCard(otherKey));
       app.appendChild(soloStreakCard());
       app.appendChild(inviteFlow(otherKey));

@@ -47,6 +47,10 @@ export type PersonProfile = {
   tz?: string;
   confirmed: boolean;
   emailHash?: string;
+  // false while an email sign-up hasn't clicked its confirm link yet.
+  // They can use the app right away (confirmed: true); only sending an
+  // invite BY EMAIL waits for this. Missing = verified (older records).
+  emailVerified?: boolean;
   // Instagram username (no "@"), set when this person signed up with a
   // handle instead of an email, shown to their partner as a tappable link.
   // UNVERIFIED — anyone can type any handle, so it's only ever a label,

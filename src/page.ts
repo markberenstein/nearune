@@ -3318,6 +3318,89 @@ const RAW = String.raw`<!doctype html>
     soloFeedKey = k;
     loadWeather(); loadNews(); loadMusic(); loadMovies();
   }
+  // SOLO START: until the partner joins, a confirmed person can still
+  // answer today's question on their own. Their answers are saved under the
+  // same day keys as usual (the server already accepts a solo answer), so
+  // once the partner joins, today's answer is already waiting for them.
+  function soloQuestionCard(otherKey) {
+    var today = dateKey(new Date());
+    var q = questionForKey(today);
+    var entry = state.answers[today] || {};
+    var mine = entry[viewerKey] && entry[viewerKey].text;
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
+      h("p", { class: "question", text: q }),
+      uiTranslateBlock(q, null)
+    ]);
+    if (mine) {
+      if (editingEntry === today) {
+        card.appendChild(ownAnswerEditor(today));
+      } else {
+        var mineWrap = h("div", { class: "own-answer-visible" });
+        mineWrap.appendChild(h("p", { class: "answer-text", text: mine }));
+        var editBtn = h("button", { class: "edit-btn", text: t("Edit your answer") });
+        editBtn.addEventListener("click", function () { startEdit(today); });
+        mineWrap.appendChild(editBtn);
+        card.appendChild(mineWrap);
+      }
+      card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + "<span>" + t("Saved. Invite someone to see their answer to this question.") + "</span>" }));
+    } else {
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Answer now. When the person you invite joins, you'll see each other's answers.") }));
+      var form = h("div", { class: "answer-form" });
+      var textarea = document.createElement("textarea");
+      textarea.placeholder = t("Type your answer…");
+      textarea.value = draftText;
+      textarea.addEventListener("input", function () { draftText = textarea.value; });
+      var btn = h("button", { class: "send-btn", text: t("Send") });
+      btn.addEventListener("click", async function () {
+        var text = textarea.value.trim();
+        if (!text) return;
+        btn.disabled = true;
+        try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
+        catch (e) { online = false; }
+        renderApp();
+      });
+      form.appendChild(textarea); form.appendChild(btn);
+      card.appendChild(form);
+    }
+    return card;
+  }
+  // Consecutive days (ending today, or yesterday if today isn't answered
+  // yet) that YOU answered while solo.
+  function soloStreakCard() {
+    var today = dateKey(new Date());
+    function answered(k) { var a = state.answers[k]; return !!(a && a[viewerKey] && a[viewerKey].text); }
+    var count = 0;
+    var cursor = answered(today) ? today : keyOffsetDays(today, -1);
+    while (answered(cursor)) { count++; cursor = keyOffsetDays(cursor, -1); }
+    var dots = h("div", { class: "streak-dots" });
+    for (var i = 6; i >= 0; i--) dots.appendChild(h("span", { class: "streak-dot" + (answered(keyOffsetDays(today, -i)) ? " filled" : "") }));
+    var label = count === 0 ? t("Answer today to start your streak.") : t("You've shown up");
+    var text = h("div", { class: "streak-text" }, [
+      document.createTextNode(label + " "),
+      count > 0 ? h("strong", { text: t(count === 1 ? "{n} day" : "{n} days").split("{n}").join(String(count)) }) : null,
+      count > 0 ? document.createTextNode(" " + t("in a row.")) : null
+    ]);
+    return h("div", { class: "streak-card" }, [text, dots]);
+  }
+  // A clearly labeled EXAMPLE of what a partner's answer looks like, so a
+  // new solo user can see (and hear) the translation feature before anyone
+  // has joined. It is never presented as a real person: the eyebrow says
+  // Example, and there's no name.
+  function sampleAnswerCard() {
+    var mineLang = langCodeFor(viewerKey);
+    var sample = mineLang === "es"
+      ? { lang: "fr", text: "Un inconnu m'a tenu la porte sous la pluie. Ça m'a fait sourire toute la matinée." }
+      : { lang: "es", text: "Mi vecino me regaló limones de su árbol. Pensé en ti cuando los vi." };
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Example") }), h("span", { text: t("How their answer will look") })]),
+      h("p", { class: "puzzle-guess-note", text: t("What small thing made you smile today?") }),
+      h("p", { class: "answer-text", text: sample.text })
+    ]);
+    if (mineLang !== sample.lang) card.appendChild(translateBlock(sample.text, mineLang, sample.lang, null));
+    card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Their answer shows in your language, and you can hear it read aloud, in their own voice once they record a sample.") }));
+    return card;
+  }
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
@@ -3328,7 +3411,12 @@ const RAW = String.raw`<!doctype html>
     // away, with the "check your email" card where the invite card will go
     // (the server only lets confirmed people send invites).
     if (!isConfirmedKey(viewerKey)) app.appendChild(registrationFlow());
-    else app.appendChild(inviteFlow(otherKey));
+    else {
+      app.appendChild(soloQuestionCard(otherKey));
+      app.appendChild(soloStreakCard());
+      app.appendChild(inviteFlow(otherKey));
+      app.appendChild(sampleAnswerCard());
+    }
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     var newsBlock = newsLineBlock();

@@ -238,11 +238,23 @@ export function isDayComplete(state: State, key: string): boolean {
 // 0 once you both have.
 export function unansweredCount(state: State, key: string): number {
   const a = state.answers[key];
+  // A room where only one person has joined so far only counts that
+  // person, so a solo user's badge clears once they've answered. The
+  // legacy room (no registered people at all) keeps counting both slots.
+  const people = state.people;
+  const anyRegistered = !!(people && (people.mark || people.nikita));
   let n = 0;
   for (const who of ["mark", "nikita"] as PersonKey[]) {
+    if (anyRegistered && !people![who]) continue;
     if (!a || !a[who] || !a[who]!.text) n++;
   }
   return n;
+}
+
+// True when exactly one of the two slots has a registered person.
+export function isSoloRoom(state: State): boolean {
+  const p = state.people;
+  return !!(p && (!!p.mark !== !!p.nikita));
 }
 
 export function totalCompleteDays(state: State): number {

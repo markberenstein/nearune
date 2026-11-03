@@ -3407,34 +3407,45 @@ const RAW = String.raw`<!doctype html>
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
+    // Solo order (per Mark): clocks, traveling, partner invite, weather,
+    // daily question, Local Feel, and the email-confirm reminder last.
     app.appendChild(header());
     var travelRow = travelBlock();
     if (travelRow) app.appendChild(travelRow);
-    // Registered by email but not yet confirmed: show your own sky right
-    // away, with the "check your email" card where the invite card will go
-    // (the server only lets confirmed people send invites).
-    if (!isConfirmedKey(viewerKey)) app.appendChild(registrationFlow());
+    var confirmed = isConfirmedKey(viewerKey);
+    // Registered by email under the old flow and not yet confirmed: the
+    // "check your email" card stands in for the invite card (the server
+    // only lets confirmed people send invites).
+    if (!confirmed) app.appendChild(registrationFlow());
     else {
-      var meNow = state.people && state.people[viewerKey];
-      if (meNow && meNow.emailVerified === false) {
-        app.appendChild(h("div", { class: "card" }, [
-          h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
-          h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that, and Nearune doesn't save your email address.") })
-        ]));
-      }
-      app.appendChild(soloQuestionCard(otherKey));
-      app.appendChild(soloStreakCard());
       app.appendChild(inviteFlow(otherKey));
-      app.appendChild(sampleAnswerCard());
+      app.appendChild(h("div", { class: "card" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("More when they join") })]),
+        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 6px;", text: t("Local Feel: their weather, top songs and a funny local story, from where they are.") }),
+        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 6px;", text: t("Puzzle: a shared picture you unlock together, one piece each day you both answer.") }),
+        h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0;", text: t("Never Have I Ever: a quick game for two.") })
+      ]));
     }
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
+    if (confirmed) {
+      app.appendChild(soloQuestionCard(otherKey));
+      app.appendChild(soloStreakCard());
+      app.appendChild(sampleAnswerCard());
+    }
     var newsBlock = newsLineBlock();
     if (newsBlock) app.appendChild(newsBlock);
     var musicBlock = musicLineBlock();
     if (musicBlock) app.appendChild(musicBlock);
     var moviesBlock = moviesLineBlock();
     if (moviesBlock) app.appendChild(moviesBlock);
+    var meNow = state.people && state.people[viewerKey];
+    if (confirmed && meNow && meNow.emailVerified === false) {
+      app.appendChild(h("div", { class: "card" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
+        h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that, and Nearune doesn't save your email address.") })
+      ]));
+    }
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
     app.appendChild(footerLinks({ room: false, block: false }));

@@ -31,7 +31,7 @@ import { topLocalStory } from "./localnews";
 import { newRound } from "./nhie";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
-import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { APP_STORE_BADGE_B64 } from "./badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
@@ -572,9 +572,10 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
             if (!sub || sub.kind !== "apns") continue;
+            const solo = isSoloRoom(state);
             sendPush(sub, {
-              title: "You're all caught up",
-              body: "Both answers are in for today on Nearune.",
+              title: solo ? "Answer saved" : "You're all caught up",
+              body: solo ? "Invite someone on Nearune to see their answer too." : "Both answers are in for today on Nearune.",
               badge: 0,
               tag: "day-complete",
             })

@@ -114,7 +114,10 @@ export type State = {
   status: Partial<Record<PersonKey, { text: string; at: string }>>;
   comments: Record<string, Comment[]>;
   people?: Partial<Record<PersonKey, PersonProfile>>;
-  pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string }>>;
+  // email is kept ONLY while the sign-up is unconfirmed (so the admin can send
+  // a reminder); it is deleted with the whole entry when they confirm, and
+  // stripped after 7 days. reminders/remindedAt cap how often we nudge.
+  pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string; email?: string; reminders?: number; remindedAt?: string }>>;
   pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string; link?: boolean }>>;
   // Server-computed on every response (never persisted, see forClient) —
   // the Instagram handle an invite was addressed to, if it went to a handle

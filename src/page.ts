@@ -3097,7 +3097,7 @@ const RAW = String.raw`<!doctype html>
     regEmailInput.setAttribute("autocorrect", "off");
     regEmailInput.setAttribute("autocomplete", "email");
     form.appendChild(regEmailInput);
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your email is used only to confirm your account and help you get back into your room. Nearune doesn't save your email address.") }));
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your email is used only to confirm your account and help you get back into your room. If you don't confirm, we keep it for up to 7 days to send a reminder, then delete it. Once you confirm, Nearune doesn't save your email address.") }));
     form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No email? Enter your Instagram handle instead. Registered with an email? Tap Find your room below if you ever lose your link. With an Instagram handle we can't look your room up, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
@@ -3457,7 +3457,7 @@ const RAW = String.raw`<!doctype html>
     if (confirmed && meNow && meNow.emailVerified === false) {
       app.appendChild(h("div", { class: "card" }, [
         h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
-        h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that, and Nearune doesn't save your email address.") })
+        h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that. Until you confirm (up to 7 days) we keep your email so we can send a reminder; after that Nearune doesn't save it.") })
       ]));
     }
     var pushRow = pushToggleRow();
@@ -5657,7 +5657,7 @@ export function buildPrivacyPage() {
     </ul>
 
     <h2>What we do with your email</h2>
-    <p>We ask for an email address once, during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. We do not store your email address in plain text anywhere. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
+    <p>We ask for an email address once, during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. Once your email is confirmed we do not store it in plain text anywhere. If you start registering but never confirm, we keep the address for up to 7 days solely so we can send you a reminder to finish, then delete it. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
 
     <h2>Where data lives</h2>
     <p>Room data and uploaded photos are stored in a cloud object-storage bucket. Outgoing emails (confirmations, invites, recovery links) are sent through a transactional email provider (Resend or SendGrid) — the email content passes through that provider but isn't retained by us beyond what's needed to send it. Location text you enter is sent to a free geocoding service (Open-Meteo) solely to resolve a timezone and language default; it isn't stored by us beyond the fields above.</p>

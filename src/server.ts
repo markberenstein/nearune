@@ -337,6 +337,54 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json({ ok: true, changed, tz });
     }
 
+    // Admin tool: email a "finish registering" reminder to someone whose email
+    // sign-up is still unconfirmed. Called by the nearune-admin service with
+    // the x-cron-secret header. Body: { roomId, who }.
+    if (req.method === "POST" && url.pathname === "/api/admin/remind") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const rid = typeof b?.roomId === "string" ? b.roomId : "";
+      const w = b?.who;
+      if (!rid || !isPerson(w)) return json({ error: "invalid" }, { status: 400 });
+      const st = await loadState(rid);
+      const pp = st.people && st.people[w];
+      const pc = st.pendingConfirm && st.pendingConfirm[w];
+      if (!pp || pp.emailVerified !== false || !pc) return json({ error: "nothing_pending" }, { status: 409 });
+      if (!pc.email) return json({ error: "no_email_kept" }, { status: 409 });
+      if ((pc.reminders || 0) >= 3) return json({ error: "max_reminders" }, { status: 429 });
+      if (pc.remindedAt && Date.now() - new Date(pc.remindedAt).getTime() < 20 * 60 * 60 * 1000) return json({ error: "too_soon" }, { status: 429 });
+      const fwd = req.headers.get("x-forwarded-proto");
+      const origin = fwd ? fwd + "://" + url.host : url.origin;
+      const rPrefix = rid ? "/r/" + rid : "";
+      const link = origin + rPrefix + "/api/confirm?who=" + w + "&token=" + pc.token;
+      const [subjR, hiR, bodyR, linkR, footR] = await translateEmailStrings(
+        [
+          "Finish setting up Nearune",
+          "Hi",
+          "You started setting up Nearune but haven't confirmed your email yet. It takes one tap:",
+          "Confirm your email",
+          "Not you, or already done? You can ignore this email.",
+        ],
+        pp.language
+      );
+      const rr = await sendEmail(
+        pc.email,
+        subjR,
+        "<p>" + hiR + " " + pp.name + ",</p><p>" + bodyR + "</p>" +
+          "<p><a href=\"" + link + "\">" + linkR + "</a></p>" +
+          "<p style=\"color:#888;font-size:0.9em\">" + footR + "</p>"
+      );
+      console.log("[remind] room=" + (rid || "main") + " who=" + w + " ok=" + rr.ok + (rr.ok ? "" : " error=" + rr.error));
+      if (rr.ok) {
+        await saveState(rid, (s) => {
+          const e = s.pendingConfirm && s.pendingConfirm[w];
+          if (e) { e.reminders = (e.reminders || 0) + 1; e.remindedAt = new Date().toISOString(); }
+        });
+      }
+      return json({ ok: rr.ok, error: rr.error });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
       const secret = Bun.env.CRON_SECRET;
       const given = req.headers.get("x-cron-secret") || "";
@@ -881,7 +929,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (!s.people) s.people = {};
         s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash };
         if (!s.pendingConfirm) s.pendingConfirm = {};
-        s.pendingConfirm[who] = { token, at: new Date().toISOString() };
+        const prevPc = s.pendingConfirm[who];
+        s.pendingConfirm[who] = {
+          token, at: new Date().toISOString(), email,
+          reminders: sameEmailPending && prevPc ? prevPc.reminders : undefined,
+          remindedAt: sameEmailPending && prevPc ? prevPc.remindedAt : undefined,
+        };
         // Only whoever registers first sets this for the room — the second
         // person's own registration (or re-registering after a bounced
         // confirm) never overwrites an already-chosen relationship.
@@ -1682,6 +1735,26 @@ async function purgeEmptyRooms(): Promise<void> {
     console.error("[room-purge] failed", err);
   }
 }
+// Emails kept for reminders are dropped after 7 days even if never confirmed.
+async function purgeStaleEmails(): Promise<void> {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const id of await listRoomIds()) {
+      const st = await loadState(id);
+      for (const k of ["mark", "nikita"] as PersonKey[]) {
+        const e = st.pendingConfirm && st.pendingConfirm[k];
+        if (e && e.email && new Date(e.at).getTime() < cutoff) {
+          await saveState(id, (s) => { const x = s.pendingConfirm && s.pendingConfirm[k]; if (x) delete x.email; });
+          console.log("[email-purge] dropped kept email for room " + (id || "main") + " " + k);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[email-purge] failed", err);
+  }
+}
+setTimeout(purgeStaleEmails, 6 * 60 * 1000);
+setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
 setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
 setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
 

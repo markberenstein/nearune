@@ -11,6 +11,9 @@ export type AdminRoomSummary = {
   lastActive: string | null;
   daysAnswered: number;
   pushCount: number;
+  // People whose email sign-up is unconfirmed AND whose email we still hold,
+  // so a reminder can be sent. reminders = how many have gone out already.
+  remindable?: { who: string; name: string; reminders: number; remindedAt: string | null }[];
 };
 
 function adminEsc(s: string): string {
@@ -22,7 +25,19 @@ function adminEsc(s: string): string {
 // was created and whether it's being used. `secret` is embedded into each
 // row's delete form so the action stays gated the same way the page itself
 // is, without a separate login step.
-export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): string {
+const NOTICES: Record<string, string> = {
+  sent: "Reminder email sent.",
+  too_soon: "A reminder went out in the last 20 hours; try again later.",
+  max_reminders: "3 reminders already sent to this person.",
+  nothing_pending: "Nothing pending for that person (they may have just confirmed).",
+  no_email_kept: "No email on file (older than 7 days or registered before reminders existed).",
+  send_failed: "The email provider refused the send. Check the logs.",
+  not_configured: "Reminders aren't set up on this service yet (CRON_SECRET / APP_URL).",
+  error: "Something went wrong sending the reminder.",
+};
+
+export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice = ""): string {
+  const noticeHtml = notice && NOTICES[notice] ? `<p class="notice">${adminEsc(NOTICES[notice])}</p>` : "";
   const secretQS = "secret=" + encodeURIComponent(secret);
   const rows = rooms
     .map((r) => {
@@ -31,7 +46,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
       const people =
         r.people.length === 0
           ? "<span class=\"muted\">no one registered</span>"
-          : r.people.map((p) => adminEsc(p.name) + (p.confirmed ? "" : " <span class=\"muted\">(pending)</span>")).join(", ");
+          : r.people.map((p) => adminEsc(p.name) + (p.confirmed ? "" : " <span class=\"muted\">(pending)</span>") + ((r.remindable || []).some((x) => x.name === p.name) ? " <span class=\"muted\">(email unconfirmed)</span>" : "")).join(", ");
       // Where: each registered person's own location, plus how the room was
       // created (device and language) — the only origin hints that are kept.
       const locs = r.people.filter((p) => p.location).map((p) => adminEsc(p.name) + ": " + adminEsc(p.location || ""));
@@ -43,12 +58,20 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
       // The legacy "main room" (empty roomId) has no delete control here —
       // it's reachable only through the in-app "Delete my data" flow, so a
       // stray click on this page can't wipe the room actually in use.
-      const action = r.roomId
+      const remind = (r.remindable || [])
+        .map((x) => `<form method="POST" action="/remind-room?${secretQS}" style="margin-bottom:6px">
+            <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
+            <input type="hidden" name="who" value="${adminEsc(x.who)}">
+            <button type="submit" class="remind-btn">Remind ${adminEsc(x.name)}</button>
+            ${x.reminders ? `<span class="muted" style="font-size:0.72rem">sent ${x.reminders}\u00d7</span>` : ""}
+          </form>`)
+        .join("");
+      const action = remind + (r.roomId
         ? `<form method="POST" action="/delete-room?${secretQS}" onsubmit="return confirm('Delete room ${adminEsc(r.roomId)}? This permanently erases its answers, comments, and photos. This cannot be undone.');">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
             <button type="submit" class="del-btn">Delete</button>
           </form>`
-        : `<span class="muted">—</span>`;
+        : `<span class="muted">—</span>`);
       return `<tr>
         <td>${label}</td>
         <td><span class="pill pill-${status}">${status}</span></td>
@@ -107,6 +130,8 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
   td.where { min-width:150px; }
   .tblwrap { overflow-x:auto; border-radius:12px; }
   .del-btn { background:none; border:1px solid var(--line); color:#B3442F; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; }
+  .remind-btn { background:var(--accent); border:1px solid var(--accent); color:#fff; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .notice { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:0.85rem; margin:0 0 16px; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
 </style>
 </head>
@@ -118,6 +143,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string): strin
   </div>
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>
   <p class="updated" id="updated"></p>
+  ${noticeHtml}
   <div class="tblwrap"><table>
     <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Where</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
     <tbody>${rows}</tbody>

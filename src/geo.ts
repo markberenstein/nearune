@@ -275,15 +275,33 @@ export async function isCityLevelLocation(location: string): Promise<boolean> {
   if (CITY_STATES.has(q.toLowerCase())) return true;
   let { first } = await geocodeFull(q);
   if (!first) { await new Promise((r) => setTimeout(r, 400)); first = (await geocodeFull(q)).first; }
-  // Strict: a place the lookup cannot identify is not accepted.
-  if (!first) { console.log("[city-check] " + JSON.stringify({ q, found: false, ok: false })); return false; }
+  // Names like "Haidian District" (what "Use my current location" returns in some
+  // countries) often are not in the place index: retry without the generic suffix.
+  if (!first) {
+    const first1 = q.split(",")[0].trim();
+    const stripped = first1.replace(/\s+(district|city|municipality|prefecture|ward|borough|town)$/i, "").trim();
+    if (stripped && stripped.toLowerCase() !== first1.toLowerCase()) {
+      const rest = q.split(",").slice(1).join(",").trim();
+      first = (await geocodeFull(rest ? stripped + ", " + rest : stripped)).first || (await geocodeFull(stripped)).first;
+    }
+  }
+  if (!first) {
+    // Still unknown. A typed word with no country ("Starthere") stays rejected; a
+    // "Name, CC" label (what the location button produces) is accepted so a lookup gap
+    // never stops someone from signing up. States and countries are caught above.
+    const parts = q.split(",").map((x) => x.trim()).filter(Boolean);
+    const lastPart = parts.length > 1 ? parts[parts.length - 1] : "";
+    const okLabel = parts[0].length >= 3 && /^[A-Za-z]{2}$/.test(lastPart);
+    console.log("[city-check] " + JSON.stringify({ q, found: false, ok: okLabel }));
+    return okLabel;
+  }
   const fc = typeof first.feature_code === "string" ? first.feature_code : "";
   const nm = typeof first.name === "string" ? first.name.trim().toLowerCase() : "";
   const co = typeof first.country === "string" ? first.country.trim().toLowerCase() : "";
   const ad = typeof first.admin1 === "string" ? first.admin1.trim().toLowerCase() : "";
   // A country (code PCL*, or its name is the country's own name), a state or a county is not a city.
   const isCountry = fc.startsWith("PCL") || (!!nm && nm === co);
-  const isRegion = fc.startsWith("ADM");
+  const isRegion = fc.startsWith("ADM1") || fc.startsWith("ADM2");
   const ok = !(isCountry || isRegion);
   console.log("[city-check] " + JSON.stringify({ q, fc, name: nm, country: co, admin1: ad, ok }));
   return ok;

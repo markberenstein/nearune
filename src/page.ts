@@ -352,6 +352,13 @@ const RAW = String.raw`<!doctype html>
   .puzzle-setup input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .puzzle-setup select.lang-select { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; appearance: none; -webkit-appearance: none; padding-right: 38px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a7a6a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; background-size: 12px 8px; }
   .puzzle-setup select.lang-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Easier-to-read fields: placeholders were the browser's pale default, and the
+     pill borders nearly matched the fill. iOS dims placeholders, so force full opacity. */
+  .puzzle-setup input[type="text"], .puzzle-setup select.lang-select { font-size: 0.95rem; border-color: #C9AE95; }
+  .puzzle-setup input[type="text"]::placeholder { color: var(--ink-soft); opacity: 1; -webkit-text-fill-color: var(--ink-soft); }
+  @media (prefers-color-scheme: dark) {
+    .puzzle-setup input[type="text"], .puzzle-setup select.lang-select { border-color: #4A5068; }
+  }
   .puzzle-setup input[type="date"] { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .travel-until-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -5436,6 +5443,15 @@ export function buildNewRoomPage(): string {
 </head>
 <body>
 <div class="card">
+  <h1 id="existing">Got an invite from your partner?</h1>
+  <p>Copy the invite link they sent you, then tap the button. This joins their room instead of starting a new one.</p>
+  <button id="pasteInvite" type="button">Paste my invite</button>
+  <p class="note" style="margin-top:8px">Nearune only reads the link you just copied. Or paste it below.</p>
+  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the invite link you were sent" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--ink-soft);background:var(--bg);color:var(--ink);font:inherit;margin-top:4px">
+  <button id="openRoom" type="button" style="margin-top:8px">Join with this link</button>
+  <p class="note" id="roomMsg"></p>
+  <p class="note">Already have a room? Paste your room link or code in the box above.</p>
+  <hr style="border:0;border-top:1px solid var(--line);margin:26px 0 22px">
   <h1>Start your own Nearune</h1>
   <p>Nearune is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
   <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your Nearune partner; when you each open it, you'll register your own name, language, and location, then you're set.</p>
@@ -5443,12 +5459,6 @@ export function buildNewRoomPage(): string {
   <p class="note" id="codePreview" style="margin:0 0 14px">Any language works. Leave it blank and we'll pick a name for you.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
-  <p class="note" id="existing" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
-  <button id="pasteInvite" type="button" style="margin-top:6px">Paste my invite</button>
-  <p class="note" style="margin-top:6px">Got an invite? Copy the link from your email, then tap above. Nearune only reads the link you just copied.</p>
-  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room or invite link, or code (type original for the first room)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
-  <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
-  <p class="note" id="roomMsg"></p>
   <p class="note"><a href="/recover" style="color:var(--ink-soft)">Find your room (email me my link)</a></p>
   <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a> &nbsp;·&nbsp; <a href="/support" style="color:var(--ink-soft)">Support</a></p>
 </div>

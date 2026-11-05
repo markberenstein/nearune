@@ -1003,11 +1003,13 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         ? publicOrigin + "/j/" + roomId + "/" + token
         : publicOrigin + roomPrefix + "/?invite=" + other + "&token=" + token;
       if (viaLink) {
+        console.log("[invite] room=" + (roomId || "main") + " via=link");
         return json({ ...forClient(state), _viaHandle: true, _viaLink: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
       }
       if (handle) {
         // Nothing to email — the link goes back to this browser and the
         // inviter sends it themselves (e.g. as an Instagram DM).
+        console.log("[invite] room=" + (roomId || "main") + " via=instagram");
         return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
       }
       const inviterName = cur.people[who]!.name;
@@ -1029,6 +1031,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
+      console.log("[invite] room=" + (roomId || "main") + " via=email sent=" + r.ok + (r.ok ? "" : " error=" + JSON.stringify(String(r.error || "").slice(0, 200))));
       return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
     }
 
@@ -1057,6 +1060,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}) };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
+      console.log("[invite-accepted] room=" + (roomId || "main") + " who=" + who);
       // Let the person who sent the invite know their partner is in —
       // otherwise the only way they'd find out is having the app open when
       // the 6s poll happens to catch it. Push only (not email): we never

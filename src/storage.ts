@@ -9,49 +9,25 @@
 import { S3Client } from "bun";
 import { readdirSync } from "node:fs";
 import type { State, PersonKey } from "./types";
-import { todayKeyFor } from "./util";
+import { todayKeyPT } from "./util";
 
 const MAX_HISTORY = 400;
-
-// Alternate room ids that point at an existing room's data. "q7mvx3ke" is a
-// normal-looking /r/<id> link for the original (legacy) room, so Mark and
-// Nikita can reach it the same way as every other room, while the legacy
-// "/" URL and its stored data keep working untouched.
-const ROOM_ALIASES: Record<string, string> = { q7mvx3ke: "" };
-export function canonRoom(roomId: string): string {
-  return Object.prototype.hasOwnProperty.call(ROOM_ALIASES, roomId) ? ROOM_ALIASES[roomId] : roomId;
-}
 
 export function defaultState(): State {
   return { version: 1, answers: {}, status: {}, comments: {} };
 }
 
 function stateKey(roomId: string): string {
-  roomId = canonRoom(roomId);
   return roomId ? `rooms/${roomId}/state.json` : "state.json";
 }
 function localStatePath(roomId: string): string {
-  roomId = canonRoom(roomId);
   return roomId ? `./local-state-${roomId}.json` : "./local-state.json";
 }
 export function puzzleImageKey(roomId: string, id: string): string {
-  roomId = canonRoom(roomId);
   return roomId ? `rooms/${roomId}/puzzle-images/${id}.jpg` : `puzzle-images/${id}.jpg`;
 }
 export function localPuzzlePath(roomId: string, id: string): string {
-  roomId = canonRoom(roomId);
   return roomId ? `./local-puzzle-${roomId}-${id}.jpg` : `./local-puzzle-${id}.jpg`;
-}
-// The "share a recent photo" feature — one photo per person, overwritten on
-// each new share (not one-per-upload like puzzle images), so the key is
-// fixed per person rather than per-upload-id. See PersonProfile.photoAt.
-export function photoKey(roomId: string, who: PersonKey): string {
-  roomId = canonRoom(roomId);
-  return roomId ? `rooms/${roomId}/photos/${who}.jpg` : `photos/${who}.jpg`;
-}
-export function localPhotoPath(roomId: string, who: PersonKey): string {
-  roomId = canonRoom(roomId);
-  return roomId ? `./local-photo-${roomId}-${who}.jpg` : `./local-photo-${who}.jpg`;
 }
 
 export const useS3 = !!(Bun.env.S3_BUCKET && Bun.env.S3_ACCESS_KEY_ID);
@@ -70,7 +46,6 @@ const caches = new Map<string, State>();
 const writeChains = new Map<string, Promise<void>>();
 
 async function readRaw(roomId: string): Promise<string | null> {
-  roomId = canonRoom(roomId);
   if (useS3 && s3) {
     const file = s3.file(stateKey(roomId));
     if (await file.exists()) return await file.text();
@@ -84,7 +59,6 @@ async function readRaw(roomId: string): Promise<string | null> {
 }
 
 async function writeRaw(roomId: string, text: string): Promise<void> {
-  roomId = canonRoom(roomId);
   if (useS3 && s3) {
     await s3.file(stateKey(roomId)).write(text);
   } else {
@@ -93,7 +67,6 @@ async function writeRaw(roomId: string, text: string): Promise<void> {
 }
 
 export async function loadState(roomId: string): Promise<State> {
-  roomId = canonRoom(roomId);
   const cached = caches.get(roomId);
   if (cached) return cached;
   let state: State;
@@ -126,7 +99,6 @@ function trimHistory(state: State) {
 // never race each other's read-modify-write against the bucket. Different
 // rooms never block each other.
 export async function saveState(roomId: string, mutate: (state: State) => void): Promise<State> {
-  roomId = canonRoom(roomId);
   const run = async () => {
     const state = await loadState(roomId);
     mutate(state);
@@ -141,39 +113,24 @@ export async function saveState(roomId: string, mutate: (state: State) => void):
   return caches.get(roomId)!;
 }
 
-// Room codes are two easy words plus two digits (e.g. "mossyfox47"): short to
-// say aloud, easy to remember, and still plain letters+digits so every
-// existing /r/<id> route and the "paste your room code" box accept them.
-// Older 8-character random ids keep working untouched.
-const ROOM_ADJ = ["amber","breezy","brave","bright","calm","clever","cosmic","cozy","crisp","dandy","eager","fuzzy","gentle","golden","happy","jolly","kind","lively","lucky","mellow","merry","mossy","nifty","olive","peachy","plucky","quiet","rosy","sunny","silver","snowy","speedy","swift","tidy","velvet","warm","windy","witty","zesty","lunar"];
-const ROOM_NOUN = ["otter","panda","falcon","maple","harbor","meadow","comet","lantern","pebble","river","willow","fox","robin","cedar","daisy","ember","fern","heron","iris","koala","lotus","moon","nest","orchid","plum","quail","raven","sparrow","tulip","violet","wren","yarrow","zebra","acorn","badger","cloud","dune","glade","kite","tide"];
+const ROOM_ID_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"; // no 0/o/1/l/i — easier to type/read aloud
+
 function randomRoomId(): string {
-  const pick = (a: string[]) => a[Math.floor(Math.random() * a.length)];
-  return pick(ROOM_ADJ) + pick(ROOM_NOUN) + String(10 + Math.floor(Math.random() * 90));
+  let s = "";
+  for (let i = 0; i < 8; i++) s += ROOM_ID_CHARS[Math.floor(Math.random() * ROOM_ID_CHARS.length)];
+  return s;
 }
 
-// Creates a brand-new, empty room and returns its id. Collisions are rare
-// (about 144,000 possible codes) and retried below.
-// Turns a name the first partner typed ("Our Sky!") into a room-code stem
-// ("oursky"). Plain a-z/0-9 only, at most 16 characters; names with no Latin
-// letters or digits (or too short) return "" and fall back to two random words.
-export function roomSlug(name: string): string {
-  const slug = (name || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "").slice(0, 16);
-  return slug.length >= 3 ? slug : "";
-}
-
-export async function createRoom(preferredName?: string, via?: string, displayName?: string): Promise<string> {
-  const stem = roomSlug(preferredName || "");
-  // Use the name exactly when it's free ("oursky"); if it's taken, add two
-  // random digits ("oursky72"). No name at all gets two random words.
-  let id = stem || randomRoomId();
-  for (let tries = 0; tries < 40 && ((await readRaw(id)) !== null || canonRoom(id) !== id); tries++) {
-    id = stem && tries < 30 ? stem + String(10 + Math.floor(Math.random() * 90)) : randomRoomId();
+// Creates a brand-new, empty room and returns its id. Collisions are
+// astronomically unlikely at 8 chars from a 32-char alphabet, but a couple
+// of retries costs nothing.
+export async function createRoom(): Promise<string> {
+  let id = randomRoomId();
+  for (let tries = 0; tries < 5 && (await readRaw(id)) !== null; tries++) {
+    id = randomRoomId();
   }
   const fresh = defaultState();
   fresh.createdAt = new Date().toISOString();
-  if (via) fresh.createdVia = via;
-  if (displayName) fresh.roomName = displayName;
   await writeRaw(id, JSON.stringify(fresh));
   caches.set(id, fresh);
   return id;
@@ -184,18 +141,11 @@ export async function createRoom(preferredName?: string, via?: string, displayNa
 // queued or solved past aren't individually tracked once superseded, so
 // this clears what's reachable — the state itself is what actually mattered.
 export async function deleteRoom(roomId: string): Promise<void> {
-  roomId = canonRoom(roomId);
   const state = await loadState(roomId);
   if (state.puzzleCurrentId) {
     try {
       if (useS3 && s3) await s3.file(puzzleImageKey(roomId, state.puzzleCurrentId)).delete();
       else await Bun.file(localPuzzlePath(roomId, state.puzzleCurrentId)).delete();
-    } catch {}
-  }
-  for (const who of ["mark", "nikita"] as PersonKey[]) {
-    try {
-      if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
-      else await Bun.file(localPhotoPath(roomId, who)).delete();
     } catch {}
   }
   try {
@@ -239,7 +189,7 @@ export async function ensurePuzzleMigrated(roomId: string): Promise<void> {
   if (s.puzzleCurrentId && !s.puzzleRoundStartDate) {
     await saveState(roomId, (st) => {
       if (st.puzzleCurrentId && !st.puzzleRoundStartDate) {
-        st.puzzleRoundStartDate = todayKeyFor(st);
+        st.puzzleRoundStartDate = todayKeyPT();
         st.puzzleBonusCredits = 0;
       }
     });
@@ -326,20 +276,4 @@ export async function removeFromEmailIndex(hash: string, roomId: string, who: Pe
   };
   emailIndexChain = emailIndexChain.then(run, run);
   await emailIndexChain;
-}
-
-// Small side files (not part of any room) that must survive restarts.
-// Keys must not start with "rooms/" or room listing would pick them up.
-export async function readSideFile(key: string): Promise<string | null> {
-  if (useS3 && s3) {
-    const file = s3.file(key);
-    if (await file.exists()) return await file.text();
-    return null;
-  }
-  try { return await Bun.file("./local-" + key.replace(/[\\/]/g, "-")).text(); } catch { return null; }
-}
-
-export async function writeSideFile(key: string, text: string): Promise<void> {
-  if (useS3 && s3) await s3.file(key).write(text);
-  else await Bun.write("./local-" + key.replace(/[\\/]/g, "-"), text);
 }

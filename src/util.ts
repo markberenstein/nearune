@@ -119,64 +119,29 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   return sendViaResend(to, subject, html);
 }
 
-// A room's day rolls over at 6:30am in whichever of its two people's home
-// time zones is furthest ahead. A room whose people's zones aren't both known
-// yet (or the legacy room, whose zones are fixed) falls back to Asia/Kolkata,
-// which is what every room used before per-room rollover existed — so the
-// legacy Mark (Los Angeles) + Nikita (Kolkata) room is unchanged. Home zones
-// only (not travel zones) keep the day stable while someone is traveling.
-// The client (page.ts dateKey()) implements the exact same rule.
-const DEFAULT_ROLLOVER_TZ = "Asia/Kolkata";
-
-function tzOffsetMinutes(tz: string, at: Date): number | null {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(at);
-    const g = (t: string) => +parts.find((p) => p.type === t)!.value;
-    const asUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
-    return Math.round((asUtc - Math.floor(at.getTime() / 60000) * 60000) / 60000);
-  } catch { return null; }
-}
-
-export function rolloverTzOf(people: State["people"] | undefined, at: Date = new Date()): string {
-  let best: string | null = null, bestOff = -Infinity;
-  for (const k of ["mark", "nikita"] as PersonKey[]) {
-    const tz = people?.[k]?.tz;
-    if (!tz) continue;
-    const off = tzOffsetMinutes(tz, at);
-    if (off !== null && off > bestOff) { bestOff = off; best = tz; }
-  }
-  return best || DEFAULT_ROLLOVER_TZ;
-}
-
-export function dayKeyIn(tz: string, at: Date = new Date()): string {
+// New day rolls over at 6:30am in whichever of the two people's zones is
+// currently ahead — Asia/Kolkata (IST, fixed UTC+5:30) is always ahead of
+// America/Los_Angeles, so 6:30am IST is the rollover instant. (Same
+// rollover applies to every room, regardless of where its people actually are —
+// matches the client, which computes the same thing independently.)
+export function todayKeyPT(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
+    timeZone: "Asia/Kolkata",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).formatToParts(at);
+  }).formatToParts(new Date());
   const g = (t: string) => +parts.find((p) => p.type === t)!.value;
   let ms = Date.UTC(g("year"), g("month") - 1, g("day"));
-  if (g("hour") % 24 < 6 || (g("hour") % 24 === 6 && g("minute") < 30)) ms -= 86400000;
+  if (g("hour") < 6 || (g("hour") === 6 && g("minute") < 30)) ms -= 86400000;
   const d = new Date(ms);
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
-}
-
-// This room's current day key.
-export function todayKeyFor(state: { people?: State["people"] } | null | undefined): string {
-  return dayKeyIn(rolloverTzOf(state?.people));
-}
-
-// The original global day key (6:30am Asia/Kolkata) — still used for the
-// app-wide daily self-check, which runs once for all rooms.
-export function todayKeyPT(): string {
-  return dayKeyIn(DEFAULT_ROLLOVER_TZ);
 }
 
 // How many days before a scheduled travelFrom date the travel override can
@@ -238,23 +203,11 @@ export function isDayComplete(state: State, key: string): boolean {
 // 0 once you both have.
 export function unansweredCount(state: State, key: string): number {
   const a = state.answers[key];
-  // A room where only one person has joined so far only counts that
-  // person, so a solo user's badge clears once they've answered. The
-  // legacy room (no registered people at all) keeps counting both slots.
-  const people = state.people;
-  const anyRegistered = !!(people && (people.mark || people.nikita));
   let n = 0;
   for (const who of ["mark", "nikita"] as PersonKey[]) {
-    if (anyRegistered && !people![who]) continue;
     if (!a || !a[who] || !a[who]!.text) n++;
   }
   return n;
-}
-
-// True when exactly one of the two slots has a registered person.
-export function isSoloRoom(state: State): boolean {
-  const p = state.people;
-  return !!(p && (!!p.mark !== !!p.nikita));
 }
 
 export function totalCompleteDays(state: State): number {
@@ -339,7 +292,7 @@ export function advanceQueue(s: State) {
     s.puzzleCurrentId = next.id;
     s.puzzleAnswer = next.answer;
     if (next.question) s.puzzleQuestion = next.question; else delete s.puzzleQuestion;
-    s.puzzleRoundStartDate = todayKeyFor(s);
+    s.puzzleRoundStartDate = todayKeyPT();
     s.puzzleBonusCredits = bonus ? 1 : 0;
     delete s.puzzleRoundBase;
   } else {
@@ -375,29 +328,17 @@ export function forClient(state: State): State {
   // When each pending invite was sent (a timestamp, not a secret) — lets the
   // client nudge the inviter after a couple of days with no sign-up.
   const piAt: Record<string, string> = {};
-  const piLink: Record<string, boolean> = {};
   if (pendingInvite) {
     for (const k of Object.keys(pendingInvite)) {
       pi[k] = true;
       if (pendingInvite[k] && pendingInvite[k].at) piAt[k] = pendingInvite[k].at;
       if (pendingInvite[k] && pendingInvite[k].instagram) piHandle[k] = pendingInvite[k].instagram;
-      if (pendingInvite[k] && pendingInvite[k].link) piLink[k] = true;
     }
   }
   // Computed fresh on every response — the client displays this number
   // as-is rather than recomputing it, so both devices always agree.
   const puzzleUnlocked = puzzleUnlockedCount(state);
-  // Never Have I Ever: nobody sees the other's answer until both are in.
-  let nhieOut: any = undefined;
-  if (state.nhie) {
-    const v = state.nhie.votes || {};
-    const both = !!(v.mark && v.nikita);
-    // Comments are open as soon as someone has answered; the page only shows
-    // the current round's comments to a person once they have answered too.
-    const comments: Record<string, any> = state.nhie.comments || {};
-    nhieOut = { round: state.nhie.round, text: state.nhie.text, voted: { mark: !!v.mark, nikita: !!v.nikita }, votes: both ? v : {}, history: state.nhie.history || [], comments };
-  }
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteLink: piLink, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut } as any as State;
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteAt: piAt, puzzleUnlocked } as State;
   if (withFlags.people) {
     const strippedPeople: any = {};
     for (const k of Object.keys(withFlags.people)) {
@@ -407,8 +348,7 @@ export function forClient(state: State): State {
     }
     (withFlags as any).people = strippedPeople;
   }
-  // The answer is revealed once the puzzle is solved OR every piece is unlocked.
-  if (withFlags.puzzleSolved || puzzleUnlocked >= PUZZLE_TOTAL) return withFlags;
+  if (withFlags.puzzleSolved) return withFlags;
   const { puzzleAnswer, ...rest } = withFlags;
   return rest as State;
 }

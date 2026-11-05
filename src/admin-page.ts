@@ -14,6 +14,15 @@ export type AdminRoomSummary = {
   // People whose email sign-up is unconfirmed AND whose email we still hold,
   // so a reminder can be sent. reminders = how many have gone out already.
   remindable?: { who: string; name: string; reminders: number; remindedAt: string | null }[];
+  // "Make a friend" rooms (matched strangers): friend = made by the matcher,
+  // reported = someone reported the other person, closed = the room has ended.
+  friend?: boolean;
+  // How many messages tripped the vulgar/NSFW screen.
+  flagged?: number;
+  // Path of the invite link for the administrator, when this friend room is waiting for admin to join.
+  adminJoin?: string;
+  reported?: boolean;
+  closed?: boolean;
 };
 
 function adminEsc(s: string): string {
@@ -27,6 +36,7 @@ function adminEsc(s: string): string {
 // is, without a separate login step.
 const NOTICES: Record<string, string> = {
   sent: "Reminder email sent.",
+  closed: "Room closed. Both people will see that it has ended.",
   too_soon: "A reminder went out in the last 20 hours; try again later.",
   max_reminders: "3 reminders already sent to this person.",
   nothing_pending: "Nothing pending for that person (they may have just confirmed).",
@@ -66,7 +76,19 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
             ${x.reminders ? `<span class="muted" style="font-size:0.72rem">sent ${x.reminders}\u00d7</span>` : ""}
           </form>`)
         .join("");
-      const action = remind + (r.roomId
+      const flags =
+        (r.friend ? ` <span class="muted">friend match</span>` : "") +
+        (r.reported ? ` <span class="flag">REPORTED</span>` : "") +
+        (r.flagged ? ` <span class="flag">${r.flagged} FLAGGED MSG</span>` : "") +
+        (r.adminJoin ? ` <a class="flag" href="https://nearune.ai${adminEsc(r.adminJoin)}" target="_blank">JOIN AS ADMIN</a>` : "") +
+        (r.closed ? ` <span class="muted">closed</span>` : "");
+      const closeBtn = r.roomId && !r.closed
+        ? `<form method="POST" action="/close-room?${secretQS}" style="margin-bottom:6px" onsubmit="return confirm('Close room ${adminEsc(r.roomId)}? Both people will see that the room has ended.');">
+            <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
+            <button type="submit" class="del-btn">Close</button>
+          </form>`
+        : "";
+      const action = remind + closeBtn + (r.roomId
         ? `<form method="POST" action="/delete-room?${secretQS}" onsubmit="return confirm('Delete room ${adminEsc(r.roomId)}? This permanently erases its answers, comments, and photos. This cannot be undone.');">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
             <button type="submit" class="del-btn">Delete</button>
@@ -74,7 +96,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
         : `<span class="muted">—</span>`);
       return `<tr>
         <td>${label}</td>
-        <td><span class="pill pill-${status}">${status}</span></td>
+        <td><span class="pill pill-${status}">${status}</span>${flags}</td>
         <td>${created}</td>
         <td>${people}</td>
         <td class="where">${where}</td>
@@ -132,6 +154,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   .del-btn { background:none; border:1px solid var(--line); color:#B3442F; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; }
   .remind-btn { background:var(--accent); border:1px solid var(--accent); color:#fff; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
   .notice { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:0.85rem; margin:0 0 16px; }
+  .flag { color:#B3361F; font-weight:700; font-size:0.72rem; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
 </style>
 </head>

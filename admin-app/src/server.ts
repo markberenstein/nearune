@@ -7,7 +7,7 @@
 // duplicating it — this service and the main app deploy from the same repo,
 // just with a different Railway "root directory", so these relative imports
 // resolve at build time the same way a workspace package would.
-import { listRoomIds, loadState, deleteRoom, removeFromEmailIndex } from "../../src/storage";
+import { listRoomIds, loadState, dropCachedState, deleteRoom, removeFromEmailIndex } from "../../src/storage";
 import { buildAdminPage, type AdminRoomSummary } from "../../src/admin-page";
 import type { PersonKey } from "../../src/types";
 import { ICON_180_B64, ICON_512_B64 } from "./icon";
@@ -60,6 +60,7 @@ Bun.serve({
       const summaries: AdminRoomSummary[] = [];
       for (const id of ids) {
         try {
+          dropCachedState(id);
           const state = await loadState(id);
           const people = (["mark", "nikita"] as PersonKey[])
             .map((k) => state.people?.[k])
@@ -76,6 +77,12 @@ Bun.serve({
             lastActive,
             daysAnswered: answerKeys.length,
             pushCount,
+            friend: state.origin === "friend",
+            reported: !!state.reported,
+            closed: !!state.closed,
+            flagged: (state.flags || []).length,
+            adminJoin: state.origin === "friend" && state.friendDevices?.mark === "admin" && !state.closed && !state.people?.mark && state.pendingInvite?.mark?.token
+              ? "/j/" + id + "/" + state.pendingInvite.mark.token : undefined,
             remindable: (["mark", "nikita"] as PersonKey[])
               .filter((k) => state.people?.[k] && state.people[k]!.emailVerified === false && !!state.pendingConfirm?.[k]?.email)
               .map((k) => ({ who: k, name: state.people![k]!.name, reminders: state.pendingConfirm![k]!.reminders || 0, remindedAt: state.pendingConfirm![k]!.remindedAt || null })),
@@ -110,6 +117,30 @@ Bun.serve({
         await deleteRoom(targetRoomId);
       }
       return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || ""), 303);
+    }
+
+    // Ends a room without erasing it: both people see "this room has ended".
+    if (req.method === "POST" && url.pathname === "/close-room") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let rid = "";
+      try { rid = String((await req.formData()).get("roomId") || ""); } catch {}
+      let cmsg = "error";
+      const cApp = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const cCron = Bun.env.CRON_SECRET || "";
+      if (!cApp || !cCron) cmsg = "not_configured";
+      else if (rid) {
+        try {
+          const r = await fetch(cApp + "/api/admin/close", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-cron-secret": cCron },
+            body: JSON.stringify({ roomId: rid }),
+          });
+          cmsg = r.ok ? "closed" : "error";
+        } catch (err) {
+          console.error("[admin] close failed", err);
+        }
+      }
+      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + cmsg, 303);
     }
 
     if (req.method === "POST" && url.pathname === "/remind-room") {

@@ -54,11 +54,14 @@ const RAW = String.raw`<!doctype html>
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* Larger type on tablets (iPad): every rem-based size scales with this. */
+  @media (min-width: 700px) { html { font-size: 112.5%; } }
+
   body {
     background: var(--bg);
     color: var(--ink);
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    padding: 28px 16px 48px;
+    padding: max(28px, calc(env(safe-area-inset-top, 0px) + 14px)) 16px calc(48px + env(safe-area-inset-bottom, 0px));
     display: flex;
     justify-content: center;
   }
@@ -70,15 +73,17 @@ const RAW = String.raw`<!doctype html>
     font-size: 1.7rem; letter-spacing: 0.01em; color: var(--accent);
   }
   .wordmark svg { width: 42px; height: 42px; flex: none; }
+  .room-code { text-align: center; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-soft); margin: 2px 0 10px; cursor: pointer; }
+  body.weather-active .room-code { color: var(--weather-ink, #2B211B); }
 
   .clocks {
-    display: flex; align-items: center; justify-content: center; gap: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 14px 18px; box-shadow: 0 1px 2px var(--shadow); flex-wrap: wrap;
+    padding: 14px 10px; box-shadow: 0 1px 2px var(--shadow); flex-wrap: nowrap;
   }
-  .clock-block { text-align: center; min-width: 108px; }
-  .clock-block.clock-me { border: 2px solid #8C6FA8; border-radius: 6px; padding: 6px 10px; }
-  .clock-city { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
+  .clock-block { text-align: center; min-width: 0; flex: 0 1 auto; }
+  .clock-block.clock-me { border: 2px solid #8C6FA8; border-radius: 6px; padding: 6px 8px; }
+  .clock-city { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); white-space: nowrap; }
   .clock-time { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 700; }
   .clock-divider { flex: none; color: var(--accent); opacity: 0.7; }
   .clock-divider svg { width: 18px; height: 18px; display: block; transform: rotate(20deg); }
@@ -106,28 +111,28 @@ const RAW = String.raw`<!doctype html>
      weight, not bold — bold read as a generic weather-widget look rather
      than anything resembling the real app. */
   .weather-widget-tile-temp { font-size: 1.55rem; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
-  .weather-widget-tile-temp-secondary { font-size: 0.72rem; font-weight: 500; line-height: 1; opacity: 1; }
-  .weather-widget-tile-humidity { font-size: 0.7rem; font-weight: 500; line-height: 1; opacity: 1; margin-top: 2px; }
-  .weather-widget-tile-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2; opacity: 1; }
+  .weather-widget-tile-temp-secondary { font-size: 0.8rem; font-weight: 500; line-height: 1; opacity: 1; }
+  .weather-widget-tile-humidity { font-size: 0.8rem; font-weight: 500; line-height: 1; opacity: 1; margin-top: 2px; }
+  .weather-widget-tile-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2; opacity: 1; }
   .weather-widget-detail {
     padding: 10px 14px; background: var(--surface); border: 1px solid var(--line);
-    border-radius: 12px; font-size: 0.78rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
+    border-radius: 12px; font-size: 0.8rem; color: var(--ink-soft); box-shadow: 0 2px 8px var(--shadow);
     max-width: 320px;
   }
   .weather-widget-detail-place { font-weight: 700; color: var(--ink); font-size: 0.88rem; margin-bottom: 2px; }
   .weather-widget-detail-sub { margin-top: 4px; font-style: italic; }
-  .weather-widget-trend-label { margin-top: 10px; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+  .weather-widget-trend-label { margin-top: 10px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
   .trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 76px; margin-top: 6px; }
   .trend-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-  .trend-bar-temp { font-size: 0.62rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; }
+  .trend-bar-temp { font-size: 0.8rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; }
   .trend-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 4px 4px 2px 2px; opacity: 0.75; }
-  .trend-bar-hour { font-size: 0.6rem; color: var(--ink-soft); margin-top: 3px; }
-  .trend-bar-hum { font-size: 0.58rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
+  .trend-bar-hour { font-size: 0.8rem; color: var(--ink-soft); margin-top: 3px; }
+  .trend-bar-hum { font-size: 0.8rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
   /* Sits beside the weather tile, so left-aligned rather than the old
      full-width centered line under the clocks. */
   .sky-line {
     text-align: left; font-style: italic; color: var(--ink-soft);
-    font-size: 0.74rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
+    font-size: 0.8rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
   }
 
   /* SANDBOX EXPERIMENT: a fixed sky wash behind the whole page, tinted by
@@ -172,13 +177,27 @@ const RAW = String.raw`<!doctype html>
     color: var(--weather-ink, #2B211B);
   }
 
+  /* Past-days journal sits directly on the sky (not in a card), so its text and
+     lines use the sky ink too — plain --ink is dark in light mode and vanished on a night sky. */
+  body.weather-active .journal-toggle,
+  body.weather-active .journal-date,
+  body.weather-active .journal-q,
+  body.weather-active .journal-a,
+  body.weather-active .journal-a b,
+  body.weather-active .journal-empty,
+  body.weather-active .journal-entry .comment,
+  body.weather-active .journal-entry .comment-name { color: var(--weather-ink, #2B211B); }
+  body.weather-active .journal-entry { border-left-color: color-mix(in srgb, var(--weather-ink, #2B211B) 55%, transparent); }
+  body.weather-active .journal-entry .comments { border-top-color: color-mix(in srgb, var(--weather-ink, #2B211B) 40%, transparent); }
   body.weather-active .translate-inline { border-left-color: var(--weather-ink, #2B211B); }
   body.weather-active .eyebrow, body.weather-active .voice-card-prompt { color: var(--weather-ink, #2B211B); }
   /* Inside a card surface (white in light mode) the sky ink can be pale at
      night, which made Hindi translations and eyebrows near-invisible. Use the
      normal soft ink on card surfaces. */
   body.weather-active .card .translate-inline,
+  body.weather-active .puzzle-card .translate-inline,
   body.weather-active .streak-card .translate-inline,
+  body.weather-active .voice-card .translate-inline,
   body.weather-active .status-chip .translate-inline { color: var(--ink-soft); border-left-color: var(--line); }
   body.weather-active .card .eyebrow,
   body.weather-active .streak-card .eyebrow { color: var(--ink-soft); }
@@ -189,10 +208,21 @@ const RAW = String.raw`<!doctype html>
     padding: 8px 14px; font-size: 0.82rem;
   }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .status-travel-flag { font-size: 0.75rem; line-height: 1; flex: none; }
+  .status-travel-flag { font-size: 0.8rem; line-height: 1; flex: none; }
   .status-chip input { border: none; background: transparent; color: var(--ink); font: inherit; flex: 1; min-width: 0; outline: none; }
   .status-chip input { text-overflow: ellipsis; }
   .status-chip input::placeholder { color: var(--ink-soft); text-overflow: ellipsis; }
+  /* iOS dims disabled inputs (the partner's chip) and placeholders to a pale
+     grey; force full-strength text so they stay readable. */
+  .status-chip input, .status-chip input:disabled, .status-chip input:read-only { opacity: 1; -webkit-text-fill-color: var(--ink); color: var(--ink); }
+  .status-chip input::placeholder { opacity: 1; -webkit-text-fill-color: var(--ink-soft); color: var(--ink-soft); }
+  /* Links that sit directly on the weather sky (news / music / movies /
+     "show top 5") use the sky ink, not the brown accent, which is nearly
+     invisible on a night-blue sky. */
+  body.weather-active .news-line .news-link,
+  body.weather-active .music-line .music-link,
+  body.weather-active .movie-line .movie-link,
+  body.weather-active .chart-expand-btn { color: var(--weather-ink, #2B211B); font-weight: 700; text-decoration: underline; }
   /* SANDBOX EXPERIMENT: the partner's chip is tappable to preview their
      home screen's background — a subtle affordance, not a full button. */
   .status-chip-preview:hover { border-color: var(--accent); }
@@ -200,7 +230,7 @@ const RAW = String.raw`<!doctype html>
   .status-edit-btn { flex: none; background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 2px 4px; }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 24px; box-shadow: 0 2px 10px var(--shadow); }
-  .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .eyebrow { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
   .question { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.5rem; line-height: 1.3; text-wrap: balance; margin: 0 0 22px; }
 
   .answer-form { display: flex; flex-direction: column; gap: 10px; }
@@ -225,7 +255,7 @@ const RAW = String.raw`<!doctype html>
   .answers-reveal { display: flex; flex-direction: column; gap: 14px; }
   .answer-bubble { border-radius: 14px; padding: 14px 16px; border: 1px solid var(--line); }
   .answer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .answer-name { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+  .answer-name { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
   .answer-text { font-size: 0.98rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
   .translate-inline { display: block; margin-top: 6px; font-size: 0.88rem; font-style: italic; color: var(--ink-soft); border-left: 2px solid var(--line); padding-left: 8px; }
   .translate-inline-row { display: flex; align-items: baseline; gap: 6px; }
@@ -269,12 +299,14 @@ const RAW = String.raw`<!doctype html>
   .voice-card-howto-steps li { margin: 0 0 6px; }
   .voice-card-howto-steps li:last-child { margin-bottom: 0; }
 
-  .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.74rem; text-decoration: underline; padding: 0; font-family: inherit; }
+  .edit-btn { background: none; border: none; color: inherit; opacity: 0.65; cursor: pointer; font-size: 0.8rem; text-decoration: underline; padding: 0; font-family: inherit; }
   .edit-btn:hover { opacity: 1; }
   .edit-form { display: flex; flex-direction: column; gap: 8px; }
   .edit-form textarea { min-height: 64px; }
+  /* The travel form sits at the top, over the sky wash, so it gets a solid card (same as the pill above it) to stay readable at night. */
+  .travel-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 0 0 12px; }
   .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+  .mini-btn { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
   .mini-btn.primary { background: var(--accent); color: var(--on-accent); }
   .mini-btn.ghost { background: var(--surface-2); color: var(--ink); }
   .own-answer-visible { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 2px; }
@@ -313,17 +345,24 @@ const RAW = String.raw`<!doctype html>
   .puzzle-upload-btn { background: var(--accent); color: var(--on-accent); border: none; border-radius: 999px; padding: 9px 20px; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .puzzle-upload-btn:disabled { opacity: 0.6; cursor: default; }
   .puzzle-replace { text-align: center; }
-  .puzzle-replace-btn { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.76rem; text-decoration: underline; cursor: pointer; padding: 4px; }
+  .puzzle-replace-btn { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; padding: 4px; }
   .puzzle-done-note { text-align: center; font-size: 0.85rem; color: var(--good); font-weight: 700; margin: 0; }
   .puzzle-setup { display: flex; flex-direction: column; gap: 8px; width: 100%; }
   .puzzle-setup input[type="text"] { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .puzzle-setup select.lang-select { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; appearance: none; -webkit-appearance: none; padding-right: 38px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a7a6a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; background-size: 12px 8px; }
   .puzzle-setup select.lang-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Easier-to-read fields: placeholders were the browser's pale default, and the
+     pill borders nearly matched the fill. iOS dims placeholders, so force full opacity. */
+  .puzzle-setup input[type="text"], .puzzle-setup select.lang-select { font-size: 0.95rem; border-color: #C9AE95; }
+  .puzzle-setup input[type="text"]::placeholder { color: var(--ink-soft); opacity: 1; -webkit-text-fill-color: var(--ink-soft); }
+  @media (prefers-color-scheme: dark) {
+    .puzzle-setup input[type="text"], .puzzle-setup select.lang-select { border-color: #4A5068; }
+  }
   .puzzle-setup input[type="date"] { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .travel-until-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .travel-until-label { font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; }
+  .travel-until-label { font-size: 0.8rem; color: var(--ink-soft); white-space: nowrap; }
   .puzzle-setup-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .puzzle-choose-btn { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 9px 16px; font: inherit; font-size: 0.83rem; cursor: pointer; }
   .puzzle-guess { display: flex; flex-direction: column; gap: 8px; }
@@ -337,15 +376,37 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-list { display: flex; flex-direction: column; gap: 12px; }
   .puzzle-batch-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .puzzle-batch-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .puzzle-batch-name { font-size: 0.78rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nhie-past-row { padding: 10px 0; border-top: 1px solid var(--line); }
+  .nhie-past-title { margin: 0 0 6px; font-weight: 700; font-size: 0.9rem; }
+  .puzzle-batch-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; border: 1px solid var(--line); }
+  .puzzle-batch-head { justify-content: flex-start; }
+  .puzzle-batch-head .puzzle-batch-name { flex: 1; min-width: 0; }
+  .puzzle-batch-name { font-size: 0.8rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .puzzle-batch-row input { width: 100%; box-sizing: border-box; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--ink); font: inherit; font-size: 0.82rem; outline: none; }
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
 
-  .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
-  .tab-btn { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.85rem; padding: 9px 12px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .tab-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
+  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
-  .tab-badge { background: var(--accent-2); color: #fff; font-size: 0.68rem; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+  .tab-ico { font-size: 1.2rem; line-height: 1; }
+  .puzzle-card .translate-inline { color: #5a4a3f; }
+  .nhie-howto { font-size: 0.92rem; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 10px; }
+  .nhie-howto summary { cursor: pointer; font-weight: 700; color: var(--ink); }
+  .nhie-howto ol { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+  .nhie-phrase { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.35rem; line-height: 1.35; margin: 0; text-align: center; }
+  .nhie-choices { display: flex; gap: 12px; }
+  .nhie-choice { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 16px 10px; font: inherit; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .nhie-choice .emo { font-size: 2.2rem; line-height: 1; }
+  .nhie-choice .lbl { font-size: 0.85rem; }
+  .nhie-choice:disabled { opacity: 0.55; cursor: default; }
+  .nhie-results { display: flex; gap: 12px; }
+  .nhie-result { flex: 1; text-align: center; border-radius: 14px; border: 1px solid var(--line); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .nhie-result .emo { font-size: 2.4rem; line-height: 1; }
+  .nhie-result .who { font-weight: 700; font-size: 0.9rem; }
+  .nhie-verdict { text-align: center; font-weight: 700; margin: 0; }
+  .nhie-note { text-align: center; color: var(--ink-soft); font-size: 0.8rem; margin: 0; }
+  .tab-badge { background: var(--accent-2); color: #fff; position: absolute; top: 3px; right: 6px; font-size: 0.6rem; font-weight: 700; border-radius: 999px; padding: 1px 5px; line-height: 1.3; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
@@ -354,7 +415,7 @@ const RAW = String.raw`<!doctype html>
   .journal-toggle.open .chevron { transform: rotate(90deg); }
   .journal { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
   .journal-entry { border-left: 2px solid var(--line); padding-left: 14px; }
-  .journal-date { font-size: 0.72rem; color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 4px; }
+  .journal-date { font-size: 0.8rem; color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 4px; }
   .journal-q { font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 0.95rem; margin: 0 0 8px; }
   .journal-a { font-size: 0.85rem; margin-bottom: 4px; }
   .journal-a b { font-weight: 700; }
@@ -369,7 +430,13 @@ const RAW = String.raw`<!doctype html>
   .picker-btn:hover { border-color: var(--accent); }
 
   .switch-row { text-align: center; }
-  .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.78rem; text-decoration: underline; cursor: pointer; padding: 4px; }
+  .foot-links { margin-top: 8px; }
+  .foot-group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 6px; margin: 2px 0; }
+  .foot-group .switch-link { font-size: 0.85rem; padding: 6px 4px; }
+  .foot-sep { opacity: 0.55; font-size: 0.85rem; }
+  .foot-quiet .switch-link { font-size: 0.75rem; opacity: 0.8; }
+  body.weather-active .foot-sep { color: var(--weather-ink, #2B211B); }
+  .switch-link { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; padding: 4px; }
   /* The traveling button and (under it) the notifications link now sit
      right at the top of the page, directly over the full-height weather
      sky wash — too low-contrast there as plain text, so they get the same
@@ -381,7 +448,7 @@ const RAW = String.raw`<!doctype html>
   }
   .top-action-row .switch-link { color: var(--ink); }
   .offline-note { text-align: center; font-size: 0.8rem; color: var(--ink-soft); padding: 4px 8px; }
-  .cdt { text-align: center; font-size: 0.78rem; color: var(--ink-soft); padding: 2px 8px; }
+  .cdt { text-align: center; font-size: 0.8rem; color: var(--ink-soft); padding: 2px 8px; }
   /* SANDBOX EXPERIMENT: the fun-local-news line — same muted, centered
      treatment as .cdt so it doesn't compete for attention, just the
      headline itself underlined as a link out to the source. */
@@ -411,6 +478,11 @@ const RAW = String.raw`<!doctype html>
   .photo-caption { margin: 4px 0 0; overflow-wrap: anywhere; }
   .photo-hint { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; }
   .photo-comment { width: 100%; box-sizing: border-box; margin-top: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line, #ccc); background: var(--surface); color: var(--ink); font: inherit; }
+  .photo-zoom-wrap { position: relative; overflow: hidden; border-radius: 10px; margin-top: 8px; touch-action: pan-y; }
+  .photo-zoom-wrap .shared-photo { margin-top: 0; will-change: transform; transform-origin: center center; }
+  .photo-zoom-overlay .photo-zoom-wrap { width: 100vw; height: 100vh; margin: 0; border-radius: 0; touch-action: none; }
+  .photo-zoom-overlay .photo-zoom-wrap .shared-photo { width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; background: transparent; }
+  .photo-zoom-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px; width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 20px; z-index: 2; cursor: pointer; }
   .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
   [hidden] { display: none !important; }
 </style>
@@ -460,7 +532,7 @@ const RAW = String.raw`<!doctype html>
   // name on file, that's used instead.
   function inviteeLabel(key) {
     var p = state.people && state.people[key];
-    return (p && p.name) || t("your Nearune partner");
+    return (p && p.name) || "your partner";
   }
   function personLocation(key) {
     var p = state.people && state.people[key];
@@ -667,6 +739,74 @@ const RAW = String.raw`<!doctype html>
   ];
   var QUESTIONS_V2_START = "2026-10-09";
 
+  var QUESTIONS_SIGNIFICANT_OTHER_V3 = [
+    "What's the first thing you'd do if I walked through your door right now?",
+    "What's something I do that you can't stop thinking about?",
+    "Describe the way I smell without saying the word 'good'.",
+    "What's your favorite thing about the way I look at you?",
+    "If we had one uninterrupted evening together tonight, how would it go?",
+    "What's a text you almost sent me today?",
+    "Where's the first place you'd want me to kiss you?",
+    "What's the most attractive thing about me that nobody else would notice?",
+    "What would you whisper to me right now if I were next to you?",
+    "What's a moment from us that you replay when you miss me?",
+    "Pick one: slow dance in the kitchen or a long, quiet kiss. Why?",
+    "What's the coziest thing you'd want me to wrap you up in tonight?",
+    "What's something you've been wanting to tell me but haven't found the right moment?",
+    "What's your favorite way for me to say your name?",
+    "What would you want to do with me for a whole hour, no phones, no interruptions?",
+    "What's a song that makes you think of us in the dark?",
+    "When did you last catch yourself smiling about me for no reason?",
+    "What's the most romantic thing you can picture us doing this month?",
+    "What's your favorite memory of us being close?",
+    "If you could teleport me to you for ten minutes, what would you do with them?",
+    "What's something about me that still gives you butterflies?",
+    "What would our perfect morning-after look like?",
+    "Pick one: a hand on your back or fingers in your hair. Why?",
+    "What's the most adventurous thing you'd want to try with me someday?",
+    "What's the last thing you thought about me before falling asleep?",
+    "What do you wish I could see right now, and why?",
+    "Describe our first kiss in three words.",
+    "What's your favorite thing I've ever said to you?",
+    "What would you cook me if I were sitting at your table tonight?",
+    "What's a place in the world where you'd want us to get lost together?",
+    "What's a little thing I do that makes your heart race?",
+    "If tonight were ours, what would be the first song you'd put on?",
+    "What's one thing about us that feels like a secret?",
+    "Pick one: candlelight dinner or a midnight swim. Why?",
+    "What part of your day did you wish I was in?",
+    "What's something I wore that you still remember?",
+    "Finish this sentence: 'The moment I see you, I...'",
+    "What's a flirty nickname you wish I'd use for you?",
+    "What do you think about when you're alone and missing me?",
+    "What would make tonight feel like a date even though we're apart?",
+    "What's the best part of waking up next to someone you love?",
+    "What's your favorite thing about my voice?",
+    "Describe the look on my face that you love most.",
+    "What's something you want me to plan for our first night back together?",
+    "What's a compliment you'd love to hear from me tonight?",
+    "What would you do if you had me to yourself for a whole weekend?",
+    "What's something I said that made you blush?",
+    "What's the sweetest thing you've daydreamed about us?",
+    "Pick one: breakfast in bed or dessert at midnight. Why?",
+    "What do you want me to remember about how it feels to be close to you?",
+    "What's the most spontaneous thing you'd want us to do together?",
+    "What's your favorite way for me to hold you?",
+    "What's a moment today that would have been better with me?",
+    "What's something about my body language that gives me away?",
+    "What would you want me to say to you right before we kiss?",
+    "If you could rewind to any evening with me, which one?",
+    "What's something you'd happily get distracted by me doing right now?",
+    "What's one way I make ordinary days feel special?",
+    "What's a secret you'd tell me only in person?",
+    "What's your favorite thing to imagine us doing on our next night out?",
+    "What would you want to be doing in my arms right now? Be sweet or be bold.",
+    "Complete the sentence: 'I'd give anything to be next to you when...'",
+    "What's the one thing you hope I never stop doing?"
+  ];
+  // From this day on, partner rooms get the more romantic V3 list (past days keep their questions).
+  var QUESTIONS_V3_START = "2026-10-14";
+
   // Family-relationship pool — warm and curious like the above, but without
   // assuming a romantic pairing (no "us as a couple" framing), so it reads
   // naturally between a parent and adult child, siblings, cousins, etc.
@@ -820,16 +960,35 @@ const RAW = String.raw`<!doctype html>
   var PUZZLE_TOTAL = PUZZLE_COLS * PUZZLE_ROWS;
   var PUZZLE_ORDER = [16, 12, 9, 19, 18, 6, 5, 10, 15, 21, 11, 17, 1, 14, 22, 13, 2, 23, 4, 24, 7, 8, 0, 3, 20];
 
+  // A room's day rolls over at 6:30am in whichever of its two people's home
+  // zones is furthest ahead (Asia/Kolkata until both are known, which is also
+  // what the legacy room uses). Mirrors the server's todayKeyFor() in util.ts.
+  function tzOffsetMin(tz, at) {
+    try {
+      var parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(at);
+      var g = function (t) { return +parts.filter(function (p) { return p.type === t; })[0].value; };
+      return Math.round((Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute")) - Math.floor(at.getTime() / 60000) * 60000) / 60000);
+    } catch (e) { return null; }
+  }
+  function rolloverTz(at) {
+    var best = null, bestOff = -Infinity;
+    ["mark", "nikita"].forEach(function (k) {
+      var p = state && state.people && state.people[k];
+      var tz = p && p.tz;
+      if (!tz) return;
+      var off = tzOffsetMin(tz, at);
+      if (off !== null && off > bestOff) { bestOff = off; best = tz; }
+    });
+    return best || "Asia/Kolkata";
+  }
   function dateKey(d) {
-    // Mirrors the server: new day rolls over at 6:30am IST (always the
-    // more-advanced of Mark's/Nikita's two zones).
-    var parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d);
+    var parts = new Intl.DateTimeFormat("en-CA", { timeZone: rolloverTz(d), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d);
     var y, m, day, hh, mm;
     parts.forEach(function (p) {
       if (p.type === "year") y = +p.value;
       if (p.type === "month") m = +p.value;
       if (p.type === "day") day = +p.value;
-      if (p.type === "hour") hh = +p.value;
+      if (p.type === "hour") hh = +p.value % 24;
       if (p.type === "minute") mm = +p.value;
     });
     var ms = Date.UTC(y, m - 1, day);
@@ -845,7 +1004,10 @@ const RAW = String.raw`<!doctype html>
   function questionForKey(key) {
     var pool = questionPoolFor();
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
-    if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V2_START) {
+    if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V3_START) {
+      pool = QUESTIONS_SIGNIFICANT_OTHER_V3;
+      days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V3_START)) / DAY_MS);
+    } else if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V2_START) {
       pool = QUESTIONS_SIGNIFICANT_OTHER_V2;
       days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V2_START)) / DAY_MS);
     }
@@ -902,9 +1064,15 @@ const RAW = String.raw`<!doctype html>
     return personTz(key);
   }
   function nextRolloverMs() {
-    var n = Date.now(), d = new Date(n);
-    var c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 1, 0, 0);
-    return n >= c ? c + DAY_MS : c;
+    // First instant after now at which this room's day key changes.
+    var n = Date.now(), k = dateKey(new Date(n));
+    var lo = n, hi = n + 27 * 3600000;
+    if (dateKey(new Date(hi)) === k) return hi;
+    while (hi - lo > 1000) {
+      var mid = Math.floor((lo + hi) / 2);
+      if (dateKey(new Date(mid)) === k) lo = mid; else hi = mid;
+    }
+    return hi;
   }
   function countdownText() {
     var diff = nextRolloverMs() - Date.now();
@@ -969,6 +1137,9 @@ const RAW = String.raw`<!doctype html>
     if (viewerKey === null && !ROOM) viewerKey = localStorage.getItem("sameSkyViewer");
   } catch (e) {}
   if (viewerKey !== "mark" && viewerKey !== "nikita") viewerKey = null;
+  // A device that already knows who it is in this room should also remember the
+  // room itself, so opening the app at "/" goes straight back here.
+  if (viewerKey && ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
 
   // The confirm-email link comes back as "?viewer=mark" (or "nikita") so
   // whoever just confirmed lands straight on their next step, even if this
@@ -990,7 +1161,7 @@ const RAW = String.raw`<!doctype html>
   try {
     var storedTab = localStorage.getItem(TAB_LS_KEY);
     if (storedTab === null && !ROOM) storedTab = localStorage.getItem("sameSkyTab");
-    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local") activeTab = storedTab;
+    if (storedTab === "puzzle" || storedTab === "today" || storedTab === "local" || storedTab === "never") activeTab = storedTab;
   } catch (e) {}
   var puzzleFlashMsg = null;
 
@@ -1145,7 +1316,7 @@ const RAW = String.raw`<!doctype html>
 
   async function api(path, body) {
     var res = await fetch(RP + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error("request failed");
+    if (!res.ok) { var er = new Error("request failed"); try { er.code = (await res.json()).error; } catch (x) {} throw er; }
     var next = await res.json();
     state = next;
     online = true;
@@ -1862,7 +2033,9 @@ const RAW = String.raw`<!doctype html>
   }
 
   var puzzleGuessDraft = "";
-  var puzzleBatchItems = []; // { file, answer }
+  var puzzleBatchItems = []; // { file, answer, question, thumb }
+  var puzzleFileInputEl = null; // one persistent picker so a re-render while the photo sheet is open can't orphan it
+  var puzzleBatchRender = null; // redraws whichever batch form is currently on screen
 
   function puzzleAdvance() {
     fetch(RP + "/api/puzzle-advance", {
@@ -1878,7 +2051,7 @@ const RAW = String.raw`<!doctype html>
   function puzzleBatchForm() {
     var wrap = h("div", { class: "puzzle-setup" });
 
-    var fileInput = document.createElement("input");
+    var fileInput = puzzleFileInputEl || (puzzleFileInputEl = document.createElement("input"));
     fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.multiple = true; fileInput.style.display = "none";
     var chooseBtn = h("button", { class: "puzzle-choose-btn", text: t("Choose up to 10 photos") });
     chooseBtn.addEventListener("click", function () { fileInput.click(); });
@@ -1886,26 +2059,44 @@ const RAW = String.raw`<!doctype html>
     var list = h("div", { class: "puzzle-batch-list" });
     var submitBtn = h("button", { class: "puzzle-upload-btn", text: t("Load pictures") });
 
+    var needNote = h("p", { class: "puzzle-guess-note", text: t("Add a question and an answer for every photo to continue.") });
+    function batchComplete() {
+      if (!puzzleBatchItems.length) return false;
+      for (var bi = 0; bi < puzzleBatchItems.length; bi++) {
+        var it0 = puzzleBatchItems[bi];
+        if (!String(it0.question || "").trim() || !String(it0.answer || "").trim()) return false;
+      }
+      return true;
+    }
     function refreshSubmit() {
-      submitBtn.disabled = puzzleBatchItems.length === 0;
+      var ok = batchComplete();
+      submitBtn.disabled = !ok;
+      needNote.style.display = (puzzleBatchItems.length && !ok) ? "" : "none";
     }
     function renderList() {
       list.innerHTML = "";
       puzzleBatchItems.forEach(function (item, i) {
         var row = h("div", { class: "puzzle-batch-row" });
         var head = h("div", { class: "puzzle-batch-head" });
+        if (!item.thumb) { try { item.thumb = URL.createObjectURL(item.file); } catch (e) { item.thumb = ""; } }
+        if (item.thumb) {
+          var th = document.createElement("img");
+          th.className = "puzzle-batch-thumb"; th.alt = ""; th.src = item.thumb;
+          th.addEventListener("error", function () { th.style.display = "none"; });
+          head.appendChild(th);
+        }
         head.appendChild(h("span", { class: "puzzle-batch-name", text: item.file.name }));
         var rm = h("button", { class: "puzzle-batch-remove", text: "✕" });
         rm.addEventListener("click", function () { puzzleBatchItems.splice(i, 1); renderList(); refreshSubmit(); });
         head.appendChild(rm);
         row.appendChild(head);
         var q = document.createElement("input");
-        q.type = "text"; q.maxLength = 120; q.placeholder = t("Question (optional — defaults to \"where is this?\")");
+        q.type = "text"; q.maxLength = 120; q.placeholder = t("Question (required) — e.g. Where is this?");
         q.value = item.question || "";
-        q.addEventListener("input", function () { item.question = q.value; });
+        q.addEventListener("input", function () { item.question = q.value; refreshSubmit(); });
         row.appendChild(q);
         var ans = document.createElement("input");
-        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer (optional — defaults to \"Somewhere special\")");
+        ans.type = "text"; ans.maxLength = 120; ans.placeholder = t("Answer (required)");
         ans.value = item.answer;
         ans.addEventListener("input", function () { item.answer = ans.value; refreshSubmit(); });
         row.appendChild(ans);
@@ -1913,7 +2104,8 @@ const RAW = String.raw`<!doctype html>
       });
     }
 
-    fileInput.addEventListener("change", function () {
+    puzzleBatchRender = function () { renderList(); refreshSubmit(); };
+    fileInput.onchange = function () {
       var room = 10 - puzzleBatchItems.length;
       var files = Array.prototype.slice.call(fileInput.files || [], 0, room);
       files.forEach(function (f) {
@@ -1925,7 +2117,7 @@ const RAW = String.raw`<!doctype html>
             readAndCompressImage(f, 700, 0.7, function (small) {
               fetch(RP + "/api/puzzle-place", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dataUrl: small }) })
                 .then(function (r) { return r.json(); })
-                .then(function (b) { if (b && b.place && !item.answer.trim()) { item.answer = b.place; renderList(); refreshSubmit(); } })
+                .then(function (b) { if (b && b.place && !item.answer.trim()) { item.answer = b.place; if (puzzleBatchRender) puzzleBatchRender(); } })
                 .catch(function () {});
             });
             return;
@@ -1933,25 +2125,30 @@ const RAW = String.raw`<!doctype html>
           lookupPlaceName(coords.lat, coords.lon, function (place) {
             if (place && !item.answer) {
               item.answer = place;
-              renderList();
-              refreshSubmit();
+              if (puzzleBatchRender) puzzleBatchRender();
             }
           });
         });
       });
       fileInput.value = "";
-      renderList();
-      refreshSubmit();
-    });
+      // Full re-render (the form may have been rebuilt while the photo sheet
+      // was open), then bring the new question/answer boxes into view — on a
+      // phone the form sits low on the page and they were easy to miss.
+      renderApp();
+      setTimeout(function () {
+        var firstRow = document.querySelector(".puzzle-batch-row");
+        if (firstRow && firstRow.scrollIntoView) firstRow.scrollIntoView({ block: "center", behavior: "smooth" });
+      }, 150);
+    };
 
     refreshSubmit();
     submitBtn.addEventListener("click", function () {
-      if (!puzzleBatchItems.length) return;
+      if (!batchComplete()) { refreshSubmit(); return; }
       submitBtn.disabled = true;
       submitBtn.textContent = "Loading…";
       Promise.all(puzzleBatchItems.map(function (it) {
         return new Promise(function (resolve) {
-          readAndCompressImage(it.file, 900, 0.82, function (dataUrl) { resolve({ dataUrl: dataUrl, answer: it.answer.trim() || "Somewhere special", question: (it.question || "").trim() }); });
+          readAndCompressImage(it.file, 900, 0.82, function (dataUrl) { resolve({ dataUrl: dataUrl, answer: it.answer.trim(), question: (it.question || "").trim() }); });
         });
       })).then(function (items) {
         return fetch(RP + "/api/puzzle-batch", {
@@ -1997,6 +2194,7 @@ const RAW = String.raw`<!doctype html>
     wrap.appendChild(chooseBtn);
     wrap.appendChild(fileInput);
     wrap.appendChild(list);
+    wrap.appendChild(needNote);
     wrap.appendChild(submitBtn);
     return wrap;
   }
@@ -2016,6 +2214,54 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // Setter-only: fix the current picture's question/answer (the answer is
+  // secret server-side, so it has to be typed again).
+  var puzzleEditOpen = false, puzzleEditQ = "", puzzleEditA = "", puzzleEditMsg = "", puzzleEditBusy = false;
+  function puzzleEditBlock() {
+    var box = h("div", { class: "puzzle-setup", style: "margin-top: 10px;" });
+    if (!puzzleEditOpen) {
+      var open = h("button", { type: "button", class: "switch-link", style: "background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font: inherit; color: inherit;", text: t("Edit question and answer") });
+      open.addEventListener("click", function () { puzzleEditOpen = true; puzzleEditQ = state.puzzleQuestion || ""; puzzleEditA = ""; puzzleEditMsg = ""; renderApp(); });
+      if (puzzleEditMsg) box.appendChild(h("p", { class: "puzzle-guess-note", text: puzzleEditMsg }));
+      box.appendChild(open);
+      return box;
+    }
+    var qi = document.createElement("input");
+    qi.type = "text"; qi.maxLength = 120; qi.placeholder = t("Question (required)"); qi.value = puzzleEditQ;
+    qi.addEventListener("input", function () { puzzleEditQ = qi.value; });
+    var ai = document.createElement("input");
+    ai.type = "text"; ai.maxLength = 120; ai.placeholder = t("Answer (required) — type it again"); ai.value = puzzleEditA;
+    ai.addEventListener("input", function () { puzzleEditA = ai.value; });
+    var save = h("button", { class: "puzzle-upload-btn", text: puzzleEditBusy ? t("Saving…") : t("Save") });
+    save.disabled = puzzleEditBusy;
+    save.addEventListener("click", function () {
+      var q = puzzleEditQ.trim(), a = puzzleEditA.trim();
+      if (!q || !a) { puzzleEditMsg = t("Add a question and an answer."); renderApp(); return; }
+      puzzleEditBusy = true; puzzleEditMsg = ""; renderApp();
+      fetch(RP + "/api/puzzle-edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, question: q, answer: a }) })
+        .then(function (res) { return res.json().then(function (b) { return { ok: res.ok, body: b }; }); })
+        .then(function (r) {
+          puzzleEditBusy = false;
+          if (!r.ok || (r.body && r.body.error)) {
+            var er = r.body && r.body.error;
+            puzzleEditMsg = er === "inappropriate" ? t("That question or answer can't be used here. Please change it.")
+              : er === "already_solved" ? t("This puzzle is already solved.")
+              : t("Couldn't save that — try again.");
+            renderApp();
+            return;
+          }
+          state = r.body; puzzleEditOpen = false; puzzleEditMsg = t("Saved."); renderApp();
+        })
+        .catch(function () { puzzleEditBusy = false; puzzleEditMsg = t("Couldn't save that — try again."); renderApp(); });
+    });
+    var cancel = h("button", { type: "button", class: "switch-link", style: "background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font: inherit; color: inherit;", text: t("Cancel") });
+    cancel.addEventListener("click", function () { puzzleEditOpen = false; puzzleEditMsg = ""; renderApp(); });
+    box.appendChild(qi); box.appendChild(ai);
+    if (puzzleEditMsg) box.appendChild(h("p", { class: "puzzle-guess-note", text: puzzleEditMsg }));
+    box.appendChild(h("div", { class: "puzzle-setup-row" }, [save, cancel]));
+    return box;
+  }
+
   function puzzleGuessBlock() {
     var today = dateKey(new Date());
     var guessedToday = state.puzzleLastGuessDate === today;
@@ -2027,6 +2273,7 @@ const RAW = String.raw`<!doctype html>
         wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
       }
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You set this one — waiting for {name} to guess.", { name: otherName }) }));
+      if (!state.puzzleSolved) wrap.appendChild(puzzleEditBlock());
       return wrap;
     }
     if (guessedToday) {
@@ -2071,6 +2318,217 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  // Never Have I Ever: both partners secretly answer the same phrase —
+  // grin = never have I, shot = I have — and the answers are revealed once
+  // both are in. The server (nhie-vote / nhie-next) owns the phrase and the
+  // votes; the other person's answer is withheld until both have voted.
+  var nhieMyChoice = {};
+  var nhieBusy = false;
+  var nhieStarted = false;
+  // Never Have I Ever how-to clip: the full ~1 minute video, served from our
+  // own server (/nhie-howto.mp4). The app re-renders (and wipes) its whole
+  // page every few seconds, which would restart an inline video, so the
+  // player lives in a full-screen overlay attached to the page body instead,
+  // outside what gets re-rendered.
+  function nhieOpenClip() {
+    if (document.getElementById("nhie-clip-modal")) return;
+    var ov = document.createElement("div");
+    ov.id = "nhie-clip-modal";
+    ov.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; gap: 16px;";
+    var vid = document.createElement("video");
+    vid.src = "/nhie-howto.mp4";
+    vid.controls = true; vid.autoplay = true; vid.playsInline = true;
+    vid.setAttribute("playsinline", ""); vid.setAttribute("webkit-playsinline", "");
+    vid.style.cssText = "max-width: 100%; max-height: 78vh; border-radius: 12px; background: #000;";
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = t("Close");
+    closeBtn.style.cssText = "border: 0; border-radius: 999px; padding: 12px 28px; font: inherit; font-weight: 700; background: #fff; color: #2B211B; cursor: pointer;";
+    function shut() {
+      try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch (e) {}
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+    }
+    closeBtn.addEventListener("click", shut);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
+    ov.appendChild(vid);
+    ov.appendChild(closeBtn);
+    document.body.appendChild(ov);
+    try { var pr = vid.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) {}
+  }
+  function nhieVideo() {
+    var btn = h("button", { type: "button", "aria-label": "Play the funny version", style: "position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; cursor: pointer; background: #000 url('https://i.ytimg.com/vi/jqci-XEAbE0/hqdefault.jpg') center / cover no-repeat; padding: 0;" }, [
+      h("span", { text: "\u25B6", style: "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; font-size: 28px; line-height: 64px; text-align: center;" })
+    ]);
+    btn.addEventListener("click", nhieOpenClip);
+    return btn;
+  }
+
+  var nhieDrafts = {};
+  var nhiePastOpen = false;
+  function nhieCommentsBlock(round) {
+    var n = state.nhie || {};
+    var wrap = h("div", { class: "comments" });
+    var list = (n.comments && n.comments[String(round)]) || [];
+    list.forEach(function (c) {
+      if (c.who !== viewerKey && isBlocked()) return;
+      var person = PEOPLE[c.who] ? { name: personName(c.who), color: PEOPLE[c.who].color } : { name: t("Someone"), color: "var(--ink-soft)" };
+      var cDiv = h("div", { class: "comment" }, [
+        h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
+        h("span", { text: c.text })
+      ]);
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
+      if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
+      wrap.appendChild(cDiv);
+    });
+    if (viewerKey) {
+      var key = String(round);
+      var form = h("div", { class: "comment-form" });
+      var input = document.createElement("input");
+      input.type = "text"; input.maxLength = 200; input.placeholder = t("Add a comment…");
+      input.value = nhieDrafts[key] || "";
+      input.addEventListener("input", function () { nhieDrafts[key] = input.value; });
+      function post() {
+        var txt = (nhieDrafts[key] || "").trim();
+        if (!txt) return;
+        nhieDrafts[key] = "";
+        api("/api/nhie-comment", { who: viewerKey, round: round, text: txt })
+          .catch(function (e) { nhieDrafts[key] = txt; if (e && e.code === "content_blocked") blockedNotice(); })
+          .then(function () { renderApp(); });
+      }
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); post(); } });
+      var send = h("button", { class: "comment-send", text: t("Reply") });
+      send.addEventListener("click", post);
+      form.appendChild(input); form.appendChild(send);
+      wrap.appendChild(form);
+    }
+    return wrap;
+  }
+
+  function nhiePastRounds() {
+    var n = state.nhie || {};
+    var past = (n.history || []).slice().reverse();
+    var det = h("details", { class: "nhie-howto" });
+    if (nhiePastOpen) det.setAttribute("open", "");
+    det.addEventListener("toggle", function () { nhiePastOpen = det.open; });
+    det.appendChild(h("summary", { text: tTemplate("Past rounds ({n})", { n: past.length }) }));
+    if (!past.length) det.appendChild(h("p", { class: "nhie-note", text: t("Finished rounds will show up here, with comments you can add.") }));
+    past.forEach(function (r) {
+      var row = h("div", { class: "nhie-past-row" });
+      row.appendChild(h("p", { class: "nhie-past-title", text: tTemplate("Round {n}", { n: r.round }) + " \u2014 " + r.text }));
+      var res = h("div", { class: "nhie-results" });
+      ["mark", "nikita"].forEach(function (key) {
+        var v = r.votes && r.votes[key];
+        res.appendChild(h("div", { class: "nhie-result" }, [
+          h("span", { class: "emo", text: v === "have" ? "\uD83E\uDD43" : "\uD83D\uDE01" }),
+          h("span", { class: "who", style: "color:" + PEOPLE[key].color, text: personName(key) }),
+          h("span", { class: "nhie-note", text: v === "have" ? t("Has done it") : t("Never has") })
+        ]));
+      });
+      row.appendChild(res);
+      row.appendChild(nhieCommentsBlock(r.round));
+      det.appendChild(row);
+    });
+    return det;
+  }
+
+  function nhieSection() {
+    if (isBlocked()) return blockedNote();
+    var n = state.nhie;
+    if (!n) {
+      if (!nhieStarted && viewerKey) {
+        nhieStarted = true;
+        api("/api/nhie-next", { who: viewerKey, round: 0 }).then(function () { renderApp(); }).catch(function () { nhieStarted = false; });
+      }
+      return h("div", { class: "puzzle-card" }, [h("p", { class: "puzzle-explain", text: t("Loading your first one...") })]);
+    }
+    var other = viewerKey ? otherKeyOf(viewerKey) : null;
+    var voted = n.voted || {};
+    var votes = n.votes || {};
+    var revealed = !!(votes.mark && votes.nikita);
+    var myVoted = viewerKey ? (voted[viewerKey] || !!nhieMyChoice[n.round]) : false;
+
+    var card = h("div", { class: "puzzle-card" }, [
+      h("div", { class: "puzzle-head" }, [
+        h("p", { class: "puzzle-title", text: t("Never Have I Ever") }),
+        h("span", { class: "puzzle-progress", text: tTemplate("Round {n}", { n: n.round }) })
+      ]),
+      h("p", { class: "nhie-phrase", text: n.text }),
+      uiTranslateBlock(n.text, viewerKey ? otherKeyOf(viewerKey) : null)
+    ]);
+
+    if (!revealed) {
+      if (!viewerKey) {
+        card.appendChild(h("p", { class: "nhie-note", text: t("Pick who you are at the bottom of the page to play.") }));
+      } else if (!myVoted) {
+        var neverBtn = h("button", { class: "nhie-choice" }, [h("span", { class: "emo", text: "\uD83D\uDE01" }), h("span", { class: "lbl", text: t("Never have I!") })]);
+        var haveBtn = h("button", { class: "nhie-choice" }, [h("span", { class: "emo", text: "\uD83E\uDD43" }), h("span", { class: "lbl", text: t("I have - take a shot") })]);
+        function cast(choice) {
+          if (nhieBusy) return;
+          nhieBusy = true;
+          nhieMyChoice[n.round] = choice;
+          try { localStorage.setItem("nearuneNhie:" + ROOM + ":" + viewerKey + ":" + n.round, choice); } catch (e) {}
+          api("/api/nhie-vote", { who: viewerKey, choice: choice, round: n.round })
+            .catch(function () { delete nhieMyChoice[n.round]; })
+            .then(function () { nhieBusy = false; renderApp(); });
+        }
+        neverBtn.addEventListener("click", function () { cast("never"); });
+        haveBtn.addEventListener("click", function () { cast("have"); });
+        card.appendChild(h("div", { class: "nhie-choices" }, [neverBtn, haveBtn]));
+        card.appendChild(h("p", { class: "nhie-note", text: t("Answers stay hidden until you both have answered.") }));
+      } else {
+        var mine = nhieMyChoice[n.round] || n.mine;
+        if (!mine) { try { mine = localStorage.getItem("nearuneNhie:" + ROOM + ":" + viewerKey + ":" + n.round) || ""; } catch (e) { mine = ""; } }
+        var mineIcon = mine === "have" ? "\uD83E\uDD43 " : mine ? "\uD83D\uDE01 " : "";
+        card.appendChild(h("p", { class: "nhie-verdict", text: mineIcon + t("Answered! \u2705") }));
+        card.appendChild(h("p", { class: "nhie-note", text: tTemplate("Waiting for {name} to answer...", { name: other ? personName(other) : "your partner" }) }));
+        card.appendChild(nhieCommentsBlock(n.round));
+      }
+    } else {
+      var res = h("div", { class: "nhie-results" });
+      ["mark", "nikita"].forEach(function (key) {
+        var v = votes[key];
+        res.appendChild(h("div", { class: "nhie-result" }, [
+          h("span", { class: "emo", text: v === "have" ? "\uD83E\uDD43" : "\uD83D\uDE01" }),
+          h("span", { class: "who", style: "color:" + PEOPLE[key].color, text: personName(key) }),
+          h("span", { class: "nhie-note", text: v === "have" ? t("Has done it") : t("Never has") })
+        ]));
+      });
+      card.appendChild(res);
+      var haveCount = (votes.mark === "have" ? 1 : 0) + (votes.nikita === "have" ? 1 : 0);
+      var verdict = haveCount === 2 ? t("You both have! Cheers, take a shot together \uD83E\uDD43\uD83E\uDD43")
+        : haveCount === 0 ? t("Neither of you has! Big grins all round \uD83D\uDE01\uD83D\uDE01")
+        : tTemplate("{name} takes a shot \uD83E\uDD43", { name: personName(votes.mark === "have" ? "mark" : "nikita") });
+      card.appendChild(h("p", { class: "nhie-verdict", text: verdict }));
+      card.appendChild(nhieCommentsBlock(n.round));
+      var nextBtn = h("button", { class: "mini-btn primary", text: t("Next one") });
+      nextBtn.addEventListener("click", function () {
+        if (nhieBusy || !viewerKey) return;
+        nhieBusy = true;
+        api("/api/nhie-next", { who: viewerKey, round: n.round })
+          .catch(function () {})
+          .then(function () { nhieBusy = false; renderApp(); });
+      });
+      card.appendChild(nextBtn);
+    }
+    var howto = h("details", { class: "nhie-howto" }, [
+      h("summary", { text: t("How to play") }),
+      h("ol", {}, [
+        h("li", { text: t("You both see the same phrase.") }),
+        h("li", { text: t("Tap \uD83D\uDE01 if you have never done it, or \uD83E\uDD43 if you have.") }),
+        h("li", { text: t("Answers stay hidden until you both have answered.") }),
+        h("li", { text: t("Then you see each other's answers. Whoever has done it takes a sip!") }),
+        h("li", { text: t("Tap Next one for a new phrase.") })
+      ])
+    ]);
+    card.appendChild(howto);
+    var pastEl = nhiePastRounds();
+    if (pastEl) card.appendChild(pastEl);
+    card.appendChild(nhieVideo());
+    card.appendChild(h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: block; text-align: center; font-weight: 700; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") }));
+    card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
+    return card;
+  }
+
   function puzzleSection() {
     if (isBlocked()) return blockedNote();
     var inBatch = !!state.puzzleCurrentId;
@@ -2085,22 +2543,29 @@ const RAW = String.raw`<!doctype html>
     if (!inBatch) {
       card.appendChild(puzzleBatchForm());
       if (state.puzzleQueueBy) {
-        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
+        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate((state.puzzleQueueTotal || 0) === 1 ? "Last loaded by {name} ({total} picture)." : "Last loaded by {name} ({total} pictures).", { name: personName(state.puzzleQueueBy), total: state.puzzleQueueTotal || 0 }) }));
       }
     } else {
       card.appendChild(puzzleZoomableGrid(puzzleImgSrc()));
-      if (state.puzzleSolved) {
-        card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate("Solved — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
+      var fullyRevealed = !!state.puzzleSolved || unlocked >= PUZZLE_TOTAL;
+      if (fullyRevealed) {
+        card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate(state.puzzleSolved ? "Solved — it was “{answer}.” ✧" : "Fully revealed — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
           card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
         }
-        var nextBtn = h("button", { class: "puzzle-upload-btn", text: puzzleQueueRemaining() > 0 ? t("Next picture →") : t("Finish batch") });
-        nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
-        card.appendChild(nextBtn);
+        if (puzzleQueueRemaining() > 0) {
+          var nextBtn = h("button", { class: "puzzle-upload-btn", text: t("Next picture →") });
+          nextBtn.addEventListener("click", function () { nextBtn.disabled = true; puzzleAdvance(); });
+          card.appendChild(nextBtn);
+        } else {
+          // Nothing queued: load a fresh batch right here (replaces this picture).
+          card.appendChild(h("p", { class: "puzzle-guess-note", text: t("That's the last picture — load new ones to keep going.") }));
+          card.appendChild(puzzleBatchForm());
+        }
       } else {
         card.appendChild(puzzleGuessBlock());
+        card.appendChild(puzzleLockedNote());
       }
-      card.appendChild(puzzleLockedNote());
     }
     return card;
   }
@@ -2120,7 +2585,7 @@ const RAW = String.raw`<!doctype html>
     var text = editDraftText.trim();
     if (!text) return;
     try { await api("/api/answer", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { online = false; }
+    catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
     editingEntry = null;
     renderApp();
   }
@@ -2139,11 +2604,14 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
+  function blockedNotice() {
+    window.alert(t("Please keep it kind and clean. This message wasn't sent."));
+  }
   async function sendComment(dateKeyVal) {
     var text = (commentDrafts[dateKeyVal] || "").trim();
     if (!text) return;
     try { await api("/api/comment", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { online = false; }
+    catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
     commentDrafts[dateKeyVal] = "";
     renderApp();
   }
@@ -2213,16 +2681,18 @@ const RAW = String.raw`<!doctype html>
 
   function tabBar() {
     var unlocked = puzzleUnlockedCount();
-    var todayBtn = h("button", { class: "tab-btn" + (activeTab === "today" ? " active" : ""), text: t("Today") });
-    todayBtn.addEventListener("click", function () { setActiveTab("today"); });
-    var localBtn = h("button", { class: "tab-btn" + (activeTab === "local" ? " active" : ""), text: t("Local Feel") });
-    localBtn.addEventListener("click", function () { setActiveTab("local"); });
-    var puzzleBtn = h("button", { class: "tab-btn" + (activeTab === "puzzle" ? " active" : "") }, [
-      document.createTextNode(t("Puzzle") + " "),
-      h("span", { class: "tab-badge", text: unlocked + "/" + PUZZLE_TOTAL })
-    ]);
-    puzzleBtn.addEventListener("click", function () { setActiveTab("puzzle"); });
-    return h("div", { class: "tab-bar" }, [todayBtn, localBtn, puzzleBtn]);
+    function mk(id, icon, label, badge) {
+      var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
+      if (badge) kids.push(h("span", { class: "tab-badge", text: badge }));
+      var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
+      btn.addEventListener("click", function () { setActiveTab(id); });
+      return btn;
+    }
+    var tabs = [mk("today", "☀️", "Today"), mk("local", "📍", "Local Feel")];
+    // The photo puzzle is off in "Make a friend" rooms (strangers).
+    if (!(state && state.origin === "friend")) tabs.push(mk("puzzle", "🧩", "Puzzle", unlocked + "/" + PUZZLE_TOTAL));
+    tabs.push(mk("never", "🥃", "Never Have I Ever"));
+    return h("div", { class: "tab-bar" }, tabs);
   }
 
   function puzzleFlashBanner() {
@@ -2241,6 +2711,41 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
     return null;
   })();
+  // Set by the server from the APP_STORE_URL variable (empty when unset).
+  var APP_STORE_URL = "__APP_STORE_URL__";
+  var IN_NATIVE_APP = false;
+  try { IN_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+  // Universal links: when the app is opened from an invite or confirmation
+  // link, load that link inside the app instead of a browser.
+  (function () {
+    try {
+      var CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (!CapApp || !CapApp.addListener) return;
+      var handleAppUrl = function (raw, fromLaunch) {
+        try {
+          var u = new URL(raw);
+          if (u.hostname !== "nearune.ai") return;
+          if (fromLaunch) {
+            var seen = ""; try { seen = localStorage.getItem("nearuneLastLaunchUrl") || ""; } catch (e) {}
+            if (seen === raw) return;
+            try { localStorage.setItem("nearuneLastLaunchUrl", raw); } catch (e) {}
+          }
+          var conf = u.pathname.match(new RegExp("^/r/([a-z0-9]+)/api/confirm$", "i"));
+          if (conf) {
+            var cwho = u.searchParams.get("who") || "";
+            fetch(u.pathname + u.search).then(
+              function () { location.href = "/r/" + conf[1] + "/?viewer=" + encodeURIComponent(cwho); },
+              function () { location.href = u.pathname + u.search; }
+            );
+            return;
+          }
+          location.href = u.pathname + u.search;
+        } catch (e) {}
+      };
+      CapApp.addListener("appUrlOpen", function (ev) { if (ev && ev.url) handleAppUrl(ev.url, false); });
+      if (CapApp.getLaunchUrl) CapApp.getLaunchUrl().then(function (r) { if (r && r.url) handleAppUrl(r.url, true); }, function () {});
+    } catch (e) {}
+  })();
   var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Looks up the typed location and, unless the person has already picked
@@ -2255,16 +2760,104 @@ const RAW = String.raw`<!doctype html>
   // mobile until they tap away), which left the dropdown looking stuck.
   var lastLangSelectEl = null;
   var lastLocInputEl = null;
+  var locCityError = "", locNoteEl = null;
+  function setLocNote(msg) {
+    locCityError = msg || "";
+    if (locNoteEl && document.body.contains(locNoteEl)) locNoteEl.textContent = locCityError;
+  }
+  function makeLocNote() {
+    locNoteEl = document.createElement("p");
+    locNoteEl.className = "puzzle-guess-note";
+    locNoteEl.style.color = "#f0605a";
+    locNoteEl.setAttribute("role", "alert");
+    locNoteEl.textContent = locCityError;
+    return locNoteEl;
+  }
+  function useCurrentLocation(draft) {
+    if (!navigator.geolocation) return;
+    setLocNote(t("Finding your location…"));
+    var locDone = false;
+    var locWatch = setTimeout(function () { if (!locDone) { locDone = true; setLocNote(t("Couldn't get your location. Please type your city.")); } }, 15000);
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      if (locDone) return;
+      locDone = true; clearTimeout(locWatch);
+      fetch(RP + "/api/reverse-geo?lat=" + pos.coords.latitude + "&lon=" + pos.coords.longitude)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.label) {
+            draft.location = d.label;
+            if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = d.label;
+            setLocNote("");
+            suggestLanguageFromLocation(draft, d.label);
+          } else { setLocNote(t("Couldn't work out your city. Please type it.")); }
+        })
+        .catch(function () { setLocNote(t("Couldn't work out your city. Please type it.")); });
+    }, function () { if (locDone) return; locDone = true; clearTimeout(locWatch); setLocNote(t("Couldn't get your location. Please type your city.")); }, { timeout: 10000, maximumAge: 600000 });
+  }
+  var autoLocTried = false;
+  function makeLocButton(draft, noAuto) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = t("📍 Use my current location");
+    b.style.cssText = "display:block;margin:-2px auto 8px;padding:6px 12px;border:0;background:transparent;font:inherit;font-size:0.9em;color:inherit;text-decoration:underline;cursor:pointer";
+    if (!navigator.geolocation) b.style.display = "none";
+    b.addEventListener("click", function () { useCurrentLocation(draft); });
+    // If location access was already granted, fill it in without asking again.
+    try {
+      if (!noAuto && !autoLocTried && navigator.permissions && navigator.permissions.query && !draft.location.trim()) {
+        autoLocTried = true;
+        navigator.permissions.query({ name: "geolocation" }).then(function (st) {
+          if (st && st.state === "granted" && !draft.location.trim()) useCurrentLocation(draft);
+        }).catch(function () {});
+      }
+    } catch (e) {}
+    return b;
+  }
+  var locChoicesEl = null;
+  function makeLocChoices() {
+    locChoicesEl = document.createElement("div");
+    locChoicesEl.style.display = "none";
+    locChoicesEl.style.margin = "-2px 0 10px";
+    locChoicesEl.style.border = "1px solid rgba(0,0,0,0.12)";
+    locChoicesEl.style.borderRadius = "16px";
+    locChoicesEl.style.overflow = "hidden";
+    locChoicesEl.style.background = "#fff";
+    return locChoicesEl;
+  }
+  function showLocChoices(draft, places) {
+    if (!locChoicesEl || !document.body.contains(locChoicesEl)) return;
+    locChoicesEl.innerHTML = "";
+    if (!places || !places.length) { locChoicesEl.style.display = "none"; return; }
+    places.forEach(function (pl) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = pl.label;
+      b.style.cssText = "display:block;width:100%;text-align:left;padding:12px 16px;border:0;border-bottom:1px solid rgba(0,0,0,0.08);background:#fff;font:inherit;font-size:1rem;color:#1b1f2a;cursor:pointer";
+      b.addEventListener("click", function () {
+        draft.location = pl.label;
+        if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = pl.label;
+        locChoicesEl.style.display = "none";
+        setLocNote("");
+        suggestLanguageFromLocation(draft, pl.label);
+      });
+      locChoicesEl.appendChild(b);
+    });
+    locChoicesEl.style.display = "block";
+  }
   function suggestLanguageFromLocation(draft, locationText) {
     if (geoSuggestTimer) clearTimeout(geoSuggestTimer);
-    if (!locationText.trim()) return;
+    if (!locationText.trim()) { setLocNote(""); showLocChoices(draft, []); return; }
     geoSuggestTimer = setTimeout(function () {
       fetch(RP + "/api/geo?location=" + encodeURIComponent(locationText.trim()))
         .then(function (r) { return r.json(); })
         .then(function (info) {
-          if (info && info.corrected && draft.location.trim() === locationText.trim()) {
-            draft.location = info.corrected;
-            if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = info.corrected;
+          if (draft.location.trim() === locationText.trim()) {
+            var pls = (info && info.places) || [];
+            var exact = pls.some(function (pl) { return pl.label.toLowerCase() === locationText.trim().toLowerCase(); });
+            var suggestedList = !!(info && info.suggested) && pls.length > 0 && !exact;
+            var ambiguous = (pls.length >= 2 && !exact) || suggestedList;
+            setLocNote(suggestedList ? t("We couldn't find that spelling. Did you mean one of these? Pick yours from the list.") : info && info.city === false && !pls.length ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "");
+            showLocChoices(draft, ambiguous ? pls : []);
           }
           if (draft.languageTouched) return; // they picked one while we were waiting
           if (info && info.language && draft.location.trim() === locationText.trim()) {
@@ -2336,15 +2929,30 @@ const RAW = String.raw`<!doctype html>
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
       h("p", { class: "question", text: t("Finish setting up your Nearune.") })
     ]);
+    // In a browser (not the app): lead with the app. Tapping the button also
+    // copies this invite link, so it can be pasted on the app's first screen.
+    if (!IN_NATIVE_APP && APP_STORE_URL && !/^__APP/.test(APP_STORE_URL)) {
+      var getApp = h("a", { class: "puzzle-upload-btn", href: APP_STORE_URL, style: "display:block;text-align:center;text-decoration:none;margin:4px 0 8px;", text: t("Get the Nearune app") });
+      getApp.addEventListener("click", function () {
+        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
+      });
+      card.appendChild(getApp);
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your invite link is copied when you tap this. After installing, open Nearune and paste it into the box on the first screen. Or just continue below in your browser.") }));
+    }
     var form = h("div", { class: "puzzle-setup" });
-    lastLocInputEl = textField(acceptDraft.location, "Where you're based", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
+    lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
+    form.appendChild(makeLocButton(acceptDraft));
+    form.appendChild(makeLocNote());
+    form.appendChild(makeLocChoices());
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Nearune") });
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
+      if (!acceptDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
+      if (locCityError) { regError = locCityError; renderApp(); return; }
       if (!acceptDraft.name.trim()) { regError = "Enter your name."; renderApp(); return; }
       regBusy = true; regError = ""; renderApp();
       fetch(RP + "/api/accept-invite", {
@@ -2353,7 +2961,7 @@ const RAW = String.raw`<!doctype html>
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
-          if (!res.ok) { regError = t("That invite link isn't valid."); renderApp(); return; }
+          if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : res.data && res.data.error === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
@@ -2379,9 +2987,28 @@ const RAW = String.raw`<!doctype html>
   }
 
   var lastConfirmUrl = "";
+  // The address a confirmation was sent to. The server only keeps a one-way
+  // hash of it, so it is remembered on this device only, to show "Sent to ..."
+  // and to prefill the form when fixing a typo.
+  var lastConfirmEmail = "";
+  function capFirst(str) { str = String(str || ""); return str.charAt(0).toUpperCase() + str.slice(1); }
+  // Same idea for the partner invite: only this device remembers where it went.
+  var lastInviteEmail = "";
+  function inviteEmailKey() { return "nearuneInviteEmail:" + ROOM + ":" + viewerKey; }
+  function sentInviteEmail() {
+    if (lastInviteEmail) return lastInviteEmail;
+    try { return localStorage.getItem(inviteEmailKey()) || ""; } catch (e) { return ""; }
+  }
+  function confirmEmailKey() { return "nearuneConfirmEmail:" + ROOM + ":" + viewerKey; }
+  function sentToEmail() {
+    if (lastConfirmEmail) return lastConfirmEmail;
+    try { return localStorage.getItem(confirmEmailKey()) || ""; } catch (e) { return ""; }
+  }
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
-    if (!name || !email) { regError = t("Name and Instagram handle (or email) required."); renderApp(); return; }
+    if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
+    if (locCityError) { regError = locCityError; renderApp(); return; }
+    if (!name || !email) { regError = t("Name and email (or Instagram handle) required."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
@@ -2395,12 +3022,18 @@ const RAW = String.raw`<!doctype html>
       .then(function (res) {
         regBusy = false;
         if (!res.ok) {
-          regError = res.data && res.data.error === "rate_limited"
+          regError = res.data && res.data.error === "region_unavailable"
+            ? t("Nearune isn't available in that location.")
+            : res.data && res.data.error === "city_required"
+            ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).")
+            : res.data && res.data.error === "rate_limited"
             ? t("Too many attempts — wait a bit and try again.")
             : t("Couldn't register — try again.");
           renderApp(); return;
         }
         lastConfirmUrl = res.data._confirmUrl || "";
+        lastConfirmEmail = email;
+        try { localStorage.setItem(confirmEmailKey(), email); } catch (e) {}
         state = res.data;
         showRegisterForm = false;
         if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
@@ -2419,11 +3052,26 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "question", text: t("Check your email for a confirmation link.") }),
         h("p", { class: "puzzle-guess-note", text: t("Don't see it? Check your spam folder.") })
       ]);
+      var sentTo = sentToEmail();
+      if (sentTo) wait.insertBefore(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: sentTo }) }), wait.children[2]);
       if (regError) wait.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
       var rowBtns = [];
-      var again = h("button", { class: "switch-link", text: t("Resend confirmation") });
-      again.addEventListener("click", function () { showRegisterForm = true; renderApp(); });
+      var again = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: t("Resend confirmation") });
+      again.addEventListener("click", function () {
+        if (!registerDraft.email) registerDraft.email = sentTo;
+        if (!registerDraft.name && mine.name) registerDraft.name = mine.name;
+        if (!registerDraft.location && mine.location) registerDraft.location = mine.location;
+        showRegisterForm = true; renderApp();
+      });
       rowBtns.push(again);
+      var wrongEmail = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: t("Wrong email? Use a different one") });
+      wrongEmail.addEventListener("click", function () {
+        registerDraft.email = "";
+        if (!registerDraft.name && mine.name) registerDraft.name = mine.name;
+        if (!registerDraft.location && mine.location) registerDraft.location = mine.location;
+        showRegisterForm = true; renderApp();
+      });
+      rowBtns.push(wrongEmail);
       // No email provider configured (sandbox) or the email just failed to
       // send — either way this link finishes the same confirmation an email
       // would have, without waiting on one.
@@ -2439,11 +3087,20 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "question", text: subtitle })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    lastLocInputEl = textField(registerDraft.location, "Where you're based", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
+    lastLocInputEl = textField(registerDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
+    form.appendChild(makeLocButton(registerDraft));
+    form.appendChild(makeLocNote());
+    form.appendChild(makeLocChoices());
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
-    form.appendChild(textField(registerDraft.email, "Your Instagram handle (or email if you don't use Instagram)", function (v) { registerDraft.email = v; }));
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No Instagram? Use your email instead. With an Instagram handle we can't email you a lost link, so keep your Nearune link handy.") }));
+    var regEmailInput = textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; });
+    regEmailInput.setAttribute("inputmode", "email");
+    regEmailInput.setAttribute("autocapitalize", "off");
+    regEmailInput.setAttribute("autocorrect", "off");
+    regEmailInput.setAttribute("autocomplete", "email");
+    form.appendChild(regEmailInput);
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your email is used only to confirm your account and help you get back into your room. If you don't confirm, we keep it for up to 7 days to send a reminder, then delete it. Once you confirm, Nearune doesn't save your email address.") }));
+    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No email? Enter your Instagram handle instead. Registered with an email? Tap Find your room below if you ever lose your link. With an Instagram handle we can't look your room up, so keep your Nearune link handy.") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     // Only the first person through sets this — it's shared by the room
     // (questionPoolFor() uses it for both people's daily question), so
@@ -2463,8 +3120,9 @@ const RAW = String.raw`<!doctype html>
       sw.addEventListener("click", function () { viewerKey = null; previewKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
-    var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Already registered somewhere? Recover your link") })]);
+    var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Find your room") })]);
     card.appendChild(lost);
+    card.appendChild(h("div", { class: "switch-row" }, [h("a", { href: "/new", class: "switch-link", text: t("Open an existing room") })]));
     return card;
   }
 
@@ -2472,7 +3130,7 @@ const RAW = String.raw`<!doctype html>
   var lastAppStoreUrl = "";
   function submitInvite() {
     var email = inviteEmailDraft.trim();
-    if (!email) { regError = t("Enter an Instagram handle (or email) first."); renderApp(); return; }
+    if (!email) { regError = t("Enter an email (or Instagram handle) first."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, contact: email })
@@ -2482,11 +3140,17 @@ const RAW = String.raw`<!doctype html>
         if (!res.ok) {
           regError = res.data && res.data.error === "rate_limited"
             ? t("Too many attempts — wait a bit and try again.")
+            : res.data && res.data.error === "email_unverified"
+            ? t("Confirm your own email first to send an invite by email. Or use \"Send a link by text\" below.")
             : t("Couldn't send invite — try again.");
           renderApp(); return;
         }
         lastInviteUrl = res.data._inviteUrl || "";
         lastAppStoreUrl = res.data._appStoreUrl || "";
+        if (!res.data._viaHandle) {
+          lastInviteEmail = email;
+          try { localStorage.setItem(inviteEmailKey(), email); } catch (e) {}
+        }
         state = res.data;
         showInviteForm = false;
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
@@ -2495,12 +3159,51 @@ const RAW = String.raw`<!doctype html>
       .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
 
+  function inviteStoreUrl() {
+    if (lastAppStoreUrl) return lastAppStoreUrl;
+    return APP_STORE_URL && !/^__APP/.test(APP_STORE_URL) ? APP_STORE_URL : "";
+  }
+  // The text a person sends: app link, invite link, and the room code so the
+  // partner can still get in by typing it if the link gets lost.
+  function inviteMessage(url) {
+    var store = inviteStoreUrl();
+    var lines = [t("Join me on Nearune!")];
+    if (store) lines.push("1. " + t("Get the app:") + " " + store);
+    lines.push((store ? "2. " : "") + t("Open this link:") + " " + url);
+    if (ROOM) lines.push(t("Or open the app, tap Open an existing room, and enter the room code:") + " " + ROOM);
+    lines.push(t("No iPhone? Use it in your browser at nearune.ai"));
+    return lines.join("\n");
+  }
+  function submitInviteLink() {
+    regBusy = true; regError = ""; renderApp();
+    fetch(RP + "/api/invite", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, via: "link" })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        regBusy = false;
+        if (!res.ok) {
+          regError = res.data && res.data.error === "rate_limited"
+            ? t("Too many attempts — wait a bit and try again.")
+            : t("Couldn't get an invite link — try again.");
+          renderApp(); return;
+        }
+        lastInviteUrl = res.data._inviteUrl || "";
+        lastAppStoreUrl = res.data._appStoreUrl || "";
+        state = res.data;
+        showInviteForm = false;
+        regError = "";
+        renderApp();
+      })
+      .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
+  }
+
   function copyLinkButton(url, label, cls) {
     var labelText = label || t("Copy invite link");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
+    if (!cls) btn.style.cssText = "color: var(--ink); font-size: 0.9rem; padding: 6px;";
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
-      var copyText = lastAppStoreUrl && url === lastInviteUrl ? "Join me on Nearune. Get the app: " + lastAppStoreUrl + "\nThen open this link: " + url : url;
+      var copyText = url === lastInviteUrl ? inviteMessage(url) : url;
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
@@ -2515,28 +3218,29 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       if (navigator.share) {
-        var shareObj = { title: "Nearune", url: url };
-        if (lastAppStoreUrl) shareObj.text = "Join me on Nearune. Get the app: " + lastAppStoreUrl + " — then open this link:";
+        var shareObj = url === lastInviteUrl ? { title: "Nearune", text: inviteMessage(url) } : { title: "Nearune", url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
-        window.prompt(t("Copy this link:"), url);
+        window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
     });
     return btn;
   }
 
+  var showEmailInvite = false;
   function inviteFlow(otherKey) {
     var pending = state.pendingInvite && state.pendingInvite[otherKey];
-    var pendingHandle = state.pendingInviteHandle && state.pendingInviteHandle[otherKey];
+    var pendingLink = !!(state.pendingInviteLink && state.pendingInviteLink[otherKey]);
+    var pendingHandle = (state.pendingInviteHandle && state.pendingInviteHandle[otherKey]) || (pendingLink ? "link" : "");
     var otherLabel = inviteeLabel(otherKey);
     var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: otherLabel }) })])]);
     if (pending && !showInviteForm) {
       if (pendingHandle) {
         // Instagram-handle invite: nothing was sent anywhere — the link is
         // the invite, and the inviter delivers it themselves.
-        card.appendChild(h("p", { class: "question", text: tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
+        card.appendChild(h("p", { class: "question", text: pendingLink ? tTemplate("Send {name} this link by text, WhatsApp or any app.", { name: otherLabel }) : tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
         if (!lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Tap below to get a fresh link to send.") }));
         if (lastInviteUrl) {
           // Show the link itself, with real buttons and a next-step hint.
@@ -2545,12 +3249,19 @@ const RAW = String.raw`<!doctype html>
             shareLinkButton(lastInviteUrl, t("Share link"), "puzzle-upload-btn"),
             copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
           ]));
-          card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Paste it into an Instagram message to {name}. They tap it and set up their side.", { name: "@" + pendingHandle }) }));
+          card.appendChild(h("p", { class: "puzzle-guess-note", text: pendingLink ? capFirst(tTemplate("{name} taps the link and sets up their side.", { name: otherLabel })) : tTemplate("Paste it into an Instagram message to {name}. They tap it and set up their side.", { name: "@" + pendingHandle }) }));
         }
+        if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: t("Room code:") + " " + ROOM }));
       } else {
         card.appendChild(h("p", { class: "question", text: tTemplate("Invite emailed — waiting for {name} to accept.", { name: otherLabel }) }));
+        var invSentTo = sentInviteEmail();
+        if (invSentTo) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: invSentTo }) }));
         card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
         if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
+        if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: t("Room code:") + " " + ROOM }));
+        var textInstead = h("button", { class: "puzzle-choose-btn", style: "margin-top: 6px;", text: t("Send by text instead") });
+        textInstead.addEventListener("click", submitInviteLink);
+        card.appendChild(textInstead);
       }
       // After two days with no sign-up, nudge the inviter to send the link
       // themselves (text, Instagram or email) — emails can sit in spam.
@@ -2565,23 +3276,44 @@ const RAW = String.raw`<!doctype html>
       // all that's needed. The regenerate button only appears when the link
       // is gone (e.g. after a reload), since that's the only way to get it back.
       if (!(pendingHandle && lastInviteUrl)) {
-        var again = h("button", { class: "switch-link", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
-        again.addEventListener("click", function () { showInviteForm = true; renderApp(); });
+        var again = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
+        again.addEventListener("click", function () { if (pendingLink) { submitInviteLink(); return; } showInviteForm = true; renderApp(); });
         row.push(again);
       }
       if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
+      // Escape hatch so nobody feels stuck on this waiting screen.
       if (row.length) card.appendChild(h("div", { class: "switch-row" }, row));
+      card.appendChild(h("div", { class: "switch-row", style: "margin-top: 4px;" }, [
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new", text: t("Start over with a new room") }),
+        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new#existing", text: t("Open an existing room") })
+      ]));
     } else {
-      card.appendChild(h("p", { class: "question", text: tTemplate("{name} hasn't joined yet — send an invite.", { name: otherLabel }) }));
-      var form = h("div", { class: "puzzle-setup" });
-      form.appendChild(textField(inviteEmailDraft, otherLabel + "'s Instagram handle (or email if they don't use Instagram)", function (v) { inviteEmailDraft = v; }));
-      form.appendChild(h("p", { class: "puzzle-guess-note", text: t("With an Instagram handle, you'll get a link to send them yourself.") }));
-      if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-      var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Send invite") });
-      btn.disabled = regBusy;
-      btn.addEventListener("click", submitInvite);
-      form.appendChild(btn);
-      card.appendChild(form);
+      // Kept short on purpose: one clear action (send a link), with email
+      // or Instagram tucked behind a small toggle.
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 12px;", text: t("Send a link to the one person you want to share Nearune with.") }));
+      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
+      var textBtn = h("button", { class: "puzzle-upload-btn", style: "width: 100%;", text: regBusy ? t("Sending…") : t("Get invite link") });
+      textBtn.disabled = regBusy;
+      textBtn.addEventListener("click", submitInviteLink);
+      card.appendChild(textBtn);
+      if (showEmailInvite) {
+        var form = h("div", { class: "puzzle-setup", style: "margin-top: 12px;" });
+        var invInput = textField(inviteEmailDraft, t("Their email or Instagram handle"), function (v) { inviteEmailDraft = v; });
+        invInput.setAttribute("inputmode", "email");
+        invInput.setAttribute("autocapitalize", "off");
+        invInput.setAttribute("autocorrect", "off");
+        form.appendChild(invInput);
+        var btn = h("button", { class: "puzzle-choose-btn", text: regBusy ? t("Sending…") : t("Send invite") });
+        btn.disabled = regBusy;
+        btn.addEventListener("click", submitInvite);
+        form.appendChild(btn);
+        card.appendChild(form);
+      } else {
+        var emailToggle = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 8px 6px 0; display: block; margin: 0 auto;", text: t("Invite by email or Instagram instead") });
+        emailToggle.addEventListener("click", function () { showEmailInvite = true; renderApp(); });
+        card.appendChild(emailToggle);
+      }
+      if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 10px 0 0;", text: t("Room code:") + " " + ROOM }));
     }
     return card;
   }
@@ -2601,34 +3333,194 @@ const RAW = String.raw`<!doctype html>
     soloFeedKey = k;
     loadWeather(); loadNews(); loadMusic(); loadMovies();
   }
+  // SOLO START: until the partner joins, a confirmed person can still
+  // answer today's question on their own. Their answers are saved under the
+  // same day keys as usual (the server already accepts a solo answer), so
+  // once the partner joins, today's answer is already waiting for them.
+  function soloQuestionCard(otherKey) {
+    var today = dateKey(new Date());
+    var q = questionForKey(today);
+    var entry = state.answers[today] || {};
+    var mine = entry[viewerKey] && entry[viewerKey].text;
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") }), h("span", { text: t(formatDateLabel(today)) })]),
+      h("p", { class: "question", text: q }),
+      uiTranslateBlock(q, null)
+    ]);
+    if (mine) {
+      if (editingEntry === today) {
+        card.appendChild(ownAnswerEditor(today));
+      } else {
+        var mineWrap = h("div", { class: "own-answer-visible" });
+        mineWrap.appendChild(h("p", { class: "answer-text", text: mine }));
+        var editBtn = h("button", { class: "edit-btn", text: t("Edit your answer") });
+        editBtn.addEventListener("click", function () { startEdit(today); });
+        mineWrap.appendChild(editBtn);
+        card.appendChild(mineWrap);
+      }
+      card.appendChild(h("div", { class: "waiting", html: PLANE_SVG + "<span>" + t("Saved. Invite someone to see their answer to this question.") + "</span>" }));
+    } else {
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Answer now. When the person you invite joins, you'll see each other's answers.") }));
+      var form = h("div", { class: "answer-form" });
+      var textarea = document.createElement("textarea");
+      textarea.placeholder = t("Type your answer…");
+      textarea.value = draftText;
+      textarea.addEventListener("input", function () { draftText = textarea.value; });
+      var btn = h("button", { class: "send-btn", text: t("Send") });
+      btn.addEventListener("click", async function () {
+        var text = textarea.value.trim();
+        if (!text) return;
+        btn.disabled = true;
+        try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
+        catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+        renderApp();
+      });
+      form.appendChild(textarea); form.appendChild(btn);
+      card.appendChild(form);
+    }
+    return card;
+  }
+  // Consecutive days (ending today, or yesterday if today isn't answered
+  // yet) that YOU answered while solo.
+  function soloStreakCard() {
+    var today = dateKey(new Date());
+    function answered(k) { var a = state.answers[k]; return !!(a && a[viewerKey] && a[viewerKey].text); }
+    var count = 0;
+    var cursor = answered(today) ? today : keyOffsetDays(today, -1);
+    while (answered(cursor)) { count++; cursor = keyOffsetDays(cursor, -1); }
+    // Hidden until there's a real streak (2+ days); empty dots are noise.
+    if (count < 2) return null;
+    var dots = h("div", { class: "streak-dots" });
+    for (var i = 6; i >= 0; i--) dots.appendChild(h("span", { class: "streak-dot" + (answered(keyOffsetDays(today, -i)) ? " filled" : "") }));
+    var label = count === 0 ? t("Answer today to start your streak.") : t("You've shown up");
+    var text = h("div", { class: "streak-text" }, [
+      document.createTextNode(label + " "),
+      count > 0 ? h("strong", { text: t(count === 1 ? "{n} day" : "{n} days").split("{n}").join(String(count)) }) : null,
+      count > 0 ? document.createTextNode(" " + t("in a row.")) : null
+    ]);
+    return h("div", { class: "streak-card" }, [text, dots]);
+  }
+  // A clearly labeled EXAMPLE of what a partner's answer looks like, so a
+  // new solo user can see (and hear) the translation feature before anyone
+  // has joined. It is never presented as a real person: the eyebrow says
+  // Example, and there's no name.
+  function sampleAnswerCard() {
+    var mineLang = langCodeFor(viewerKey);
+    var sample = mineLang === "es"
+      ? { lang: "fr", text: "Un inconnu m'a tenu la porte sous la pluie. Ça m'a fait sourire toute la matinée." }
+      : { lang: "es", text: "Mi vecino me regaló limones de su árbol. Pensé en ti cuando los vi." };
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Example") }), h("span", { text: t("How their answer will look") })]),
+      h("p", { class: "puzzle-guess-note", text: t("What small thing made you smile today?") }),
+      h("p", { class: "answer-text", text: sample.text })
+    ]);
+    if (mineLang !== sample.lang) card.appendChild(translateBlock(sample.text, mineLang, sample.lang, null));
+    card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Their answer shows in your language, and you can hear it read aloud, in their own voice once they record a sample.") }));
+    return card;
+  }
+  // ---- Rooms list + "Make a friend" rooms ----
+  // The opening page (/home) keeps its list of rooms on this device; every
+  // room a person is registered in adds itself here.
+  var roomRemembered = false;
+  function rememberRoom() {
+    if (roomRemembered || !viewerKey || !state || !state.people || !state.people[viewerKey]) return;
+    try {
+      var list = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
+      if (!Array.isArray(list)) list = [];
+      var isFriend = state.origin === "friend";
+      var found = null;
+      for (var i = 0; i < list.length; i++) { if (list[i].id === ROOM) found = list[i]; }
+      if (!found) list.push(isFriend ? { id: ROOM, friend: true } : { id: ROOM });
+      else if (isFriend && !found.friend) found.friend = true;
+      localStorage.setItem("nearuneRooms", JSON.stringify(list));
+      roomRemembered = true;
+    } catch (e) {}
+  }
+  function closedRoomCard() {
+    var msg = state.closedBy === "admin" ? t("This room was closed by Nearune.") : (state.closedBy && state.closedBy === viewerKey) ? t("You left this room.") : t("This room has ended.");
+    return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
+      h("p", { class: "puzzle-guess-note", text: msg }),
+      h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })
+    ]);
+  }
+  function leaveFriend(report) {
+    var q = report
+      ? t("Report this person and leave? This ends the room for both of you, and you won't be matched again.")
+      : t("Leave this room? This ends it for both of you, and you won't be matched again.");
+    if (!window.confirm(q)) return;
+    fetch(RP + "/api/leave-friend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, report: report }) })
+      .then(function (r) { if (!r.ok) throw new Error("bad"); return r.json(); })
+      .then(function (d) { state = d; renderApp(); })
+      .catch(function () { try { window.alert(t("Couldn't do that. Please try again.")); } catch (e) {} });
+  }
+  function friendBanner() {
+    if (!state || state.origin !== "friend" || !viewerKey) return null;
+    var box = h("div", { class: "card" });
+    box.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 0 0 8px;", text: t("You met this person through Make a friend. Be kind and keep personal details private. Photo sharing is off in this room.") }));
+    var row = h("div", { class: "switch-row" });
+    var rep = h("button", { class: "switch-link", type: "button", text: t("Report and leave") });
+    rep.addEventListener("click", function () { leaveFriend(true); });
+    var lv = h("button", { class: "switch-link", type: "button", text: t("Leave this room") });
+    lv.addEventListener("click", function () { leaveFriend(false); });
+    row.appendChild(rep);
+    row.appendChild(lv);
+    box.appendChild(row);
+    return box;
+  }
+  var soloFeedOpen = false;
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
+    // Solo order (per Mark): clocks, traveling, partner invite, weather,
+    // daily question, Local Feel, and the email-confirm reminder last.
     app.appendChild(header());
     var travelRow = travelBlock();
     if (travelRow) app.appendChild(travelRow);
-    // Registered by email but not yet confirmed: show your own sky right
-    // away, with the "check your email" card where the invite card will go
-    // (the server only lets confirmed people send invites).
-    if (!isConfirmedKey(viewerKey)) app.appendChild(registrationFlow());
-    else app.appendChild(inviteFlow(otherKey));
+    var confirmed = isConfirmedKey(viewerKey);
+    // Registered by email under the old flow and not yet confirmed: the
+    // "check your email" card stands in for the invite card (the server
+    // only lets confirmed people send invites).
+    if (!confirmed) app.appendChild(registrationFlow());
+    else if (state.origin === "friend") {
+      var fbSolo = friendBanner();
+      if (fbSolo) app.appendChild(fbSolo);
+      app.appendChild(h("div", { class: "card" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("Waiting for your match") })]),
+        h("p", { class: "puzzle-guess-note", text: t("Your match hasn't joined yet. They'll show up here as soon as they do. You can answer today's question in the meantime.") })
+      ]));
+    } else {
+      var invCard = inviteFlow(otherKey);
+      invCard.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 12px 0 0;", text: t("When they join: Local Feel from their city, a shared Puzzle, and Never Have I Ever.") }));
+      app.appendChild(invCard);
+    }
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
-    var newsBlock = newsLineBlock();
-    if (newsBlock) app.appendChild(newsBlock);
-    var musicBlock = musicLineBlock();
-    if (musicBlock) app.appendChild(musicBlock);
-    var moviesBlock = moviesLineBlock();
-    if (moviesBlock) app.appendChild(moviesBlock);
+    if (confirmed) {
+      app.appendChild(soloQuestionCard(otherKey));
+      var streak = soloStreakCard();
+      if (streak) app.appendChild(streak);
+      // The example only helps until they've answered once themselves.
+      var everAnswered = Object.keys(state.answers || {}).some(function (k) { var a = state.answers[k]; return !!(a && a[viewerKey] && a[viewerKey].text); });
+      if (!everAnswered) app.appendChild(sampleAnswerCard());
+    }
+    // Local Feel collapsed to one line while solo; tap to open.
+    var feedBlocks = [newsLineBlock(), musicLineBlock(), moviesLineBlock()].filter(Boolean);
+    if (feedBlocks.length) {
+      var feedToggle = h("button", { class: "journal-toggle" + (soloFeedOpen ? " open" : ""), html: '<span class="chevron">›</span><span>' + t(soloFeedOpen ? "Hide your city" : "See what's happening in your city") + "</span>" });
+      feedToggle.addEventListener("click", function () { soloFeedOpen = !soloFeedOpen; renderApp(); });
+      app.appendChild(feedToggle);
+      if (soloFeedOpen) feedBlocks.forEach(function (b) { app.appendChild(b); });
+    }
+    var meNow = state.people && state.people[viewerKey];
+    if (confirmed && meNow && meNow.emailVerified === false) {
+      app.appendChild(h("div", { class: "card" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("Confirm your email") })]),
+        h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that. Until you confirm (up to 7 days) we keep your email so we can send a reminder; after that Nearune doesn't save it.") })
+      ]));
+    }
     var pushRow = pushToggleRow();
     if (pushRow) app.appendChild(pushRow);
-    var foot = h("div", { class: "switch-row" });
-    foot.appendChild(h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") }));
-    foot.appendChild(h("a", { class: "switch-link", href: "/terms", text: t("Terms") }));
-    var del = h("button", { class: "switch-link", text: t("Delete my data") });
-    del.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
-    foot.appendChild(del);
-    app.appendChild(foot);
+    app.appendChild(footerLinks({ room: false, block: false }));
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
@@ -2636,7 +3528,14 @@ const RAW = String.raw`<!doctype html>
     var app = document.getElementById("app");
     if (!app) return;
     app.innerHTML = "";
+    if (state && state.error === "region_unavailable") {
+      var rb = document.createElement("div");
+      rb.style.margin = "60px 24px"; rb.style.textAlign = "center"; rb.style.fontSize = "18px";
+      rb.textContent = t("Nearune isn't available in that location.");
+      app.appendChild(rb); return;
+    }
 
+    if (ROOM && state && state.closed) { app.appendChild(closedRoomCard()); return; }
     if (inviteParams) { app.appendChild(acceptInviteForm()); return; }
     // A brand-new room (not the legacy one) with nobody registered yet has
     // only one real person so far — whoever has the link. This stays true
@@ -2656,6 +3555,7 @@ const RAW = String.raw`<!doctype html>
       }
     }
 
+    rememberRoom();
     // The legacy room (no ROOM id) predates this registration/confirm
     // system entirely — Mark and Nikita have real hardcoded placeholder
     // identities there (see PEOPLE) and have always used the app without
@@ -2693,6 +3593,8 @@ const RAW = String.raw`<!doctype html>
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
 
     app.appendChild(header());
+    var friendNote = friendBanner();
+    if (friendNote) app.appendChild(friendNote);
     // Traveling button sits right under the clock/timezone block at the
     // very top of the page. The "enable notifications" link used to sit
     // right under it too — moved to the bottom of the page, under the
@@ -2710,6 +3612,7 @@ const RAW = String.raw`<!doctype html>
     // Today tab was getting cluttered), with nothing else alongside them.
     // Today and Puzzle stay focused on the question/journal and the puzzle
     // itself, respectively.
+    if (activeTab === "puzzle" && state && state.origin === "friend") activeTab = "today";
     if (activeTab === "local") {
       var newsBlock = newsLineBlock();
       if (newsBlock) app.appendChild(newsBlock);
@@ -2719,6 +3622,8 @@ const RAW = String.raw`<!doctype html>
       if (moviesBlock) app.appendChild(moviesBlock);
       var photoBlock = photoCardBlock();
       if (photoBlock) app.appendChild(photoBlock);
+    } else if (activeTab === "never") {
+      app.appendChild(nhieSection());
     } else {
       app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
       if (activeTab === "puzzle") {
@@ -2784,6 +3689,7 @@ const RAW = String.raw`<!doctype html>
     previewKey = null;
     weatherExpanded = false;
     try { localStorage.setItem(VIEWER_LS_KEY, key); } catch (e) {}
+    if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
     applyWeatherSky(); // instant, from whatever weather data is already loaded
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
@@ -2903,6 +3809,9 @@ const RAW = String.raw`<!doctype html>
     }
     return list;
   }
+  // The song/movie titles link to a plain YouTube search, NOT Apple's own
+  // page (that opens Apple Music / Apple TV, which needs an Apple ID setup
+  // and has caused trouble for people without one).
   // SANDBOX EXPERIMENT: collapsed line — "🎵 Popular near <name>: <title> —
   // <artist>" with a play button for the #1 song's 30s preview, plus a
   // "Show top 5"/"Show less" toggle that expands into the full chart (see
@@ -2918,7 +3827,7 @@ const RAW = String.raw`<!doctype html>
     var line = h("p", { class: "music-line" });
     line.appendChild(document.createTextNode(tTemplate("🎵 Popular near {name}: ", { name: shownName })));
     line.appendChild(
-      h("a", { class: "music-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
+      h("a", { class: "music-link", href: "https://www.youtube.com/results?search_query=" + encodeURIComponent((top.artist ? top.artist + " - " : "") + top.title + " official video") + "&sp=EgIQAQ%3D%3D", target: "_blank", rel: "noopener noreferrer", text: top.title + (top.artist ? " — " + top.artist : "") })
     );
     var playBtn = chartPlayButton(top.previewUrl, "Play " + top.title, "audio");
     if (playBtn) line.appendChild(document.createTextNode(" "));
@@ -2947,7 +3856,7 @@ const RAW = String.raw`<!doctype html>
     var line = h("p", { class: "movie-line" });
     line.appendChild(document.createTextNode(tTemplate("🎬 Popular near {name}: ", { name: shownName })));
     line.appendChild(
-      h("a", { class: "movie-link", href: top.url || "#", target: "_blank", rel: "noopener noreferrer", text: top.title })
+      h("a", { class: "movie-link", href: top.previewUrl || ("https://www.youtube.com/results?search_query=" + encodeURIComponent(top.title + " trailer")), target: "_blank", rel: "noopener noreferrer", text: top.title })
     );
     var playBtn = chartPlayButton(top.previewUrl, "Watch trailer for " + top.title, "video");
     if (playBtn) line.appendChild(document.createTextNode(" "));
@@ -3118,7 +4027,13 @@ const RAW = String.raw`<!doctype html>
     var nikitaClock = solo && !isConfirmedKey("nikita") ? pendingClockBlock("nikita") : clockBlock("nikita");
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    return h("div", {}, [wordmark, clocks]);
+    var code = ROOM || "q7mvx3ke";
+    var roomLine = h("div", { class: "room-code", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
+    roomLine.addEventListener("click", function () {
+      try { navigator.clipboard.writeText(code); roomLine.textContent = t("Copied!"); setTimeout(function () { roomLine.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
+    });
+    var titleLine = state && state.roomName ? h("div", { class: "room-code", style: "font-size: 1rem; font-weight: 700; color: var(--ink); margin-bottom: 2px;", text: state.roomName }) : null;
+    return h("div", {}, [wordmark, titleLine, roomLine, clocks]);
   }
 
   // Mic-recording state for the "record your voice" card below — module-
@@ -3435,6 +4350,77 @@ const RAW = String.raw`<!doctype html>
   // control sits underneath it, always visible.
   // A micro thumbnail (tap to enlarge) with the sharer's comment beside it.
   // Shown for BOTH people so each can see what the other sees.
+  // Pinch-to-zoom for a shared photo: the page-level pinch is disabled (see the
+  // viewport note up top), so this mirrors the puzzle's handler. Pinching, or
+  // double-tapping, lifts the photo into a full-screen overlay where you can
+  // pan; the close button or zooming back out returns it inline.
+  function zoomablePhoto(src, alt) {
+    var wrap = h("div", { class: "photo-zoom-wrap" });
+    var img = h("img", { class: "shared-photo", src: src, alt: alt });
+    wrap.appendChild(img);
+    var scale = 1, panX = 0, panY = 0, startDist = 0, startScale = 1;
+    var startX = 0, startY = 0, startPanX = 0, startPanY = 0, lastTap = 0;
+    var overlay = null, placeholder = null;
+    function openOverlay() {
+      if (overlay) return;
+      placeholder = document.createComment("photo-zoom");
+      if (wrap.parentNode) wrap.parentNode.insertBefore(placeholder, wrap);
+      overlay = h("div", { class: "puzzle-zoom-overlay photo-zoom-overlay" });
+      var closeBtn = h("button", { class: "photo-zoom-close", text: "\u2715" });
+      closeBtn.addEventListener("click", closeOverlay);
+      overlay.appendChild(wrap);
+      overlay.appendChild(closeBtn);
+      document.body.appendChild(overlay);
+    }
+    function closeOverlay() {
+      scale = 1; panX = 0; panY = 0;
+      draw();
+      if (!overlay) return;
+      if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(wrap, placeholder);
+        placeholder.parentNode.removeChild(placeholder);
+      }
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      overlay = null; placeholder = null;
+    }
+    function draw() {
+      var maxX = Math.max(0, (wrap.clientWidth * scale - wrap.clientWidth) / 2);
+      var maxY = Math.max(0, (wrap.clientHeight * scale - wrap.clientHeight) / 2);
+      panX = Math.min(Math.max(panX, -maxX), maxX);
+      panY = Math.min(Math.max(panY, -maxY), maxY);
+      img.style.transform = scale > 1 ? "translate(" + panX + "px," + panY + "px) scale(" + scale + ")" : "";
+    }
+    function dist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
+    wrap.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        startDist = dist(e.touches[0], e.touches[1]);
+        startScale = scale;
+      } else if (e.touches.length === 1) {
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        startPanX = panX; startPanY = panY;
+        var now = Date.now();
+        if (now - lastTap < 300) {
+          if (scale > 1) { closeOverlay(); } else { scale = 2.5; openOverlay(); draw(); }
+        }
+        lastTap = now;
+      }
+    }, { passive: true });
+    wrap.addEventListener("touchmove", function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        scale = Math.min(Math.max(startScale * (dist(e.touches[0], e.touches[1]) / startDist), 1), 8);
+        if (scale > 1) openOverlay();
+        draw();
+      } else if (e.touches.length === 1 && scale > 1) {
+        e.preventDefault();
+        panX = startPanX + (e.touches[0].clientX - startX);
+        panY = startPanY + (e.touches[0].clientY - startY);
+        draw();
+      }
+    }, { passive: false });
+    wrap.addEventListener("touchend", function () { if (scale <= 1.02 && overlay) closeOverlay(); }, { passive: true });
+    return wrap;
+  }
   function photoRow(personKey, label, photoAt, caption, expanded, onToggle, canReport) {
     var box = h("div", {});
     var row = h("div", { class: "photo-row" });
@@ -3443,16 +4429,21 @@ const RAW = String.raw`<!doctype html>
     row.appendChild(img);
     var meta = h("div", { class: "photo-meta" });
     meta.appendChild(h("div", { class: "photo-who", text: "📷 " + label }));
-    if (caption) meta.appendChild(h("p", { class: "photo-caption", text: caption }));
+    if (caption) {
+      meta.appendChild(h("p", { class: "photo-caption", text: caption }));
+      meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey));
+    }
     meta.appendChild(h("p", { class: "photo-hint", text: expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it") }));
     if (canReport) meta.appendChild(reportLink("photo"));
     row.appendChild(meta);
     box.appendChild(row);
-    if (expanded) box.appendChild(h("img", { class: "shared-photo", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label }));
+    if (expanded) box.appendChild(zoomablePhoto(RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), label));
     return box;
   }
   function photoCardBlock() {
     if (!viewerKey) return null;
+    // Photo sharing is turned off in "Make a friend" rooms (strangers).
+    if (state && state.origin === "friend") return null;
     var key = viewerKey;
     var otherKey = otherKeyOf(key);
     var partnerName = personName(otherKey);
@@ -3711,7 +4702,7 @@ const RAW = String.raw`<!doctype html>
         if (!text) return;
         btn.disabled = true;
         try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
-        catch (e) { online = false; }
+        catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
         renderApp();
       });
       form.appendChild(textarea); form.appendChild(btn);
@@ -3801,7 +4792,21 @@ const RAW = String.raw`<!doctype html>
   // devices show, regardless of which of you has or hasn't answered. Works
   // while the app is open; the service worker handles it the rest of the
   // time via incoming pushes.
+  var lastNativeBadgeSync = 0;
+  function nativeBadgeSync() {
+    // Native app has no client-side badge API, so ask the server to push the
+    // true count to this device (rate-limited here and on the server).
+    if (!isNativeApp() || !viewerKey) return;
+    var now = Date.now();
+    if (now - lastNativeBadgeSync < 120000) return;
+    lastNativeBadgeSync = now;
+    try {
+      fetch(RP + "/api/badge-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey }) }).catch(function () {});
+    } catch (e) {}
+  }
+
   function syncAppBadge() {
+    nativeBadgeSync();
     if (!("setAppBadge" in navigator)) return;
     var today = todayKeyStr();
     var count = unansweredCountLocal(today);
@@ -3969,6 +4974,8 @@ const RAW = String.raw`<!doctype html>
     };
     travelError = "";
     travelFormOpen = true;
+    locCityError = "";
+    travelDraft.languageTouched = true;
     renderApp();
   }
   function cancelTravelForm() {
@@ -3978,6 +4985,9 @@ const RAW = String.raw`<!doctype html>
   async function saveTravelForm() {
     var location = travelDraft.location.trim();
     if (!location) { travelError = t("Enter a city, or use Back home to clear it."); renderApp(); return; }
+    if (locCityError) { travelError = locCityError; renderApp(); return; }
+    if (travelDraft.from && travelDraft.until && travelDraft.until < travelDraft.from) { travelError = t("The return date can't be before the start date."); renderApp(); return; }
+    if (travelDraft.until && travelDraft.until < dateKey(new Date())) { travelError = t("The return date is already past."); renderApp(); return; }
     travelBusy = true; travelError = ""; renderApp();
     try {
       await api("/api/travel", {
@@ -3988,7 +4998,7 @@ const RAW = String.raw`<!doctype html>
         showEarly: !!(travelDraft.from && travelDraft.showEarly),
       });
       travelFormOpen = false;
-    } catch (e) { travelError = t("Something went wrong — try again."); }
+    } catch (e) { travelError = e && e.code === "region_unavailable" ? t("Nearune isn't available in that location.") : e && e.code === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("Something went wrong — try again."); }
     travelBusy = false;
     renderApp();
   }
@@ -4036,14 +5046,18 @@ const RAW = String.raw`<!doctype html>
     var today = dateKey(new Date());
     var wrap = h("div", {});
     if (travelFormOpen) {
-      var card = h("div", { class: "edit-form" });
+      var card = h("div", { class: "edit-form travel-card" });
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Set where you're traveling — your partner's weather, local-story line and clock will show this instead of home. Leave \"Starts\" blank to begin right away, or pick a future date to schedule it ahead.") }));
       var fields = h("div", { class: "puzzle-setup" });
-      fields.appendChild(textField(travelDraft.location, "City you're traveling to", function (v) { travelDraft.location = v; }));
+      lastLocInputEl = textField(travelDraft.location, "City you're traveling to (e.g. Paris, FR)", function (v) { travelDraft.location = v; suggestLanguageFromLocation(travelDraft, v); });
+      fields.appendChild(lastLocInputEl);
+      fields.appendChild(makeLocButton(travelDraft, true));
+      fields.appendChild(makeLocNote());
+      fields.appendChild(makeLocChoices());
       var fromInput = document.createElement("input");
       fromInput.type = "date";
       fromInput.value = travelDraft.from;
-      fromInput.addEventListener("input", function () { travelDraft.from = fromInput.value; renderApp(); });
+      fromInput.addEventListener("change", function () { travelDraft.from = fromInput.value; renderApp(); });
       fields.appendChild(h("div", { class: "travel-until-row" }, [
         h("span", { class: "travel-until-label", text: t("Starts (optional)") }),
         fromInput,
@@ -4119,32 +5133,50 @@ const RAW = String.raw`<!doctype html>
     return wrap;
   }
 
-  function switchRow() {
-    var row = h("div", { class: "switch-row" });
-    var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
-    link.addEventListener("click", function () {
-      viewerKey = null;
-      previewKey = null;
-      weatherExpanded = false;
-      try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
-      renderApp();
-    });
-    row.appendChild(link);
-    var newRoomLink = h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") });
-    row.appendChild(newRoomLink);
-    var privacyLink = h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") });
-    row.appendChild(privacyLink);
-    var termsLink = h("a", { class: "switch-link", href: "/terms", text: t("Terms") });
-    row.appendChild(termsLink);
-    var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
-    deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
-    row.appendChild(deleteLink);
-    if (viewerKey) {
+  // One tidy footer for every screen: room actions, then Privacy / Terms /
+  // Support, then the quieter account actions (Block, Delete my data).
+  function footSepEl() { return h("span", { class: "foot-sep", text: "·" }); }
+  function footerLinks(opts) {
+    opts = opts || {};
+    var wrap = h("div", { class: "foot-links" });
+    if (opts.room) {
+      var room = h("div", { class: "switch-row foot-group" });
+      var link = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
+      link.addEventListener("click", function () {
+        viewerKey = null;
+        previewKey = null;
+        weatherExpanded = false;
+        try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
+        renderApp();
+      });
+      room.appendChild(link);
+      room.appendChild(h("a", { class: "switch-link", href: "/home", text: t("My rooms") }));
+      room.appendChild(h("a", { class: "switch-link", href: "/new", text: t("Start Nearune with someone else") }));
+      wrap.appendChild(room);
+    }
+    var legal = h("div", { class: "switch-row foot-group" });
+    legal.appendChild(h("a", { class: "switch-link", href: "/privacy", text: t("Privacy") }));
+    legal.appendChild(footSepEl());
+    legal.appendChild(h("a", { class: "switch-link", href: "/terms", text: t("Terms") }));
+    legal.appendChild(footSepEl());
+    legal.appendChild(h("a", { class: "switch-link", href: "/support", text: t("Support") }));
+    wrap.appendChild(legal);
+    var quiet = h("div", { class: "switch-row foot-group foot-quiet" });
+    if (opts.block && viewerKey && state.people && state.people[otherKeyOf(viewerKey)] && state.people[otherKeyOf(viewerKey)].confirmed) {
       var blockLink = h("button", { class: "switch-link", type: "button", text: isBlocked() ? tTemplate("Unblock {name}", { name: personName(otherKeyOf(viewerKey)) }) : tTemplate("Block {name}", { name: personName(otherKeyOf(viewerKey)) }) });
       blockLink.addEventListener("click", function () { setBlocked(!isBlocked()); });
-      row.appendChild(blockLink);
+      quiet.appendChild(blockLink);
+      quiet.appendChild(footSepEl());
     }
-    return row;
+    var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
+    deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
+    quiet.appendChild(deleteLink);
+    wrap.appendChild(quiet);
+    return wrap;
+  }
+
+  function switchRow() {
+    return footerLinks({ room: true, block: true });
   }
 
   function deleteConfirmScreen() {
@@ -4192,9 +5224,16 @@ const RAW = String.raw`<!doctype html>
   // if it redirected away — callers should stop and not render/fetch.
   function redirectToMyRoom() {
     if (ROOM) return false;
+    // /?legacy=1 : deliberately return this device to the original (main) room.
+    try {
+      if (new URLSearchParams(location.search).get("legacy") === "1") {
+        localStorage.setItem(MY_ROOM_LS_KEY, "");
+        return false;
+      }
+    } catch (e) {}
     var myRoom = null;
     try { myRoom = localStorage.getItem(MY_ROOM_LS_KEY); } catch (e) {}
-    if (myRoom) { location.href = "/r/" + myRoom; return true; }
+    if (myRoom) { location.href = "/home"; return true; }
     if (myRoom === "") return false; // this device's room IS the legacy one
     // Never decided yet. A device that already has a legacy viewer identity
     // saved (from before this check existed) belongs to the legacy room —
@@ -4219,11 +5258,18 @@ const RAW = String.raw`<!doctype html>
   async function initialLoad() {
     if (redirectToMyRoom()) return;
     try {
-      var res = await fetch(RP + "/api/state");
+      var res = await fetch(RP + "/api/state" + (viewerKey ? "?who=" + encodeURIComponent(viewerKey) : ""));
       state = await res.json();
       online = true;
     } catch (e) { online = false; }
+    // Show the last known sky immediately (refreshed by loadWeather() below)
+    // so the background doesn't wait on the network.
+    try {
+      var cachedW = JSON.parse(localStorage.getItem("nearuneWeather:" + ROOM) || "null");
+      if (cachedW && cachedW.w && Date.now() - cachedW.at < 12 * 3600 * 1000) weatherByPerson = cachedW.w;
+    } catch (e3) {}
     renderApp();
+    applyWeatherSky();
     syncAppBadge();
     loadWeather();
     loadNews();
@@ -4254,6 +5300,7 @@ const RAW = String.raw`<!doctype html>
       var res = await fetch(RP + "/api/weather");
       var data = await res.json();
       weatherByPerson = (data && data.weather) || { mark: null, nikita: null };
+      try { localStorage.setItem("nearuneWeather:" + ROOM, JSON.stringify({ at: Date.now(), w: weatherByPerson })); } catch (e2) {}
     } catch (e) {
       return; // leave whatever theme was already showing rather than clear it on a blip
     }
@@ -4302,6 +5349,19 @@ const RAW = String.raw`<!doctype html>
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") { loadWeather(); loadNews(); loadMusic(); loadMovies(); }
   });
+  // Picks dark or pale text, whichever reads better against BOTH ends of the
+  // sky gradient (WCAG contrast), instead of assuming day = dark, night = pale.
+  function inkForSky(sky) {
+    function lum(hex) {
+      var c = [1, 3, 5].map(function (i) { var v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+    function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+    var dark = "#2B211B", pale = "#F2EFE9";
+    var dMin = Math.min(ratio(dark, sky[0]), ratio(dark, sky[1]));
+    var pMin = Math.min(ratio(pale, sky[0]), ratio(pale, sky[1]));
+    return pMin > dMin ? pale : dark;
+  }
   function applyWeatherSky() {
     var el = document.getElementById("weather-sky");
     if (!el) return;
@@ -4326,12 +5386,12 @@ const RAW = String.raw`<!doctype html>
     // so text pinned to dark ink (the daytime default) goes nearly
     // invisible against it — switch to a pale ink instead whenever it's
     // nighttime at the OTHER person's location (the sky shown here).
-    document.body.style.setProperty("--weather-ink", w.isDay ? "#2B211B" : "#F2EFE9");
+    document.body.style.setProperty("--weather-ink", inkForSky(sky));
   }
 
   async function poll() {
     try {
-      var res = await fetch(RP + "/api/state");
+      var res = await fetch(RP + "/api/state" + (viewerKey ? "?who=" + encodeURIComponent(viewerKey) : ""));
       var next = await res.json();
       online = true;
       if (Date.now() < suppressPollUntil) return;
@@ -4356,7 +5416,7 @@ const RAW = String.raw`<!doctype html>
 </html>`;
 
 export function buildPageHtml(roomId: string, iconV: string): string {
-  return RAW.replace(/__ICON_V__/g, iconV).replace(/__ROOM__/g, roomId);
+  return RAW.replace(/__ICON_V__/g, iconV).replace(/__ROOM__/g, roomId).replace(/__APP_STORE_URL__/g, Bun.env.APP_STORE_URL || "");
 }
 
 // Web App Manifest — lets the app be added to the home screen and, on
@@ -4449,36 +5509,84 @@ export function buildNewRoomPage(): string {
 </head>
 <body>
 <div class="card">
+  <h1 id="existing">Got an invite from your partner?</h1>
+  <p>Copy the invite link they sent you, then tap the button. This joins their room instead of starting a new one.</p>
+  <button id="pasteInvite" type="button">Paste my invite</button>
+  <p class="note" style="margin-top:8px">Nearune only reads the link you just copied. Or paste it below.</p>
+  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the invite link you were sent" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--ink-soft);background:var(--bg);color:var(--ink);font:inherit;margin-top:4px">
+  <button id="openRoom" type="button" style="margin-top:8px">Join with this link</button>
+  <p class="note" id="roomMsg"></p>
+  <p class="note">Already have a room? Paste your room link or code in the box above.</p>
+  <hr style="border:0;border-top:1px solid var(--line);margin:26px 0 22px">
   <h1>Start your own Nearune</h1>
   <p>Nearune is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
   <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your Nearune partner; when you each open it, you'll register your own name, language, and location, then you're set.</p>
+  <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Name your room (optional), like Our Sky" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin:0 0 6px">
+  <p class="note" id="codePreview" style="margin:0 0 14px">Any language works. Leave it blank and we'll pick a name for you.</p>
   <button id="go">Create my room</button>
   <p class="note" id="msg"></p>
-  <p class="note" style="margin-top:22px"><strong>Already have a Nearune room?</strong></p>
-  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your room link or code" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin-top:6px">
-  <button id="openRoom" type="button" style="margin-top:8px">Open my room</button>
-  <p class="note" id="roomMsg"></p>
-  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Lost your link? Email it to me</a></p>
-  <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a></p>
+  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Find your room (email me my link)</a></p>
+  <p class="note"><a href="/home" style="color:var(--ink-soft)">No one to invite yet? Meet a new friend, or see your rooms</a></p>
+  <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a> &nbsp;·&nbsp; <a href="/support" style="color:var(--ink-soft)">Support</a></p>
 </div>
 <script>
-document.getElementById("openRoom").addEventListener("click", function () {
-  var v = (document.getElementById("roomLink").value || "").trim();
+function routeFromText(v) {
+  v = (v || "").trim();
+  if (v.toLowerCase() === "original") {
+    try { localStorage.setItem("nearuneMyRoom", ""); } catch (e) {}
+    location.href = "/";
+    return true;
+  }
+  var inv = v.match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
+  if (inv) { location.href = "/j/" + inv[1].toLowerCase() + "/" + inv[2]; return true; }
   var m = v.match(new RegExp("/r/([a-z0-9]{4,20})", "i")) || v.match(new RegExp("^([a-z0-9]{4,20})$", "i"));
-  if (!m) { document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent."; return; }
+  if (!m) return false;
+  var q = v.match(new RegExp("[?&]invite=(mark|nikita)&token=([a-z0-9-]{6,64})", "i"));
+  if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return true; }
   location.href = "/r/" + m[1].toLowerCase() + "/";
+  return true;
+}
+document.getElementById("openRoom").addEventListener("click", function () {
+  if (!routeFromText(document.getElementById("roomLink").value)) {
+    document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent.";
+  }
+});
+document.getElementById("pasteInvite").addEventListener("click", function () {
+  var msg = document.getElementById("roomMsg");
+  function fail() { msg.textContent = "Couldn't read what you copied. Touch and hold the box below, tap Paste, then tap Open my room."; }
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) { fail(); return; }
+    navigator.clipboard.readText().then(function (txt) {
+      if (!routeFromText(txt)) msg.textContent = "No Nearune invite found in what you copied. Copy the invite link from your email first, then tap Paste my invite.";
+    }, fail);
+  } catch (e) { fail(); }
+});
+function roomSlugPreview(name) {
+  var s = (name || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "").slice(0, 16);
+  return s.length >= 3 ? s : "";
+}
+document.getElementById("roomName").addEventListener("input", function () {
+  var v = this.value.trim();
+  var el = document.getElementById("codePreview");
+  if (!v) { el.textContent = "Any language works. Leave it blank and we'll pick a name for you."; return; }
+  var slug = roomSlugPreview(v);
+  el.textContent = slug
+    ? "Your room will be called \u201c" + v + "\u201d. Room code: " + slug + " (if it's taken, we add two numbers)."
+    : "Your room will be called \u201c" + v + "\u201d. Its room code will be two friendly words, since codes use English letters and numbers only.";
 });
 document.getElementById("go").addEventListener("click", function () {
   var btn = document.getElementById("go");
   btn.disabled = true;
   btn.textContent = "Creating…";
-  fetch("/api/create-room", { method: "POST" })
+  fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: (document.getElementById("roomName").value || "").trim() }) })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
       if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
       var msg = res.data && res.data.error === "registrations_paused"
         ? (res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.")
-        : (res.data && res.data.error === "rate_limited"
+        : (res.data && res.data.error === "inappropriate_name"
+          ? "Please choose a different room name."
+          : res.data && res.data.error === "rate_limited"
           ? "Too many rooms created from here recently — wait a bit and try again."
           : "Something went wrong — try again.");
       btn.disabled = false;
@@ -4502,7 +5610,7 @@ export function buildRecoverPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recover your Nearune link</title>
+<title>Find your room — Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
   :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; }
@@ -4522,11 +5630,12 @@ export function buildRecoverPage(): string {
 </head>
 <body>
 <div class="card">
-  <h1>Lost your link?</h1>
+  <h1>Find your room</h1>
   <p>Enter the email you used when you registered, and if it matches, we'll send you your Nearune room link. (Signed up with an Instagram handle instead? We have no email on file for you, so ask your partner to send you the room link again.)</p>
   <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
   <button id="go">Send my link</button>
   <p class="note" id="msg"></p>
+  <p class="note"><a href="/new" style="color:var(--ink-soft)">Open an existing room (paste a link, or type original)</a></p>
 </div>
 <script>
 document.getElementById("go").addEventListener("click", function () {
@@ -4575,14 +5684,17 @@ function legalPageShell(title, bodyHtml) {
   a { color:var(--accent); }
   ul { padding-left:20px; margin:8px 0; }
   .back { display:inline-block; margin-top:28px; color:var(--ink-soft); font-size:0.85rem; text-decoration:none; }
+  .foot-nav { text-align:center; margin:18px 0 0; font-size:0.85rem; }
+  .foot-nav a { color:var(--ink-soft); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     ${bodyHtml}
-    <a class="back" href="/new">&larr; Back to Nearune</a>
+    <a class="back" href="/new" onclick="if (history.length > 1) { history.back(); return false; }">&larr; Back</a>
   </div>
+  <p class="foot-nav"><a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/support">Support</a></p>
 </div>
 </body>
 </html>`;
@@ -4612,7 +5724,7 @@ export function buildPrivacyPage() {
     </ul>
 
     <h2>What we do with your email</h2>
-    <p>We ask for an email address once, during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. We do not store your email address in plain text anywhere. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
+    <p>We ask for an email address once, during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. Once your email is confirmed we do not store it in plain text anywhere. If you start registering but never confirm, we keep the address for up to 7 days solely so we can send you a reminder to finish, then delete it. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
 
     <h2>Where data lives</h2>
     <p>Room data and uploaded photos are stored in a cloud object-storage bucket. Outgoing emails (confirmations, invites, recovery links) are sent through a transactional email provider (Resend or SendGrid) — the email content passes through that provider but isn't retained by us beyond what's needed to send it. Location text you enter is sent to a free geocoding service (Open-Meteo) solely to resolve a timezone and language default; it isn't stored by us beyond the fields above.</p>
@@ -4646,7 +5758,7 @@ export function buildPrivacyPage() {
     <p>If this policy changes in a meaningful way, we'll update the date at the top of this page.</p>
 
     <h2>Contact</h2>
-    <p>Questions about this policy or your data: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+    <p>Questions about this policy or your data: <a href="mailto:support@nearune.ai">support@nearune.ai</a>.</p>`
   );
 }
 
@@ -4682,6 +5794,30 @@ export function buildTermsPage() {
     <p>These terms are governed by the laws of the State of California, without regard to conflict-of-law principles.</p>
 
     <h2>Contact</h2>
-    <p>Questions about these terms: <a href="mailto:mark.berenstein@gmail.com">mark.berenstein@gmail.com</a>.</p>`
+    <p>Questions about these terms: <a href="mailto:support@nearune.ai">support@nearune.ai</a>.</p>`
+  );
+}
+
+
+export function buildSupportPage() {
+  return legalPageShell(
+    "Support",
+    `<h1>Nearune Support</h1>
+    <p class="updated">We're happy to help.</p>
+    <p>Nearune is a private daily question and photo puzzle for two people who live apart. If something isn't working, or you have a question or idea, write to us and we'll reply within a couple of days.</p>
+
+    <h2>Contact us</h2>
+    <p>Email <a href="mailto:support@nearune.ai?subject=Nearune%20support">support@nearune.ai</a>. Please include your room code (shown at the top of the app) and which device you're using, such as an iPhone or iPad, so we can look into it quickly.</p>
+
+    <h2>Common questions</h2>
+    <ul>
+      <li><strong>I lost my room link.</strong> On the Nearune start page, choose the option to email yourself a recovery link, using the same email you registered with.</li>
+      <li><strong>"Use my current location" doesn't fill in my city.</strong> Allow location access for Nearune when asked (Settings &rsaquo; Nearune &rsaquo; Location), or simply type your city and pick it from the list.</li>
+      <li><strong>My partner's weather or local story is missing.</strong> Make sure each of you has set a city. Stories refresh through the day and can take a minute to appear.</li>
+      <li><strong>I want my data deleted.</strong> Open the app and choose "Delete my data", or email us and we'll do it for you.</li>
+      <li><strong>Report or block something.</strong> Use the report and block options next to your partner's photo, answer or comment.</li>
+    </ul>
+
+    `
   );
 }

@@ -2,6 +2,8 @@
 // as the single-file version always was), "/r/<roomId>" is any other room,
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
+import { screenText } from "./moderation";
+import { startStatsSchedule } from "./stats";
 import { isPerson, type PersonKey } from "./types";
 import {
   loadState,
@@ -22,16 +24,78 @@ import {
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
-import { aiGuessMatches } from "./ai";
-import { resolveTimezoneFromLocation, resolveLocationInfo } from "./geo";
+import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
+import { regionAbbr } from "./usstates";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
-import { topSongs } from "./music";
+import { newRound } from "./nhie";
+import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
-import { json, isValidEmail, readJson, sendEmail, todayKeyPT, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, effectiveLocation, normalizeInstagramHandle } from "./util";
-import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
+import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { APP_STORE_BADGE_B64 } from "./badge";
+import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
+import { buildGetPage } from "./get-page";
+import { buildHomePage } from "./home-page";
+import { friendJoin, friendStatus, friendCancel, friendBlock } from "./friend";
+import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
+const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
+
+// Vulgar / NSFW screen for text people write. Returns a Response to send back
+// when the text is rejected (friend rooms), otherwise null. Every hit is
+// recorded for the admin page.
+async function moderate(roomId: string, who: string, kind: string, text: string): Promise<Response | null> {
+  const word = screenText(text);
+  if (!word) return null;
+  let friend = false;
+  await saveState(roomId, (s) => {
+    friend = s.origin === "friend";
+    if (!s.flags) s.flags = [];
+    if (s.flags.length < 100) s.flags.push({ at: new Date().toISOString(), who, kind, word, excerpt: text.slice(0, 120) });
+  });
+  console.log("[moderation] room=" + roomId + " kind=" + kind + " who=" + who + " word=" + word + (friend ? " blocked" : " logged"));
+  return friend ? new Response(JSON.stringify({ error: "content_blocked" }), { status: 422, headers: { "content-type": "application/json" } }) : null;
+}
+
+
+// Counts rooms created today (Pacific time). Scanned once per day / process
+// start, then incremented as rooms are created.
+const regToday = { day: "", n: 0 };
+function pacificDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Slack heads-up at every 10th new room of the day (10, 20, ... 100). Needs a
+// Slack "Incoming Webhook" URL in SLACK_WEBHOOK_URL; without one this does
+// nothing. Fire-and-forget so it can never slow down or break room creation.
+function notifyRoomMilestone(n: number): void {
+  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  if (!hook || n < 10 || n % 10 !== 0) return;
+  const cap = parseInt(Bun.env.REGISTRATION_DAILY_CAP || "50", 10) || 50;
+  const text = ":tada: Nearune: " + n + " new rooms created today (" + pacificDay(new Date()) + ")." + (n >= cap ? " Daily cap of " + cap + " reached \u2014 new rooms are paused until tomorrow." : "");
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] milestone post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] milestone post error", e));
+}
+
+async function roomsCreatedToday(): Promise<number> {
+  const day = pacificDay(new Date());
+  if (regToday.day !== day) {
+    let n = 0;
+    try {
+      for (const id of await listRoomIds()) {
+        if (!id) continue;
+        const st = await loadState(id);
+        if (st.createdAt && pacificDay(new Date(st.createdAt)) === day) n++;
+      }
+    } catch {}
+    regToday.day = day;
+    regToday.n = n;
+  }
+  return regToday.n;
+}
+
 
 const PORT = Number(Bun.env.PORT) || 3000;
 
@@ -41,10 +105,39 @@ function parseRoom(pathname: string): { roomId: string; restPath: string } {
   return { roomId: "", restPath: pathname };
 }
 
+// Sign-up trouble log. Any failed (4xx/5xx) call on the create / register /
+// invite / accept steps is written as one line with the room, step, status,
+// the error code, and the coarse device + language — never names, emails,
+// locations or other request content. Lets us see where a visitor stalled.
+const SIGNUP_PATHS = new Set(["/api/create-room", "/api/register", "/api/invite", "/api/accept-invite", "/api/confirm", "/api/geo"]);
+function logSignupFailure(req: Request, pathname: string, res: Response): void {
+  try {
+    const { roomId, restPath } = parseRoom(pathname);
+    const step = pathname === "/api/create-room" ? pathname : restPath;
+    if (!SIGNUP_PATHS.has(step) || res.status < 400) return;
+    const ua = req.headers.get("user-agent") || "";
+    const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "other";
+    const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+    const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
+    res.clone().json().then((b: any) => {
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " error=" + ((b && b.error) || "?") + " via=" + device + " " + kind + " " + lang);
+    }).catch(() => {
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " via=" + device + " " + kind + " " + lang);
+    });
+  } catch {}
+}
+
 Bun.serve({
   port: PORT,
   idleTimeout: 60,
   async fetch(req, server) {
+    const res = await handleRequest(req, server);
+    logSignupFailure(req, new URL(req.url).pathname, res);
+    return res;
+  },
+});
+
+async function handleRequest(req: Request, server: any): Promise<Response> {
     const url = new URL(req.url);
     // Behind Railway's proxy req.url is plain http; links we hand out (invite,
     // confirm, etc.) must use the public https origin instead.
@@ -68,14 +161,91 @@ Bun.serve({
     const roomPrefix = roomId ? "/r/" + roomId : "";
     const HOUR = 60 * 60 * 1000;
 
+    if (req.method === "GET" && url.pathname === "/api/music-preview") {
+      if (!rateLimit("music-preview:" + clientIp(req, server), 120, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "");
+      if (!clip) return json({ error: "no_preview" }, { status: 404 });
+      return new Response(clip.bytes, { headers: { "content-type": clip.type, "cache-control": "public, max-age=3600", "accept-ranges": "none" } });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/create-room") {
       // Caps how many fresh rooms one visitor can spin up — a real couple
       // needs one, ever.
       if (!rateLimit("create-room:" + clientIp(req, server), 5, HOUR)) {
         return json({ error: "rate_limited" }, { status: 429 });
       }
-      const id = await createRoom();
+      // Guardrails: a manual kill switch (REGISTRATIONS_PAUSED=1) and a daily
+      // cap (REGISTRATION_DAILY_CAP, default 50 new rooms per Pacific day).
+      // Only creating a NEW room is gated — existing rooms and invited
+      // partners joining them are never blocked.
+      const waitMsg = "Nearune is getting a lot of love today, and we're working to catch up before welcoming more new rooms. Please check back tomorrow — we'd love to have you!";
+      if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
+        return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
+      }
+      const cap = parseInt(Bun.env.REGISTRATION_DAILY_CAP || "50", 10) || 50;
+      if ((await roomsCreatedToday()) >= cap) {
+        return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
+      }
+      // Optional room name from the first partner ("Our Sky" -> oursky, or oursky47 if taken).
+      // Screened like any other user text; only an explicit block refuses it.
+      const reqBody = await readJson(req);
+      const rawName = typeof reqBody?.name === "string" ? reqBody.name.trim().slice(0, 40) : "";
+      let useName = "";
+      if (rawName) {
+        const verdict = await moderateContent({ text: rawName });
+        console.log("[room-name] \"" + rawName + "\" screening=" + verdict);
+        if (verdict === "blocked") return json({ error: "inappropriate_name" }, { status: 400 });
+        // Only an explicit BLOCK refuses the name. If screening is down or gave
+        // no clear answer, still honor the name — it only becomes this room's
+        // own link, so a failed check shouldn't silently swap in random words.
+        useName = rawName;
+      }
+      // Coarse hint about who made the room (no IP stored): device, app vs web,
+      // browser language. Lets the admin tell a real visitor from a test.
+      const ua = req.headers.get("user-agent") || "";
+      const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "other";
+      const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+      const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
+      const via = device + " " + kind + " " + lang;
+      const id = await createRoom(useName, via, useName || undefined);
+      regToday.n++;
+      console.log("[room-created] " + id + " via " + via);
+      notifyRoomMilestone(regToday.n);
       return json({ roomId: id });
+    }
+
+    // "My rooms": the opening page. The room list lives on the device itself.
+    if (req.method === "GET" && url.pathname === "/home") {
+      return new Response(buildHomePage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    // Make a friend: anonymous matching with the next person who taps it.
+    if (req.method === "POST" && url.pathname === "/api/friend/join") {
+      if (!rateLimit("friend-join:" + clientIp(req, server), 8, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const fb = await readJson(req);
+      const device = typeof fb?.device === "string" ? fb.device : "";
+      if (!/^[A-Za-z0-9]{16,64}$/.test(device)) return json({ error: "invalid" }, { status: 400 });
+      if (fb?.adult !== true) return json({ error: "adult_required" }, { status: 400 });
+      if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
+        return json({ error: "registrations_paused" }, { status: 503 });
+      }
+      const fr = await friendJoin(device);
+      console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId : ""));
+      return json(fr);
+    }
+    if (req.method === "GET" && url.pathname === "/api/friend/status") {
+      if (!rateLimit("friend-status:" + clientIp(req, server), 900, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const t = url.searchParams.get("ticket") || "";
+      if (!/^[a-f0-9]{24}$/.test(t)) return json({ status: "none" });
+      return json(await friendStatus(t));
+    }
+    if (req.method === "POST" && url.pathname === "/api/friend/cancel") {
+      const cb = await readJson(req);
+      const t = typeof cb?.ticket === "string" ? cb.ticket : "";
+      if (/^[a-f0-9]{24}$/.test(t)) await friendCancel(t);
+      return json({ ok: true });
     }
 
     if (req.method === "GET" && url.pathname === "/new") {
@@ -116,8 +286,20 @@ Bun.serve({
       return json(generic);
     }
 
+    if (req.method === "GET" && (url.pathname === "/get" || url.pathname === "/get/")) {
+      return new Response(buildGetPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
+    }
+
     if (req.method === "GET" && url.pathname === "/privacy") {
       return new Response(buildPrivacyPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/support") {
+      return new Response(buildSupportPage(), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }
@@ -186,18 +368,101 @@ Bun.serve({
       return json({ ok: true });
     }
 
+    // Support tool: change one person's saved location. Needs the x-cron-secret header.
+    // Body: { name, from, to } updates every person with that name and current location.
+    if (req.method === "POST" && url.pathname === "/api/admin/set-location") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const nm = String(b?.name || "").trim(), from = String(b?.from || "").trim().toLowerCase(), to = String(b?.to || "").trim().slice(0, 80);
+      if (!nm || !from || !to) return json({ error: "invalid" }, { status: 400 });
+      const tz = await resolveTimezoneFromLocation(to);
+      let changed = 0;
+      for (const id of await listRoomIds()) {
+        const st = await loadState(id);
+        for (const k of ["mark", "nikita"] as PersonKey[]) {
+          const p: any = st.people?.[k];
+          if (p && String(p.name || "").trim() === nm && String(p.location || "").trim().toLowerCase() === from) {
+            await saveState(id, (s) => { const q: any = s.people?.[k]; if (q) { q.location = to; if (tz) q.tz = tz; } });
+            changed++;
+          }
+        }
+      }
+      return json({ ok: true, changed, tz });
+    }
+
+    // Admin tool: end a room (without erasing it). Same secret as the reminder.
+    if (req.method === "POST" && url.pathname === "/api/admin/close") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const cb = await readJson(req);
+      const rid = typeof cb?.roomId === "string" ? cb.roomId : "";
+      if (!rid) return json({ error: "invalid" }, { status: 400 });
+      await saveState(rid, (s) => { s.closed = true; s.closedBy = "admin"; });
+      console.log("[admin] closed room " + rid);
+      return json({ ok: true });
+    }
+
+    // Admin tool: email a "finish registering" reminder to someone whose email
+    // sign-up is still unconfirmed. Called by the nearune-admin service with
+    // the x-cron-secret header. Body: { roomId, who }.
+    if (req.method === "POST" && url.pathname === "/api/admin/remind") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const rid = typeof b?.roomId === "string" ? b.roomId : "";
+      const w = b?.who;
+      if (!rid || !isPerson(w)) return json({ error: "invalid" }, { status: 400 });
+      const st = await loadState(rid);
+      const pp = st.people && st.people[w];
+      const pc = st.pendingConfirm && st.pendingConfirm[w];
+      if (!pp || pp.emailVerified !== false || !pc) return json({ error: "nothing_pending" }, { status: 409 });
+      if (!pc.email) return json({ error: "no_email_kept" }, { status: 409 });
+      if ((pc.reminders || 0) >= 3) return json({ error: "max_reminders" }, { status: 429 });
+      if (pc.remindedAt && Date.now() - new Date(pc.remindedAt).getTime() < 20 * 60 * 60 * 1000) return json({ error: "too_soon" }, { status: 429 });
+      const fwd = req.headers.get("x-forwarded-proto");
+      const origin = fwd ? fwd + "://" + url.host : url.origin;
+      const rPrefix = rid ? "/r/" + rid : "";
+      const link = origin + rPrefix + "/api/confirm?who=" + w + "&token=" + pc.token;
+      const [subjR, hiR, bodyR, linkR, footR] = await translateEmailStrings(
+        [
+          "Finish setting up Nearune",
+          "Hi",
+          "You started setting up Nearune but haven't confirmed your email yet. It takes one tap:",
+          "Confirm your email",
+          "Not you, or already done? You can ignore this email.",
+        ],
+        pp.language
+      );
+      const rr = await sendEmail(
+        pc.email,
+        subjR,
+        "<p>" + hiR + " " + pp.name + ",</p><p>" + bodyR + "</p>" +
+          "<p><a href=\"" + link + "\">" + linkR + "</a></p>" +
+          "<p style=\"color:#888;font-size:0.9em\">" + footR + "</p>"
+      );
+      console.log("[remind] room=" + (rid || "main") + " who=" + w + " ok=" + rr.ok + (rr.ok ? "" : " error=" + rr.error));
+      if (rr.ok) {
+        await saveState(rid, (s) => {
+          const e = s.pendingConfirm && s.pendingConfirm[w];
+          if (e) { e.reminders = (e.reminders || 0) + 1; e.remindedAt = new Date().toISOString(); }
+        });
+      }
+      return json({ ok: rr.ok, error: rr.error });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
       const secret = Bun.env.CRON_SECRET;
       const given = req.headers.get("x-cron-secret") || "";
       if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
       if (!anyPushConfigured) return json({ ok: true, sent: 0, note: "push not configured" });
-      const today = todayKeyPT();
       const ids = await listRoomIds();
       let sent = 0;
       for (const id of ids) {
         try {
           const state = await loadState(id);
           if (!state.pushSubs) continue;
+          const today = todayKeyFor(state);
           // "Still waiting" nudge: an invite unanswered for 2+ days, at most
           // once every 3 days, pushed to whoever sent it.
           const DAY_MS = 24 * 60 * 60 * 1000;
@@ -266,9 +531,54 @@ Bun.serve({
       });
     }
 
+    if (req.method === "GET" && url.pathname === "/api/qa") {
+      // Summary only (counts and check names, no room data).
+      return json(lastQaReport() || (await runQa()));
+    }
+
     if (req.method === "GET" && restPath === "/api/state") {
-      const state = await loadState(roomId);
-      return json(forClient(state));
+      let state = await loadState(roomId);
+      // Existing users: a room with anyone located in (or traveling to) a blocked country is closed.
+      try {
+        for (const k of ["mark", "nikita"] as PersonKey[]) {
+          const p: any = state.people?.[k];
+          if (!p) continue;
+          if (await isBlockedLocation(String(p.location || "")) || (p.travelLocation && await isBlockedLocation(String(p.travelLocation)))) {
+            return json({ error: "region_unavailable" }, { status: 403 });
+          }
+        }
+      } catch {}
+      // Self-heal: a person with a saved location but no timezone (the
+      // lookup failed at registration) would otherwise show UTC clocks.
+      // Resolve it now, at most once every 10 minutes per room.
+      try {
+        const missing = (["mark", "nikita"] as PersonKey[]).filter((k) => state.people?.[k]?.location && !state.people?.[k]?.tz);
+        const last = tzBackfillAt.get(roomId) || 0;
+        if (missing.length && Date.now() - last > 10 * 60 * 1000) {
+          tzBackfillAt.set(roomId, Date.now());
+          const found: Partial<Record<PersonKey, string>> = {};
+          for (const k of missing) {
+            const tz = await resolveTimezoneFromLocation(state.people![k]!.location!);
+            if (tz) found[k] = tz;
+          }
+          if (Object.keys(found).length) {
+            state = await saveState(roomId, (s) => {
+              for (const k of Object.keys(found) as PersonKey[]) {
+                if (s.people?.[k] && !s.people[k]!.tz) s.people[k]!.tz = found[k];
+              }
+            });
+          }
+        }
+      } catch (e) { /* never block state on a timezone lookup */ }
+      try { roomQaOnce(roomId, state); } catch (e) {}
+      const out: any = forClient(state);
+      // Never Have I Ever: a viewer may always see their OWN answer (never the partner's).
+      try {
+        const who = url.searchParams.get("who");
+        const mine = (who === "mark" || who === "nikita") ? (state as any).nhie?.votes?.[who] : undefined;
+        if (mine && out.nhie) out.nhie.mine = mine;
+      } catch {}
+      return json(out);
     }
 
     if (req.method === "POST" && restPath === "/api/delete-room") {
@@ -295,6 +605,8 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 4000);
+      const blockedA = await moderate(roomId, who, "answer", trimmed);
+      if (blockedA) return blockedA;
       const state = await saveState(roomId, (s) => {
         if (!s.answers[date]) s.answers[date] = {};
         const prev = s.answers[date][who];
@@ -376,9 +688,10 @@ Bun.serve({
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
             if (!sub || sub.kind !== "apns") continue;
+            const solo = isSoloRoom(state);
             sendPush(sub, {
-              title: "You're all caught up",
-              body: "Both answers are in for today on Nearune.",
+              title: solo ? "Answer saved" : "You're all caught up",
+              body: solo ? "Invite someone on Nearune to see their answer too." : "Both answers are in for today on Nearune.",
               badge: 0,
               tag: "day-complete",
             })
@@ -393,6 +706,37 @@ Bun.serve({
           }
         }
       }
+      return json(forClient(state));
+    }
+
+    // "Make a friend" rooms are joined only through the invite token the
+    // matcher issued: no open registration, and no inviting third parties.
+    if (req.method === "POST" && (restPath === "/api/register" || restPath === "/api/invite")) {
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "not_allowed" }, { status: 403 });
+    }
+
+    // Leave a "Make a friend" room, optionally reporting the other person.
+    // Ends the room for both, and those two devices are never paired again.
+    if (req.method === "POST" && restPath === "/api/leave-friend") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (cur.origin !== "friend") return json({ error: "not_friend_room" }, { status: 400 });
+      const report = body.report === true;
+      const about: PersonKey = who === "mark" ? "nikita" : "mark";
+      const note = typeof body.note === "string" ? body.note.slice(0, 300) : undefined;
+      const state = await saveState(roomId, (s) => {
+        s.closed = true;
+        if (!s.closedBy) s.closedBy = who;
+        if (report) s.reported = true;
+        if (!s.reports) s.reports = [];
+        s.reports.push({ by: who, about, kind: report ? "friend-report" : "friend-leave", note, at: new Date().toISOString() });
+        if (s.reports.length > 50) s.reports = s.reports.slice(-50);
+      });
+      await friendBlock(cur.friendDevices && cur.friendDevices.mark, cur.friendDevices && cur.friendDevices.nikita);
+      console.log("[friend-leave] room=" + roomId + " by=" + who + " report=" + report + (note ? " note=" + JSON.stringify(note) : ""));
       return json(forClient(state));
     }
 
@@ -438,6 +782,8 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 300);
+      const blockedC = await moderate(roomId, who, "comment", trimmed);
+      if (blockedC) return blockedC;
       const state = await saveState(roomId, (s) => {
         if (!s.comments[date]) s.comments[date] = [];
         s.comments[date].push({ who, text: trimmed, at: new Date().toISOString() });
@@ -448,7 +794,33 @@ Bun.serve({
     if (req.method === "GET" && restPath === "/api/geo") {
       const location = url.searchParams.get("location") || "";
       const info = await resolveLocationInfo(location);
-      return json(info);
+      const city = await isCityLevelLocation(location);
+      let places = await searchPlaces(location);
+      let suggested = false;
+      // Nothing matches as typed (a misspelling): offer the places for the corrected spelling.
+      if (!places.length && info.corrected) { places = await searchPlaces(info.corrected); suggested = places.length > 0; }
+      return json({ ...info, city, places, suggested });
+    }
+
+    // "Use my current location": turns browser coordinates into a "City, Region, Country" label.
+    // Coordinates are rounded to about a kilometre and not stored.
+    if (req.method === "GET" && restPath === "/api/reverse-geo") {
+      if (!rateLimit("reverse-geo:" + clientIp(req, server), 20, 60 * 60 * 1000)) return json({ error: "rate_limited" }, { status: 429 });
+      const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+      if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return json({ error: "invalid" }, { status: 400 });
+      try {
+        const r = await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=" + lat.toFixed(2) + "&lon=" + lon.toFixed(2), { headers: { "user-agent": "Nearune/1.0 (https://nearune.ai)" } });
+        if (!r.ok) return json({ label: null });
+        const d: any = await r.json();
+        const a = d?.address || {};
+        const city = a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || "";
+        if (!city) return json({ label: null });
+        {
+          const cc3 = String(a.country_code || "").toUpperCase();
+          const st = a.state || a.region || "";
+          return json({ label: [city, regionAbbr(cc3, st), cc3 || a.country || ""].filter(Boolean).join(", ") });
+        }
+      } catch { return json({ label: null }); }
     }
 
     // SANDBOX EXPERIMENT: current weather at the OTHER person's registered
@@ -461,7 +833,7 @@ Bun.serve({
     // server-side regardless.
     if (req.method === "GET" && restPath === "/api/weather") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markWeather, nikitaWeather] = await Promise.all([
         currentWeather(effectiveLocation(state.people?.mark, today)),
         currentWeather(effectiveLocation(state.people?.nikita, today)),
@@ -477,7 +849,7 @@ Bun.serve({
     // /api/weather above, no API key required.
     if (req.method === "GET" && restPath === "/api/news") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markNews, nikitaNews] = await Promise.all([
         topLocalStory(effectiveLocation(state.people?.mark, today)),
         topLocalStory(effectiveLocation(state.people?.nikita, today)),
@@ -492,7 +864,7 @@ Bun.serve({
     // than needing a second round trip when someone expands the list.
     if (req.method === "GET" && restPath === "/api/music") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markMusic, nikitaMusic] = await Promise.all([
         topSongs(effectiveLocation(state.people?.mark, today), 5),
         topSongs(effectiveLocation(state.people?.nikita, today), 5),
@@ -503,7 +875,7 @@ Bun.serve({
     // Top movies chart (see movies.ts) — same shape as /api/music above.
     if (req.method === "GET" && restPath === "/api/movies") {
       const state = await loadState(roomId);
-      const today = todayKeyPT();
+      const today = todayKeyFor(state);
       const [markMovies, nikitaMovies] = await Promise.all([
         topMovies(effectiveLocation(state.people?.mark, today), 5),
         topMovies(effectiveLocation(state.people?.nikita, today), 5),
@@ -528,7 +900,10 @@ Bun.serve({
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const { who } = body || {};
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      let location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      if (location && await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (location && !(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      if (location) location = await canonicalPlaceLabel(location);
       const asDateKey = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
       const from = asDateKey(body?.from);
       const until = asDateKey(body?.until);
@@ -600,6 +975,8 @@ Bun.serve({
       if (!isPerson(who) || !name || (!email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
+      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       if (handle) {
         // Instagram-handle sign-up: nothing is emailed (there's no address),
         // so there's nothing to confirm and nothing that could be used to
@@ -630,7 +1007,7 @@ Bun.serve({
         return json({ error: "rate_limited" }, { status: 429 });
       }
       const cur = await loadState(roomId);
-      if (cur.people && cur.people[who] && cur.people[who]!.confirmed) {
+      if (cur.people && cur.people[who] && cur.people[who]!.confirmed && cur.people[who]!.emailVerified !== false) {
         return json({ error: "already_registered" }, { status: 409 });
       }
       // The typed location is the source of truth for timezone when it
@@ -639,15 +1016,26 @@ Bun.serve({
       // geocoding lookup being unreachable).
       const resolvedTz = await resolveTimezoneFromLocation(location);
       const tz = resolvedTz || browserTz;
-      const token = crypto.randomUUID();
+      // Re-registering with the same address (Resend confirmation) keeps the
+      // same token, so an earlier email's link keeps working instead of
+      // being cut off by the newer one.
+      const emailHash0 = await hashEmail(email);
+      const sameEmailPending =
+        cur.people && cur.people[who] && cur.people[who]!.emailHash === emailHash0 && cur.pendingConfirm && cur.pendingConfirm[who];
+      const token = sameEmailPending ? cur.pendingConfirm![who]!.token : crypto.randomUUID();
       // Keyed hash only — the address itself is never stored on the person's
       // profile, just this one-way fingerprint (see hashEmail).
       const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: false, emailHash };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash };
         if (!s.pendingConfirm) s.pendingConfirm = {};
-        s.pendingConfirm[who] = { token, at: new Date().toISOString() };
+        const prevPc = s.pendingConfirm[who];
+        s.pendingConfirm[who] = {
+          token, at: new Date().toISOString(), email,
+          reminders: sameEmailPending && prevPc ? prevPc.reminders : undefined,
+          remindedAt: sameEmailPending && prevPc ? prevPc.remindedAt : undefined,
+        };
         // Only whoever registers first sets this for the room — the second
         // person's own registration (or re-registering after a bounced
         // confirm) never overwrites an already-chosen relationship.
@@ -698,9 +1086,13 @@ Bun.serve({
         const cur = await loadState(roomId);
         if (cur.pendingConfirm && cur.pendingConfirm[who] && cur.pendingConfirm[who]!.token === token) {
           await saveState(roomId, (s) => {
-            if (s.people && s.people[who]) s.people[who]!.confirmed = true;
+            if (s.people && s.people[who]) { s.people[who]!.confirmed = true; s.people[who]!.emailVerified = true; }
             if (s.pendingConfirm) delete s.pendingConfirm[who];
           });
+          ok = true;
+        } else if (cur.people && cur.people[who] && cur.people[who]!.confirmed && cur.people[who]!.emailVerified !== false) {
+          // Already confirmed (link clicked twice, or an email app pre-opened
+          // it): that's a success, not an expired link.
           ok = true;
         }
       }
@@ -711,7 +1103,7 @@ Bun.serve({
       // picker instead of straight into their next step.
       const backUrl = publicOrigin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
       const html = ok
-        ? "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"1;url=" + backUrl + "\"></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Confirmed 🎉</h1><p><a href=\"" + backUrl + "\">Continue to Nearune</a></p></body></html>"
+        ? "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Confirmed</title></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 24px;color:#2B211B\"><h1>Confirmed 🎉</h1><p style=\"font-size:1.15rem;line-height:1.5\">You're all set. Switch back to the <strong>Nearune app</strong> to keep going.</p><p style=\"margin-top:40px;font-size:0.9rem;color:#6F6054\">Using Nearune in your browser instead? <a href=\"" + backUrl + "\" style=\"color:#6F6054\">Continue in browser</a></p></body></html>"
         : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }
@@ -723,9 +1115,12 @@ Bun.serve({
       const contact =
         typeof body?.contact === "string" ? body.contact.trim().slice(0, 200)
         : typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
-      const email = isValidEmail(contact) ? contact : "";
-      const handle = email ? null : normalizeInstagramHandle(contact);
-      if (!isPerson(who) || (!email && !handle)) {
+      // via === "link": no email or handle — just hand back a link (with the
+      // room code) for the inviter to send by text, WhatsApp, etc.
+      const viaLink = body && body.via === "link";
+      const email = viaLink ? "" : isValidEmail(contact) ? contact : "";
+      const handle = viaLink || email ? null : normalizeInstagramHandle(contact);
+      if (!isPerson(who) || (!viaLink && !email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
       if (!rateLimit("invite-ip:" + clientIp(req, server), 10, HOUR) || (email && !rateLimit("invite-email:" + email.toLowerCase(), 3, HOUR))) {
@@ -735,25 +1130,41 @@ Bun.serve({
       if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) {
         return json({ error: "not_confirmed" }, { status: 403 });
       }
+      // Sending an invite BY EMAIL waits until this person's own email is
+      // confirmed (keeps unverified sign-ups from emailing strangers).
+      // Link and Instagram-handle invites work right away.
+      if (email && cur.people[who]!.emailVerified === false) {
+        return json({ error: "email_unverified" }, { status: 403 });
+      }
       const other: PersonKey = who === "mark" ? "nikita" : "mark";
       if (cur.people[other] && cur.people[other]!.confirmed) {
         return json({ error: "already_registered" }, { status: 409 });
       }
       // 12 hex chars keeps the shareable link short; invites are rate-limited.
-      const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      // A resend keeps the same token, so the link in an earlier email or
+      // message never stops working just because a newer one was sent.
+      const priorInvite = cur.pendingInvite && cur.pendingInvite[other];
+      const token = priorInvite && priorInvite.token ? priorInvite.token : crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
         s.pendingInvite[other] = handle
           ? { token, at: new Date().toISOString(), instagram: handle }
-          : { token, at: new Date().toISOString() };
+          : viaLink
+            ? { token, at: new Date().toISOString(), link: true }
+            : { token, at: new Date().toISOString() };
       });
       const inviteUrl = roomId
         ? publicOrigin + "/j/" + roomId + "/" + token
         : publicOrigin + roomPrefix + "/?invite=" + other + "&token=" + token;
+      if (viaLink) {
+        console.log("[invite] room=" + (roomId || "main") + " via=link");
+        return json({ ...forClient(state), _viaHandle: true, _viaLink: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
+      }
       if (handle) {
         // Nothing to email — the link goes back to this browser and the
         // inviter sends it themselves (e.g. as an Instagram DM).
-        return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl });
+        console.log("[invite] room=" + (roomId || "main") + " via=instagram");
+        return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
       }
       const inviterName = cur.people[who]!.name;
       const r = await sendEmail(
@@ -762,9 +1173,20 @@ Bun.serve({
         "<p>" + inviterName + " invited you to Nearune.</p>" +
           "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
           "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
+          (roomId ? "<p style=\"font-size:15px\">Your room code: <b>" + roomId + "</b><br><span style=\"font-size:14px\">If the link doesn't open the app, open Nearune, tap <b>Open an existing room</b> and enter this code.</span></p>" : "") +
+          (Bun.env.APP_STORE_URL
+            ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
+              "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
+              "<td style=\"vertical-align:middle\"><div style=\"font-size:15px;margin-bottom:8px\">Get the Nearune app</div>" +
+              "<a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a></td>" +
+              "</tr></table>"
+            : "") +
+          "<p style=\"font-size:14px\">Already have the app? Copy the link above, open Nearune and tap <b>Paste my invite</b>. Nearune only reads the link you just copied.</p>" +
+          "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
           "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
       );
-      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl });
+      console.log("[invite] room=" + (roomId || "main") + " via=email sent=" + r.ok + (r.ok ? "" : " error=" + JSON.stringify(String(r.error || "").slice(0, 200))));
+      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
     }
 
     if (req.method === "POST" && restPath === "/api/accept-invite") {
@@ -776,6 +1198,8 @@ Bun.serve({
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
+      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
       (["mark", "nikita"] as PersonKey[]).forEach((k) => {
@@ -790,6 +1214,7 @@ Bun.serve({
         s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}) };
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
+      console.log("[invite-accepted] room=" + (roomId || "main") + " who=" + who);
       // Let the person who sent the invite know their partner is in —
       // otherwise the only way they'd find out is having the app open when
       // the 6s poll happens to catch it. Push only (not email): we never
@@ -798,7 +1223,7 @@ Bun.serve({
       const inviter: PersonKey = who === "mark" ? "nikita" : "mark";
       const inviterSub = state.pushSubs && state.pushSubs[inviter];
       if (inviterSub) {
-        const today = todayKeyPT();
+        const today = todayKeyFor(state);
         sendPush(inviterSub, {
           title: "Your Nearune partner joined!",
           body: name + " just joined Nearune — today's question is ready for you both.",
@@ -813,6 +1238,11 @@ Bun.serve({
         }).catch(() => {});
       }
       return json({ who, ...forClient(state) });
+    }
+
+    // The photo puzzle is off in "Make a friend" rooms (strangers).
+    if (req.method === "POST" && restPath.startsWith("/api/puzzle-")) {
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "puzzle_disabled" }, { status: 403 });
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-batch") {
@@ -831,7 +1261,7 @@ Bun.serve({
         const match = typeof dataUrl === "string" ? dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
         const trimmedAnswer = typeof answer === "string" ? answer.trim().slice(0, 200) : "";
         const trimmedQuestion = typeof question === "string" ? question.trim().slice(0, 200) : "";
-        if (!match || !trimmedAnswer) return json({ error: "invalid" }, { status: 400 });
+        if (!match || !trimmedAnswer || !trimmedQuestion) return json({ error: "invalid" }, { status: 400 });
         let bytes: Uint8Array;
         try {
           bytes = Buffer.from(match[1], "base64");
@@ -842,9 +1272,16 @@ Bun.serve({
         parsed.push({ id: crypto.randomUUID(), answer: trimmedAnswer, question: trimmedQuestion, bytes });
       }
       const current = await loadState(roomId);
-      if (current.puzzleCurrentId || (current.puzzleQueue && current.puzzleQueue.length > 0)) {
+      // A new batch can be loaded once the current picture is finished (solved
+      // or every piece unlocked) and nothing is still queued behind it.
+      const curRevealed = !!current.puzzleCurrentId && (!!current.puzzleSolved || puzzleUnlockedCount(current) >= PUZZLE_TOTAL);
+      const curQueued = !!(current.puzzleQueue && current.puzzleQueue.length > 0);
+      if (curQueued || (current.puzzleCurrentId && !curRevealed)) {
         return json({ error: "in_progress" }, { status: 409 });
       }
+      const verdicts = await Promise.all(parsed.map((p) => moderateContent({ image: p.bytes, text: p.question + " " + p.answer })));
+      if (verdicts.indexOf("blocked") >= 0) return json({ error: "inappropriate" }, { status: 422 });
+      if (verdicts.indexOf("unavailable") >= 0) return json({ error: "moderation_unavailable" }, { status: 503 });
       for (const p of parsed) {
         if (useS3 && s3) {
           await s3.file(puzzleImageKey(roomId, p.id)).write(p.bytes, { type: "image/jpeg" });
@@ -859,7 +1296,7 @@ Bun.serve({
         s.puzzleAnswer = first.answer;
         if (first.question) s.puzzleQuestion = first.question; else delete s.puzzleQuestion;
         s.puzzleSetBy = who;
-        s.puzzleRoundStartDate = todayKeyPT();
+        s.puzzleRoundStartDate = todayKeyFor(s);
         s.puzzleBonusCredits = 0;
         delete s.puzzleRoundBase;
         s.puzzleSolved = false;
@@ -872,6 +1309,118 @@ Bun.serve({
         delete s.puzzleLastGuessBy;
         delete s.puzzleLastGuessText;
         delete s.puzzleLastGuessCorrect;
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-place") {
+      if (!rateLimit("puzzle-place:" + roomId, 40, HOUR)) return json({ place: null });
+      const body = await readJson(req);
+      const m = body && typeof body.dataUrl === "string" ? body.dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
+      if (!m) return json({ place: null });
+      let bytes: Uint8Array;
+      try { bytes = Buffer.from(m[1], "base64"); } catch { return json({ place: null }); }
+      if (bytes.length < 200) return json({ place: null });
+      return json({ place: await guessPlaceFromImage(bytes) });
+    }
+
+    // Never Have I Ever: answer the current phrase. "round" guards against a
+    // stale tab answering a phrase that has already moved on.
+    if (req.method === "POST" && restPath === "/api/nhie-vote") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, choice, round } = body || {};
+      if (!isPerson(who) || (choice !== "never" && choice !== "have")) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie) s.nhie = newRound(undefined, s.relationship);
+        if (s.nhie.round !== round) return;
+        if (!s.nhie.votes) s.nhie.votes = {};
+        s.nhie.votes[who] = choice;
+      });
+      return json(forClient(state));
+    }
+
+    // Starts the next phrase. Only moves on once both have answered (or when
+    // there is no round yet), and only from the round the caller was looking
+    // at, so two quick taps never skip a phrase.
+    if (req.method === "POST" && restPath === "/api/nhie-next") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, round } = body || {};
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie) { s.nhie = newRound(undefined, s.relationship); return; }
+        const v = s.nhie.votes || {};
+        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, s.relationship);
+      });
+      return json(forClient(state));
+    }
+
+    // Never Have I Ever: a short note on a revealed round (current one once
+    // both have answered, or any past one).
+    if (req.method === "POST" && restPath === "/api/nhie-comment") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, round, text } = body || {};
+      const trimmed = typeof text === "string" ? text.trim().slice(0, 300) : "";
+      if (!isPerson(who) || !Number.isInteger(round) || round < 1 || !trimmed) return json({ error: "invalid" }, { status: 400 });
+      const blockedN = await moderate(roomId, who, "nhie-comment", trimmed);
+      if (blockedN) return blockedN;
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie || round > s.nhie.round) return;
+        const v = s.nhie.votes || {};
+        if (round === s.nhie.round && !v[who as PersonKey]) return;
+        if (!s.nhie.comments) s.nhie.comments = {};
+        const list = s.nhie.comments[String(round)] || (s.nhie.comments[String(round)] = []);
+        if (list.length >= 50) return;
+        list.push({ who, text: trimmed, at: new Date().toISOString() });
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/badge-sync") {
+      // Self-heal for the native app-icon badge: the clear/set push is only
+      // sent at the moment an answer lands, and if it is missed the icon
+      // stays wrong. The open app asks for a resend of the true count.
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      if (!rateLimit("badge-sync:" + roomId + ":" + who, 4, 10 * 60 * 1000)) return json({ ok: true, skipped: true });
+      const cur = await loadState(roomId);
+      const sub = cur.pushSubs && cur.pushSubs[who];
+      if (!anyPushConfigured || !sub || sub.kind !== "apns") return json({ ok: true, skipped: true });
+      const count = unansweredCount(cur, todayKeyFor(cur));
+      sendPush(sub, { title: "", body: "", badge: count, tag: "badge-sync", silent: true })
+        .then((res) => {
+          if (res.gone) {
+            saveState(roomId, (s) => { if (s.pushSubs) delete s.pushSubs[who]; }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+      return json({ ok: true, count });
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-edit") {
+      // The person who set the current picture can fix its question/answer
+      // until it is solved. The answer stays server-side (never sent back).
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const q = typeof body?.question === "string" ? body.question.trim().slice(0, 200) : "";
+      const a = typeof body?.answer === "string" ? body.answer.trim().slice(0, 200) : "";
+      if (!isPerson(who) || !q || !a) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (!cur.puzzleCurrentId || cur.puzzleSetBy !== who) return json({ error: "not_setter" }, { status: 403 });
+      if (cur.puzzleSolved) return json({ error: "already_solved" }, { status: 409 });
+      const verdict = await moderateContent({ text: q + " " + a });
+      if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+      if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      const state = await saveState(roomId, (s) => {
+        if (s.puzzleCurrentId && s.puzzleSetBy === who && !s.puzzleSolved) {
+          s.puzzleQuestion = q;
+          s.puzzleAnswer = a;
+        }
       });
       return json(forClient(state));
     }
@@ -952,6 +1501,11 @@ Bun.serve({
     // overwritten each time (see storage.ts's photoKey/PersonProfile.photoAt),
     // same resize-client-side-then-base64-POST approach as /api/voice-sample
     // and /api/puzzle-batch above.
+    // Photo sharing is off in "Make a friend" rooms (strangers).
+    if (req.method === "POST" && (restPath === "/api/photo-upload" || restPath === "/api/photo-caption")) {
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "photos_disabled" }, { status: 403 });
+    }
+
     if (req.method === "POST" && restPath === "/api/photo-upload") {
       if (!rateLimit("photo-upload:" + roomId, 30, HOUR)) {
         return json({ error: "rate_limited" }, { status: 429 });
@@ -971,6 +1525,12 @@ Bun.serve({
       }
       if (bytes.length < 200) return json({ error: "invalid" }, { status: 400 });
       if (bytes.length > 6 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      {
+        const capText = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
+        const verdict = await moderateContent({ image: bytes, text: capText });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
       if (useS3 && s3) {
         await s3.file(photoKey(roomId, who)).write(bytes, { type: "image/jpeg" });
       } else {
@@ -980,6 +1540,28 @@ Bun.serve({
         if (!s.people) s.people = {};
         if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
         s.people[who]!.photoAt = new Date().toISOString();
+        const cap = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
+        if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+      });
+      return json(forClient(state));
+    }
+
+    // Edit the comment under an already-shared photo.
+    if (req.method === "POST" && restPath === "/api/photo-caption") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who) || typeof body.caption !== "string") return json({ error: "invalid" }, { status: 400 });
+      const cap = body.caption.trim().slice(0, 200);
+      if (cap) {
+        const verdict = await moderateContent({ text: cap });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who] && s.people[who]!.photoAt) {
+          if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+        }
       });
       return json(forClient(state));
     }
@@ -992,7 +1574,7 @@ Bun.serve({
       const who = body && body.who;
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (s.people && s.people[who]) delete s.people[who]!.photoAt;
+        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; }
       });
       try {
         if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
@@ -1053,7 +1635,7 @@ Bun.serve({
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 120);
-      const today = todayKeyPT();
+      const today = todayKeyFor(await loadState(roomId));
 
       // guessMatches() (exact/substring) is the fast, free first check.
       // aiGuessMatches() is the generous fallback — catches a paraphrase,
@@ -1076,7 +1658,7 @@ Bun.serve({
 
       let rejected = false;
       const state = await saveState(roomId, (s) => {
-        if (!s.puzzleAnswer || s.puzzleSolved) return;
+        if (!s.puzzleAnswer || s.puzzleSolved || puzzleUnlockedCount(s) >= PUZZLE_TOTAL) return;
         if (s.puzzleSetBy && who === s.puzzleSetBy) { rejected = true; return; }
         if (s.puzzleLastGuessDate === today) return;
         const finalCorrect = s.puzzleAnswer === peekedAnswer ? correct : guessMatches(trimmed, s.puzzleAnswer);
@@ -1177,6 +1759,45 @@ Bun.serve({
       return json({ ok: true });
     }
 
+    // Universal links: tells iOS that invite links (/j/...) and confirmation
+    // links belong to the Nearune app. Must be served as plain JSON at exactly
+    // this path, with no redirect. The Team ID comes from existing Apple vars.
+    if (req.method === "GET" && url.pathname === "/.well-known/apple-app-site-association") {
+      const teamId = Bun.env.APPLE_TEAM_ID || Bun.env.APNS_TEAM_ID || Bun.env.APPLE_WEATHERKIT_TEAM_ID || "";
+      if (!teamId) return new Response("Not found", { status: 404 });
+      const body = {
+        applinks: {
+          details: [
+            { appIDs: [teamId + ".com.nearune.app"], components: [{ "/": "/j/*" }, { "/": "/r/*/api/confirm" }] },
+          ],
+        },
+      };
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
+    }
+
+    // The Never Have I Ever how-to clip. iOS needs Range support to play video.
+    if (req.method === "GET" && url.pathname === "/nhie-howto.mp4") {
+      const f = Bun.file(import.meta.dir + "/nhie-howto.mp4");
+      if (!(await f.exists())) return new Response("Not found", { status: 404 });
+      const size = f.size;
+      const base = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=86400" };
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") || "");
+      if (m && (m[1] || m[2])) {
+        let start = m[1] ? parseInt(m[1], 10) : Math.max(0, size - parseInt(m[2], 10));
+        let end = m[1] && m[2] ? parseInt(m[2], 10) : size - 1;
+        if (end >= size) end = size - 1;
+        if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size } });
+        return new Response(f.slice(start, end + 1), { status: 206, headers: { ...base, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
+      }
+      return new Response(f, { headers: { ...base, "content-length": String(size) } });
+    }
+
+    if (req.method === "GET" && url.pathname === "/app-store-badge.png") {
+      return new Response(Buffer.from(APP_STORE_BADGE_B64, "base64"), {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
+    }
+
     if (req.method === "GET" && (url.pathname === "/favicon.png" || url.pathname === "/favicon.ico" || url.pathname === "/apple-touch-icon.png")) {
       const key = url.pathname === "/apple-touch-icon.png" ? "touch" : "favicon";
       try {
@@ -1198,8 +1819,57 @@ Bun.serve({
     }
 
     return new Response("Not found", { status: 404 });
-  },
-});
+}
 
 console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
 ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));
+
+// Rooms where someone tapped "create" but nobody ever registered pile up in
+// the admin list. Once a day, remove ones that are over 7 days old with no
+// people, no answers and no puzzle. Rooms with any registered person, and the
+// original room, are never touched.
+async function purgeEmptyRooms(): Promise<void> {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let removed = 0;
+    for (const id of await listRoomIds()) {
+      if (!id) continue;
+      const st = await loadState(id);
+      if (!st.createdAt || new Date(st.createdAt).getTime() > cutoff) continue;
+      const people = Object.values(st.people || {}).filter(Boolean).length;
+      const pending = Object.keys(st.pendingInvite || {}).length + Object.keys(st.pendingConfirm || {}).length;
+      if (people > 0 || pending > 0 || Object.keys(st.answers || {}).length > 0 || st.puzzleCurrentId) continue;
+      await deleteRoom(id);
+      removed++;
+      console.log("[room-purge] removed empty room " + id + " (created " + st.createdAt + ")");
+    }
+    if (removed) regToday.day = ""; // recount today's rooms next time
+  } catch (err) {
+    console.error("[room-purge] failed", err);
+  }
+}
+// Emails kept for reminders are dropped after 7 days even if never confirmed.
+async function purgeStaleEmails(): Promise<void> {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const id of await listRoomIds()) {
+      const st = await loadState(id);
+      for (const k of ["mark", "nikita"] as PersonKey[]) {
+        const e = st.pendingConfirm && st.pendingConfirm[k];
+        if (e && e.email && new Date(e.at).getTime() < cutoff) {
+          await saveState(id, (s) => { const x = s.pendingConfirm && s.pendingConfirm[k]; if (x) delete x.email; });
+          console.log("[email-purge] dropped kept email for room " + (id || "main") + " " + k);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[email-purge] failed", err);
+  }
+}
+setTimeout(purgeStaleEmails, 6 * 60 * 1000);
+setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
+setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
+setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
+
+startQaSchedule();
+startStatsSchedule();

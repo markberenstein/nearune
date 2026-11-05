@@ -47,6 +47,10 @@ export type PersonProfile = {
   tz?: string;
   confirmed: boolean;
   emailHash?: string;
+  // false while an email sign-up hasn't clicked its confirm link yet.
+  // They can use the app right away (confirmed: true); only sending an
+  // invite BY EMAIL waits for this. Missing = verified (older records).
+  emailVerified?: boolean;
   // Instagram username (no "@"), set when this person signed up with a
   // handle instead of an email, shown to their partner as a tappable link.
   // UNVERIFIED — anyone can type any handle, so it's only ever a label,
@@ -61,6 +65,8 @@ export type PersonProfile = {
   // same idea as hasVoice but a timestamp instead of a boolean since the
   // client needs it to know when to refetch a replaced photo.
   photoAt?: string;
+  // Optional short comment the sharer wrote under their photo.
+  photoCaption?: string;
   travelLocation?: string;
   travelTz?: string;
   travelFrom?: string;
@@ -97,17 +103,28 @@ export type State = {
   // rooms created after this field was added; older rooms show as unknown in
   // the admin view rather than guessing a date.
   createdAt?: string;
+  // Coarse, non-identifying hint about where the room was created (device
+  // type, app vs web, browser language) — no IP address. Shown in the logs.
+  createdVia?: string;
   relationship?: RelationshipType;
+  // The room name the first person typed, in any language (shown as the
+  // room's title). The room code/link is built separately from a-z/0-9.
+  roomName?: string;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
   status: Partial<Record<PersonKey, { text: string; at: string }>>;
   comments: Record<string, Comment[]>;
   people?: Partial<Record<PersonKey, PersonProfile>>;
-  pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string }>>;
-  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string }>>;
+  // email is kept ONLY while the sign-up is unconfirmed (so the admin can send
+  // a reminder); it is deleted with the whole entry when they confirm, and
+  // stripped after 7 days. reminders/remindedAt cap how often we nudge.
+  pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string; email?: string; reminders?: number; remindedAt?: string }>>;
+  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string; link?: boolean }>>;
   // Server-computed on every response (never persisted, see forClient) —
   // the Instagram handle an invite was addressed to, if it went to a handle
   // rather than an email.
   pendingInviteHandle?: Partial<Record<PersonKey, string>>;
+  // true when the invite was made as a plain link to send by text/WhatsApp/etc.
+  pendingInviteLink?: Partial<Record<PersonKey, boolean>>;
   // Server-computed on every response (not persisted) — ISO time each
   // pending invite was sent, for the "still waiting" nudge.
   pendingInviteAt?: Partial<Record<PersonKey, string>>;
@@ -119,6 +136,29 @@ export type State = {
   // never sent to browsers (see forClient).
   blocked?: Partial<Record<PersonKey, boolean>>;
   reports?: { by: PersonKey; about: PersonKey; kind: string; note?: string; at: string }[];
+  // "Never Have I Ever" tab: one shared phrase per round. votes holds each
+  // person's answer ("never" = never have I, "have" = I have) and is hidden
+  // from the client until both have answered (see forClient). recent keeps
+  // the last phrases so a new round never repeats one.
+  // history = finished rounds (both answered), comments = per-round notes
+  // keyed by round number; both only shown once a round is revealed.
+  nhie?: {
+    round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">>; recent?: string[];
+    history?: { round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">> }[];
+    comments?: Record<string, { who: PersonKey; text: string; at: string }[]>;
+  };
+  // Rooms made by the "Make a friend" matcher. friendDevices holds anonymous
+  // device ids per slot (server-only, stripped by forClient) so a report can
+  // stop the same two devices being paired again. closed = the room has
+  // ended (someone left/reported it, or the admin closed it); reported = at
+  // least one person reported the other.
+  origin?: "friend";
+  friendDevices?: Partial<Record<PersonKey, string>>;
+  closed?: boolean;
+  closedBy?: PersonKey | "admin";
+  reported?: boolean;
+  // Text that tripped the vulgar/NSFW screen (server-only; admin sees the count).
+  flags?: { at: string; who: string; kind: string; word: string; excerpt: string }[];
   puzzleCurrentId?: string;
   // Server-computed on every response (not persisted) — how many pieces of
   // the current picture are unlocked, including the streak speed-up.

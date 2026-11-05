@@ -94,6 +94,15 @@ async function writeRaw(roomId: string, text: string): Promise<void> {
 
 // The admin service is a separate process with its own copy of the cache, so
 // it drops a room's cached copy before reading it to see the live state.
+// True when a room has actually been created (its state exists in storage).
+// Reads storage directly, because loadState() hands back an empty cached
+// state for any made-up room code.
+export async function roomExists(roomId: string): Promise<boolean> {
+  roomId = canonRoom(roomId);
+  if (!roomId) return true;
+  try { return (await readRaw(roomId)) !== null; } catch { return true; }
+}
+
 export function dropCachedState(roomId: string): void {
   caches.delete(canonRoom(roomId));
 }

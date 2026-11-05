@@ -2,6 +2,7 @@
 // as the single-file version always was), "/r/<roomId>" is any other room,
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
+import { roomExists } from "./storage";
 import { screenText } from "./moderation";
 import { startStatsSchedule } from "./stats";
 import { isPerson, type PersonKey } from "./types";
@@ -150,6 +151,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     const shortInvite = url.pathname.match(/^\/j\/([a-zA-Z0-9]{1,40})\/([a-zA-Z0-9-]{6,64})\/?$/);
     if (req.method === "GET" && shortInvite) {
       const [, sRoom, sToken] = shortInvite;
+      if (!(await roomExists(sRoom))) return new Response(null, { status: 302, headers: { location: "/new?notfound=1" } });
       const sState = await loadState(sRoom);
       let sWho = "";
       for (const k of ["mark", "nikita"] as const) {
@@ -524,6 +526,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     // see that service for the /admin equivalent.
 
     if (req.method === "GET" && restPath === "/") {
+      // A made-up or mistyped room code must not open a blank sign-up screen
+      // (registering there would quietly create a stray room).
+      if (roomId && !(await roomExists(roomId))) return new Response(null, { status: 302, headers: { location: "/new?notfound=1" } });
       // Date-tag icon URLs so iOS treats each day's icon as a fresh resource.
       const html = buildPageHtml(roomId, todayKeyPT());
       return new Response(html, {

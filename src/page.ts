@@ -4033,7 +4033,8 @@ const RAW = String.raw`<!doctype html>
       try { navigator.clipboard.writeText(code); roomLine.textContent = t("Copied!"); setTimeout(function () { roomLine.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
     });
     var titleLine = state && state.roomName ? h("div", { class: "room-code", style: "font-size: 1rem; font-weight: 700; color: var(--ink); margin-bottom: 2px;", text: state.roomName }) : null;
-    return h("div", {}, [wordmark, titleLine, roomLine, clocks]);
+    var back = h("a", { href: "/home", style: "display:inline-block; align-self:flex-start; margin:0 0 6px -4px; padding:8px 10px; font-size:0.95rem; font-weight:700; color:var(--accent); text-decoration:none;", text: "\u2039 " + t("Rooms") });
+    return h("div", {}, [back, wordmark, titleLine, roomLine, clocks]);
   }
 
   // Mic-recording state for the "record your voice" card below — module-
@@ -5495,41 +5496,50 @@ export function buildNewRoomPage(): string {
 <title>Start Nearune</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; --field:#FBF6F0; --danger:#B3361F; --shadow:0 6px 18px rgba(80,50,30,0.10); }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; --field:#161A26; --danger:#FF8A75; --shadow:0 6px 18px rgba(0,0,0,0.35); }
   }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; display:flex; justify-content:center; padding:60px 16px; }
-  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 26px; max-width:420px; width:100%; text-align:center; }
-  h1 { font-family:'Manrope',sans-serif; font-weight:800; font-size:1.6rem; margin:0 0 10px; }
-  p { color:var(--ink-soft); font-size:0.95rem; line-height:1.5; margin:0 0 24px; }
-  button { background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:12px 26px; font:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; }
-  button:disabled { opacity:0.6; }
-  .note { margin-top:16px; font-size:0.8rem; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; min-height:100vh; padding:calc(24px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); display:flex; justify-content:center; }
+  .wrap { max-width:460px; width:100%; }
+  .back { display:inline-block; margin:0 0 4px -6px; padding:8px 10px; font-size:0.95rem; font-weight:700; color:var(--accent); text-decoration:none; }
+  .brand { display:flex; align-items:center; justify-content:center; gap:12px; margin:0 0 24px; }
+  .brand img { width:46px; height:46px; border-radius:11px; display:block; box-shadow:var(--shadow); }
+  .brand h1 { font-weight:800; font-size:1.9rem; letter-spacing:-0.01em; margin:0; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:24px; box-shadow:var(--shadow); padding:24px 22px; margin:0 0 16px; }
+  .card h2 { font-weight:800; font-size:1.25rem; margin:0 0 16px; }
+  input[type=text] { width:100%; background:var(--field); border:1px solid var(--line); border-radius:14px; padding:14px 16px; color:var(--ink); font:inherit; font-size:1rem; outline:none; margin:0 0 12px; }
+  input[type=text]:focus { border-color:var(--accent); }
+  button.main { display:block; width:100%; background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:14px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; }
+  button.main:disabled { opacity:0.6; cursor:default; }
+  button.ghost { display:block; width:100%; background:transparent; color:var(--accent); border:1px solid var(--line); border-radius:999px; padding:13px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; margin:0 0 12px; }
+  .or { text-align:center; color:var(--ink-soft); font-size:0.8rem; margin:0 0 12px; }
+  .err { color:var(--danger); font-size:0.85rem; text-align:center; margin:12px 0 0; }
+  .err:empty { display:none; }
+  .foot { text-align:center; margin-top:22px; font-size:0.72rem; opacity:0.7; }
+  .foot a { color:var(--ink-soft); margin:0 6px; }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1 id="existing">Got an invite from your partner?</h1>
-  <p>Copy the invite link they sent you, then tap the button. This joins their room instead of starting a new one.</p>
-  <button id="pasteInvite" type="button">Paste my invite</button>
-  <p class="note" style="margin-top:8px">Nearune only reads the link you just copied. Or paste it below.</p>
-  <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the invite link you were sent" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--ink-soft);background:var(--bg);color:var(--ink);font:inherit;margin-top:4px">
-  <button id="openRoom" type="button" style="margin-top:8px">Join with this link</button>
-  <p class="note" id="roomMsg"></p>
-  <p class="note">Already have a room? Paste your room link or code in the box above.</p>
-  <hr style="border:0;border-top:1px solid var(--line);margin:26px 0 22px">
-  <h1>Start your own Nearune</h1>
-  <p>Nearune is a small daily ritual for two people. Every day you both answer one shared question, and once you've each answered, a small piece of a hidden photo unlocks — answer enough days in a row and the whole picture comes together as a puzzle. It's built for couples, friends, or family who live apart and want one small thing to check in on together each day. If you each speak a different language, every screen shows both automatically, side by side.</p>
-  <p>Tapping the button below creates a brand-new, completely private room just for the two of you — separate from anyone else using the app. You'll get a link to share with your Nearune partner; when you each open it, you'll register your own name, language, and location, then you're set.</p>
-  <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Name your room (optional), like Our Sky" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#ccc);font:inherit;margin:0 0 6px">
-  <p class="note" id="codePreview" style="margin:0 0 14px">Any language works. Leave it blank and we'll pick a name for you.</p>
-  <button id="go">Create my room</button>
-  <p class="note" id="msg"></p>
-  <p class="note"><a href="/recover" style="color:var(--ink-soft)">Find your room (email me my link)</a></p>
-  <p class="note"><a href="/home" style="color:var(--ink-soft)">No one to invite yet? Meet a new friend, or see your rooms</a></p>
-  <p class="note"><a href="/privacy" style="color:var(--ink-soft)">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:var(--ink-soft)">Terms</a> &nbsp;·&nbsp; <a href="/support" style="color:var(--ink-soft)">Support</a></p>
+<div class="wrap">
+  <a class="back" href="/home">&lsaquo; Rooms</a>
+  <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
+  <div class="card">
+    <h2>Start a room</h2>
+    <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Room name" aria-label="Room name">
+    <button class="main" id="go" type="button">Create room</button>
+    <p class="err" id="msg"></p>
+  </div>
+  <div class="card">
+    <h2>Join a room</h2>
+    <button class="ghost" id="pasteInvite" type="button">Paste invite</button>
+    <p class="or">or</p>
+    <input id="roomLink" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Invite link or room code" aria-label="Invite link or room code">
+    <button class="main" id="openRoom" type="button">Join</button>
+    <p class="err" id="roomMsg"></p>
+  </div>
+  <p class="foot"><a href="/recover">Find my room</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a></p>
 </div>
 <script>
 function routeFromText(v) {
@@ -5548,33 +5558,21 @@ function routeFromText(v) {
   location.href = "/r/" + m[1].toLowerCase() + "/";
   return true;
 }
+try { if (new URLSearchParams(location.search).get("notfound") === "1") document.getElementById("roomMsg").textContent = "We couldn't find that room. Check the link or code and try again."; } catch (e) {}
 document.getElementById("openRoom").addEventListener("click", function () {
   if (!routeFromText(document.getElementById("roomLink").value)) {
-    document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link. Paste the whole link you were sent.";
+    document.getElementById("roomMsg").textContent = "That doesn't look like a Nearune link or code.";
   }
 });
 document.getElementById("pasteInvite").addEventListener("click", function () {
   var msg = document.getElementById("roomMsg");
-  function fail() { msg.textContent = "Couldn't read what you copied. Touch and hold the box below, tap Paste, then tap Open my room."; }
+  function fail() { msg.textContent = "Couldn't read your clipboard. Paste the link into the box instead."; }
   try {
     if (!navigator.clipboard || !navigator.clipboard.readText) { fail(); return; }
     navigator.clipboard.readText().then(function (txt) {
-      if (!routeFromText(txt)) msg.textContent = "No Nearune invite found in what you copied. Copy the invite link from your email first, then tap Paste my invite.";
+      if (!routeFromText(txt)) msg.textContent = "No invite found. Copy the invite link first.";
     }, fail);
   } catch (e) { fail(); }
-});
-function roomSlugPreview(name) {
-  var s = (name || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "").slice(0, 16);
-  return s.length >= 3 ? s : "";
-}
-document.getElementById("roomName").addEventListener("input", function () {
-  var v = this.value.trim();
-  var el = document.getElementById("codePreview");
-  if (!v) { el.textContent = "Any language works. Leave it blank and we'll pick a name for you."; return; }
-  var slug = roomSlugPreview(v);
-  el.textContent = slug
-    ? "Your room will be called \u201c" + v + "\u201d. Room code: " + slug + " (if it's taken, we add two numbers)."
-    : "Your room will be called \u201c" + v + "\u201d. Its room code will be two friendly words, since codes use English letters and numbers only.";
 });
 document.getElementById("go").addEventListener("click", function () {
   var btn = document.getElementById("go");
@@ -5592,12 +5590,12 @@ document.getElementById("go").addEventListener("click", function () {
           ? "Too many rooms created from here recently — wait a bit and try again."
           : "Something went wrong — try again.");
       btn.disabled = false;
-      btn.textContent = "Create my room";
+      btn.textContent = "Create room";
       document.getElementById("msg").textContent = msg;
     })
     .catch(function () {
       btn.disabled = false;
-      btn.textContent = "Create my room";
+      btn.textContent = "Create room";
       document.getElementById("msg").textContent = "Something went wrong — try again.";
     });
 });

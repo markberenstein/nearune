@@ -1,3 +1,5 @@
+import { expandUsState, US_ABBR, regionAbbr } from "./usstates";
+import { recordClaude } from "./usage";
 // Nearune — resolves a free-text "where you're based" string (city,
 // country, whatever someone types) to a real IANA timezone and a likely
 // primary language, via Open-Meteo's free geocoding API (no key required).
@@ -66,18 +68,76 @@ const INDIA_STATE_LANGUAGE: Record<string, string> = {
   "punjab": "Punjabi",
 };
 
-async function geocodeRaw(q: string): Promise<any | null> {
+const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+async function fetchPlaces(name: string, count: number): Promise<any[]> {
   try {
-    const url =
-      "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" +
-      encodeURIComponent(q);
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    const res = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=" + count + "&language=en&format=json&name=" + encodeURIComponent(name));
+    if (!res.ok) return [];
     const data: any = await res.json();
-    return (data && Array.isArray(data.results) && data.results[0]) || null;
-  } catch {
-    return null;
+    return (data && Array.isArray(data.results)) ? data.results : [];
+  } catch { return []; }
+}
+
+// Does a result match the qualifiers typed after the city name ("TX", "Texas", "France", "US")?
+function matchesQualifiers(r: any, rest: string[]): boolean {
+  return rest.every((t0) => {
+    const t = norm(t0);
+    if (!t) return true;
+    const cc = String(r.country_code || "").toLowerCase();
+    if (r.admin1 && norm(r.admin1) === t) return true;
+    if (r.admin2 && norm(r.admin2) === t) return true;
+    if (r.country && norm(r.country) === t) return true;
+    if (cc === t || (t === "usa" && cc === "us") || (t === "uk" && cc === "gb")) return true;
+    if (cc === "us" && US_ABBR[t.toUpperCase()] && US_ABBR[t.toUpperCase()] === norm(r.admin1 || "")) return true;
+    if (regionAbbr(cc, r.admin1 || "") === t.toUpperCase()) return true;
+    return false;
+  });
+}
+
+// Best match for free text. "City, Region, Country" picks the matching place; plain text takes the top result.
+export async function geocodePlace(q0: string): Promise<any | null> {
+  const q = expandUsState(q0);
+  if (q.includes(",")) {
+    const parts = q.split(",").map((s) => s.trim()).filter(Boolean);
+    const cityName = parts[0], rest = parts.slice(1);
+    if (cityName && rest.length) {
+      const hits = (await fetchPlaces(cityName, 10)).filter((r) => norm(r.name) === norm(cityName) && matchesQualifiers(r, rest));
+      if (hits[0]) return hits[0];
+    }
   }
+  return (await fetchPlaces(q, 1))[0] || null;
+}
+
+async function geocodeRaw(q: string): Promise<any | null> {
+  return geocodePlace(q);
+}
+
+// Cities and towns matching the text, for a "which one?" list. Up to 6, labelled "City, Region, Country".
+export async function searchPlaces(q0: string): Promise<{ label: string; lat: number; lon: number }[]> {
+  const q = expandUsState((q0 || "").trim());
+  const parts = q.split(",").map((s) => s.trim()).filter(Boolean);
+  const cityName = parts[0] || "";
+  if (cityName.length < 2) return [];
+  const rest = parts.slice(1);
+  const out: { label: string; lat: number; lon: number }[] = [];
+  const seen = new Set<string>();
+  for (const r of await fetchPlaces(cityName, 10)) {
+    const fc = String(r.feature_code || "");
+    if (fc.startsWith("PCL") || fc.startsWith("ADM")) continue;
+    if (norm(r.name) !== norm(cityName)) continue;
+    if (!matchesQualifiers(r, rest)) continue;
+    const cc2 = String(r.country_code || "").toUpperCase();
+    const ab = regionAbbr(cc2, r.admin1 || "");
+    let label = [r.name, ab, cc2 || r.country || ""].filter(Boolean).join(", ");
+    // Regions with no standard abbreviation: only name the region when the short label would repeat.
+    if (!ab && seen.has(label) && r.admin1) label = [r.name, r.admin1, cc2 || r.country || ""].filter(Boolean).join(", ");
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, lat: r.latitude, lon: r.longitude });
+    if (out.length >= 6) break;
+  }
+  return out;
 }
 
 // When the geocoder finds nothing (usually a misspelling like "Mumbay" or
@@ -106,6 +166,7 @@ async function aiFixLocation(q: string): Promise<string | null> {
     });
     if (res.ok) {
       const data: any = await res.json();
+      recordClaude("location", data);
       const text = ((data && data.content && data.content[0] && data.content[0].text) || "").trim().split("\n")[0];
       if (text && !/^none\b/i.test(text) && text.length <= 60) out = text;
     }
@@ -128,6 +189,36 @@ async function geocodeFull(location: string): Promise<{ first: any | null; corre
 
 async function geocode(location: string): Promise<any | null> {
   return (await geocodeFull(location)).first;
+}
+
+// Weather's lookup: the normal geocode (with the Claude spelling fix), then,
+// for free text with no comma such as "Changi Singapore", progressively
+// shorter prefixes ("Changi") so a place plus a country word still resolves.
+export async function geocodeAny(location: string): Promise<any | null> {
+  const q = (location || "").trim();
+  if (!q) return null;
+  const first = await geocode(q);
+  if (first) return first;
+  const words = q.split(/[\s,]+/).filter(Boolean);
+  for (let n = words.length - 1; n >= 1; n--) {
+    const r = await geocodeRaw(words.slice(0, n).join(" "));
+    if (r) return r;
+  }
+  return null;
+}
+
+// "City, Region, Country" label for free text typed without a comma (the form
+// the city list produces), e.g. "Changi singapore" -> "Changi Village, SG".
+// Text that already has a comma (picked from the list) is left alone, and so
+// is anything that cannot be resolved.
+export async function canonicalPlaceLabel(location: string): Promise<string> {
+  const q = (location || "").trim();
+  if (!q || q.includes(",")) return q;
+  const r = await geocodeAny(q);
+  if (!r || !r.name) return q;
+  const cc = String(r.country_code || "").toUpperCase();
+  const ab = regionAbbr(cc, r.admin1 || "");
+  return [r.name, ab, cc || r.country || ""].filter(Boolean).join(", ").slice(0, 80);
 }
 
 export async function resolveTimezoneFromLocation(location: string): Promise<string | null> {
@@ -160,4 +251,55 @@ export async function resolveCountryCode(location: string): Promise<string | nul
   const first = await geocode(location);
   const code = first && typeof first.country_code === "string" ? first.country_code.toLowerCase() : "";
   return code || null;
+}
+
+// Coordinates + city label for a free-text location (admin stats map only).
+export async function resolveCoords(location: string): Promise<{ lat: number; lon: number; city: string; country: string } | null> {
+  const first = await geocode(location);
+  if (!first || typeof first.latitude !== "number" || typeof first.longitude !== "number") return null;
+  return { lat: first.latitude, lon: first.longitude, city: String(first.name || ""), country: String(first.country_code || "").toUpperCase() };
+}
+
+// Countries Nearune is not offered in: those with no U.S. diplomatic
+// relations. Editable without a deploy via the BLOCKED_COUNTRIES env var
+// (comma-separated ISO codes). Default: Bhutan, Iran, North Korea.
+// Fails open: an empty location or an unresolvable one is never blocked.
+// True when the text names a city or town. Rejects a bare country, state or
+// county (feature codes PCL*, ADM*) so every person has a city for weather and
+// the clock. Fails open when the lookup finds nothing.
+const CITY_STATES = new Set(["singapore", "monaco", "hong kong", "vatican city", "macau", "macao", "gibraltar", "luxembourg"]);
+export async function isCityLevelLocation(location: string): Promise<boolean> {
+  const q = (location || "").trim();
+  if (!q) return false;
+  if (expandUsState(q) !== q) return false;
+  if (CITY_STATES.has(q.toLowerCase())) return true;
+  let { first } = await geocodeFull(q);
+  if (!first) { await new Promise((r) => setTimeout(r, 400)); first = (await geocodeFull(q)).first; }
+  // Strict: a place the lookup cannot identify is not accepted.
+  if (!first) { console.log("[city-check] " + JSON.stringify({ q, found: false, ok: false })); return false; }
+  const fc = typeof first.feature_code === "string" ? first.feature_code : "";
+  const nm = typeof first.name === "string" ? first.name.trim().toLowerCase() : "";
+  const co = typeof first.country === "string" ? first.country.trim().toLowerCase() : "";
+  const ad = typeof first.admin1 === "string" ? first.admin1.trim().toLowerCase() : "";
+  // A country (code PCL*, or its name is the country's own name), a state or a county is not a city.
+  const isCountry = fc.startsWith("PCL") || (!!nm && nm === co);
+  const isRegion = fc.startsWith("ADM");
+  const ok = !(isCountry || isRegion);
+  console.log("[city-check] " + JSON.stringify({ q, fc, name: nm, country: co, admin1: ad, ok }));
+  return ok;
+}
+
+const blockedCache = new Map<string, boolean>();
+export async function isBlockedLocation(location: string): Promise<boolean> {
+  const blocked = (Bun.env.BLOCKED_COUNTRIES ?? "BT,IR,KP").split(",").map((c) => c.trim().toLowerCase()).filter(Boolean);
+  const q = (location || "").trim();
+  if (!blocked.length || !q) return false;
+  const ck = blocked.join(",") + "|" + q.toLowerCase();
+  const hit = blockedCache.get(ck);
+  if (hit !== undefined) return hit;
+  const cc = await resolveCountryCode(q).catch(() => null);
+  const res = !!cc && blocked.includes(cc.toLowerCase());
+  // Only cache successful lookups so a failed geocode is retried (fails open meanwhile).
+  if (cc) { if (blockedCache.size > 1000) blockedCache.clear(); blockedCache.set(ck, res); }
+  return res;
 }

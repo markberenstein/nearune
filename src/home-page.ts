@@ -10,42 +10,50 @@ export function buildHomePage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>My rooms — Nearune</title>
+<title>Nearune</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; --friend:#F3E6F3; --danger:#B3361F; }
+  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; --friend:#F3E6F3; --danger:#B3361F; --shadow:0 6px 18px rgba(80,50,30,0.10); }
   @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; --friend:#2A2338; --danger:#FF8A75; }
+    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; --friend:#2A2338; --danger:#FF8A75; --shadow:0 6px 18px rgba(0,0,0,0.35); }
   }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; padding:calc(40px + env(safe-area-inset-top)) 16px 40px; display:flex; justify-content:center; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; min-height:100vh; padding:calc(36px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); display:flex; justify-content:center; }
   .wrap { max-width:460px; width:100%; }
-  h1 { font-weight:800; font-size:1.7rem; margin:0 0 6px; text-align:center; }
-  .sub { color:var(--ink-soft); font-size:0.92rem; line-height:1.5; text-align:center; margin:0 0 22px; }
-  .slot { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px 18px; margin:0 0 12px; }
-  .slot.friend { background:var(--friend); }
-  .slot.empty { border-style:dashed; text-align:center; }
-  .slot h2 { font-size:1.05rem; font-weight:800; margin:0 0 4px; word-break:break-word; }
-  .slot p { color:var(--ink-soft); font-size:0.88rem; line-height:1.45; margin:0 0 12px; }
-  .tag { display:inline-block; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-soft); margin:0 0 6px; }
-  .btn { display:inline-block; background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:10px 22px; font:inherit; font-weight:700; font-size:0.92rem; cursor:pointer; text-decoration:none; }
-  .btn:disabled { opacity:0.5; cursor:default; }
-  .btn.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
-  .link { background:none; border:none; padding:6px 4px; font:inherit; font-size:0.82rem; color:var(--ink-soft); text-decoration:underline; cursor:pointer; }
-  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .check { display:flex; gap:10px; align-items:flex-start; font-size:0.88rem; line-height:1.4; margin:0 0 12px; color:var(--ink); }
-  .check input { margin-top:3px; width:18px; height:18px; flex:none; }
-  .msg { font-size:0.85rem; color:var(--danger); margin:8px 0 0; min-height:1em; }
-  .foot { text-align:center; margin-top:22px; font-size:0.8rem; }
+  .brand { display:flex; align-items:center; justify-content:center; gap:12px; margin:0 0 26px; }
+  .brand img { width:46px; height:46px; border-radius:11px; display:block; box-shadow:var(--shadow); }
+  .brand h1 { font-weight:800; font-size:1.9rem; letter-spacing:-0.01em; margin:0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .box { position:relative; aspect-ratio:1; border-radius:24px; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:14px; text-align:center; color:var(--ink); text-decoration:none; font:inherit; cursor:pointer; overflow:hidden; }
+  .box.empty { background:transparent; border:2px dashed var(--line); box-shadow:none; }
+  .box.empty .plus { font-size:2.6rem; font-weight:300; color:var(--ink-soft); line-height:1; }
+  .box.friend { background:var(--friend); }
+  .box .big { font-weight:800; font-size:1.15rem; line-height:1.2; word-break:break-word; max-width:100%; }
+  .box .small { font-size:0.78rem; color:var(--ink-soft); word-break:break-word; max-width:100%; }
+  .box .glyph { font-size:2.1rem; line-height:1; }
+  .box .dot { width:9px; height:9px; border-radius:50%; background:var(--ink-soft); opacity:0.5; }
+  .box .dot.live { background:#3E9B5F; opacity:1; }
+  .box.gone { opacity:0.55; }
+  .x { position:absolute; top:8px; right:10px; background:none; border:none; font:inherit; font-size:1.25rem; line-height:1; color:var(--ink-soft); padding:6px; cursor:pointer; }
+  .pulse { animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.45; } }
+  .msg { text-align:center; font-size:0.85rem; color:var(--danger); margin:14px 0 0; min-height:1em; }
+  .foot { text-align:center; margin-top:26px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
+  .sheet-bg { position:fixed; inset:0; background:rgba(20,15,10,0.45); display:flex; align-items:flex-end; justify-content:center; z-index:10; }
+  .sheet { background:var(--surface); width:100%; max-width:460px; border-radius:24px 24px 0 0; padding:26px 22px calc(26px + env(safe-area-inset-bottom)); text-align:center; }
+  .sheet h2 { margin:0 0 18px; font-size:1.25rem; font-weight:800; }
+  .btn { display:block; width:100%; background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:14px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; margin:0 0 10px; }
+  .btn.ghost { background:transparent; color:var(--ink-soft); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Your Nearune rooms</h1>
-  <p class="sub">Up to three rooms of your own, plus one spot to meet someone new.</p>
-  <div id="slots"></div>
-  <p class="foot"><a href="/new">Got an invite? Paste it</a> · <a href="/recover">Find your room</a></p>
+  <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
+  <div class="grid" id="slots"></div>
+  <p class="msg" id="msg"></p>
   <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a></p>
 </div>
 <script>
@@ -115,40 +123,34 @@ export function buildHomePage(): string {
     return null;
   }
 
-  function roomCard(entry, isFriend) {
+  function roomBox(entry, isFriend) {
     var id = entry.id, b = briefs[id];
-    var title = id === "" ? "Original room" : id, line = "Loading…", closed = false, gone = false;
-    if (b && b.gone) { line = "This room is no longer available."; gone = true; }
+    var name = "", sub = id === "" ? "Original room" : id, dead = false, gone = false, live = false;
+    if (b && b.gone) { name = "Unavailable"; gone = true; }
     else if (b && b.s) {
       var s = b.s, me = viewerOf(id), other = me === "mark" ? "nikita" : "mark";
-      if (s.roomName) title = s.roomName;
-      if (s.closed) { closed = true; line = s.closedBy === "admin" ? "This room was closed by Nearune." : "This room has ended."; }
-      else if (me && s.people && s.people[other]) line = "Nearune partner: " + s.people[other].name + (s.people[other].location ? " · " + s.people[other].location : "");
-      else if (s.pendingInvite && s.pendingInvite[other]) line = "Waiting for your partner to join.";
-      else line = "Ready for your partner. Open it to send an invite.";
-    }
-    var card = el("div", { class: "slot" + (isFriend ? " friend" : "") });
-    if (isFriend) card.appendChild(el("div", { class: "tag", text: "Make a friend" }));
-    card.appendChild(el("h2", { text: title }));
-    if (title !== (id === "" ? "Original room" : id) && id) card.appendChild(el("p", { class: "code", text: "Room code: " + id }));
-    card.appendChild(el("p", { text: line }));
-    var row = el("div", { class: "row" });
-    if (!closed && !gone) row.appendChild(el("a", { class: "btn", href: roomHref(id), text: "Open" }));
-    var rm = el("button", { class: "link", type: "button", text: closed || gone ? "Remove" : "Remove from this device" });
-    rm.addEventListener("click", function () {
-      if (closed || gone || window.confirm("Remove this room from this device? The room itself isn't deleted, and you can come back with its link.")) removeRoom(id);
+      if (s.roomName) sub = s.roomName;
+      if (s.closed) { dead = true; name = "Ended"; }
+      else if (me && s.people && s.people[other]) { name = s.people[other].name; live = true; }
+      else name = "Waiting";
+    } else name = "…";
+    var box = el(dead || gone ? "div" : "a", { class: "box" + (isFriend ? " friend" : "") + (dead || gone ? " gone" : ""), href: roomHref(id) });
+    box.appendChild(el("span", { class: "dot" + (live ? " live" : "") }));
+    box.appendChild(el("div", { class: "big", text: name }));
+    box.appendChild(el("div", { class: "small", text: sub }));
+    var x = el("button", { class: "x", type: "button", text: "×", "aria-label": "Remove" });
+    x.addEventListener("click", function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      if (dead || gone || window.confirm("Remove this room from this device?")) removeRoom(id);
     });
-    row.appendChild(rm);
-    card.appendChild(row);
-    return card;
+    box.appendChild(x);
+    return box;
   }
 
-  function emptySlot() {
-    var card = el("div", { class: "slot empty" });
-    card.appendChild(el("h2", { text: "Open spot" }));
-    card.appendChild(el("p", { text: "Start a room with someone you know." }));
-    card.appendChild(el("a", { class: "btn", href: "/new", text: "Start a room" }));
-    return card;
+  function emptyBox() {
+    var box = el("a", { class: "box empty", href: "/new", "aria-label": "Start a room" });
+    box.appendChild(el("div", { class: "plus", text: "+" }));
+    return box;
   }
 
   // ---- Make a friend ----
@@ -156,14 +158,14 @@ export function buildHomePage(): string {
   var pollTimer = null;
   function setFriend(v) { if (v) jset(LS_FRIEND, v); else jdel(LS_FRIEND); }
 
-  function startFriend(btn, box) {
-    btn.disabled = true; friendMsg = "";
+  function startFriend() {
+    friendMsg = "";
     fetch("/api/friend/join", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device: deviceId(), adult: true }) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (x) {
         if (!x.ok) {
-          friendMsg = x.d && x.d.error === "rate_limited" ? "Too many tries. Please wait a bit and try again."
-            : x.d && x.d.error === "registrations_paused" ? "Nearune is catching up on new rooms. Please check back tomorrow."
+          friendMsg = x.d && x.d.error === "rate_limited" ? "Too many tries. Please wait a bit."
+            : x.d && x.d.error === "registrations_paused" ? "Please check back tomorrow."
             : "Something went wrong. Please try again.";
           render(); return;
         }
@@ -172,45 +174,50 @@ export function buildHomePage(): string {
         else setFriend({ status: "waiting", ticket: d.ticket });
         render();
       })
-      .catch(function () { friendMsg = "Couldn't reach Nearune. Check your connection and try again."; render(); });
+      .catch(function () { friendMsg = "Couldn't reach Nearune."; render(); });
   }
 
-  function friendSlot() {
-    var card = el("div", { class: "slot friend" });
+  function ageSheet() {
+    var bg = el("div", { class: "sheet-bg" });
+    var sh = el("div", { class: "sheet" });
+    sh.appendChild(el("h2", { text: "Are you 18 or older?" }));
+    var yes = el("button", { class: "btn", type: "button", text: "Yes, find me a friend" });
+    var no = el("button", { class: "btn ghost", type: "button", text: "No" });
+    yes.addEventListener("click", function () { document.body.removeChild(bg); startFriend(); });
+    no.addEventListener("click", function () { document.body.removeChild(bg); });
+    bg.addEventListener("click", function (ev) { if (ev.target === bg) document.body.removeChild(bg); });
+    sh.appendChild(yes); sh.appendChild(no); bg.appendChild(sh);
+    document.body.appendChild(bg);
+  }
+
+  function friendBox() {
     var friendRoom = null;
     rooms.forEach(function (r) { if (r.friend) friendRoom = r; });
-    if (friendRoom) return roomCard(friendRoom, true);
+    if (friendRoom) return roomBox(friendRoom, true);
     var f = jget(LS_FRIEND, null);
-    card.appendChild(el("div", { class: "tag", text: "Make a friend" }));
     if (f && f.status === "matched") {
-      card.appendChild(el("h2", { text: "You've got a match!" }));
-      card.appendChild(el("p", { text: "Say hello to someone new. You each choose your own name, city and language, and share one question a day. Photo sharing is off in these rooms, and you can report or leave any time." }));
-      card.appendChild(el("a", { class: "btn", href: "/j/" + f.roomId + "/" + f.token, text: "Meet your match" }));
-      return card;
+      var m = el("a", { class: "box friend", href: "/j/" + f.roomId + "/" + f.token });
+      m.appendChild(el("div", { class: "glyph", text: "🎉" }));
+      m.appendChild(el("div", { class: "big", text: "Meet your match" }));
+      return m;
     }
     if (f && f.status === "waiting") {
-      card.appendChild(el("h2", { text: "Looking for your friend…" }));
-      card.appendChild(el("p", { text: "We'll pair you with the next person who taps Make a friend. Keep this page open, or come back later: we'll hold your spot for up to a day." }));
-      var cancel = el("button", { class: "btn ghost", type: "button", text: "Cancel" });
-      cancel.addEventListener("click", function () {
+      var w = el("div", { class: "box friend" });
+      w.appendChild(el("div", { class: "glyph pulse", text: "✨" }));
+      w.appendChild(el("div", { class: "big pulse", text: "Finding a friend…" }));
+      var cx = el("button", { class: "x", type: "button", text: "×", "aria-label": "Cancel" });
+      cx.addEventListener("click", function () {
         fetch("/api/friend/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ticket: f.ticket }) }).catch(function () {});
         setFriend(null); render();
       });
-      card.appendChild(cancel);
-      return card;
+      w.appendChild(cx);
+      return w;
     }
-    card.appendChild(el("h2", { text: "Meet someone new" }));
-    card.appendChild(el("p", { text: "We'll pair you with another Nearune user who also wants a new friend. You each pick your own name and city, and answer one question a day. Photo sharing is off in these rooms." }));
-    var cb = el("input", { type: "checkbox", id: "adult" });
-    var label = el("label", { class: "check" }, [cb, el("span", { text: "I'm 18 or older." })]);
-    card.appendChild(label);
-    var go = el("button", { class: "btn", type: "button", text: "Find me a friend" });
-    go.disabled = true;
-    cb.addEventListener("change", function () { go.disabled = !cb.checked; });
-    go.addEventListener("click", function () { startFriend(go, card); });
-    card.appendChild(go);
-    card.appendChild(el("p", { class: "msg", text: friendMsg }));
-    return card;
+    var box = el("button", { class: "box friend", type: "button" });
+    box.appendChild(el("div", { class: "glyph", text: "🤝" }));
+    box.appendChild(el("div", { class: "big", text: "Make a friend" }));
+    box.addEventListener("click", ageSheet);
+    return box;
   }
 
   function pollFriend() {
@@ -220,7 +227,7 @@ export function buildHomePage(): string {
     function check() {
       fetch("/api/friend/status?ticket=" + encodeURIComponent(f.ticket)).then(function (r) { return r.json(); }).then(function (d) {
         if (d.status === "matched") { setFriend({ status: "matched", roomId: d.roomId, token: d.token }); render(); }
-        else if (d.status === "none") { setFriend(null); friendMsg = "Your wait timed out. Tap Find me a friend to try again."; render(); }
+        else if (d.status === "none") { setFriend(null); friendMsg = "Your wait timed out. Please try again."; render(); }
       }).catch(function () {});
     }
     check();
@@ -233,9 +240,10 @@ export function buildHomePage(): string {
     var regular = rooms.filter(function (r) { return !r.friend; });
     // A friend room that now exists makes the pending match record obsolete.
     if (rooms.some(function (r) { return r.friend; })) setFriend(null);
-    regular.forEach(function (r) { slots.appendChild(roomCard(r, false)); });
-    for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptySlot());
-    slots.appendChild(friendSlot());
+    regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
+    for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox());
+    slots.appendChild(friendBox());
+    document.getElementById("msg").textContent = friendMsg;
     pollFriend();
   }
 

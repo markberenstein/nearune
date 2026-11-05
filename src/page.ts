@@ -5233,8 +5233,9 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
     var myRoom = null;
     try { myRoom = localStorage.getItem(MY_ROOM_LS_KEY); } catch (e) {}
-    if (myRoom) { location.href = "/home"; return true; }
-    if (myRoom === "") return false; // this device's room IS the legacy one
+    // Everyone who already has a room (including the original room, stored
+    // as "") lands on the rooms page; "Open" there goes to /?legacy=1.
+    if (myRoom !== null) { location.href = "/home"; return true; }
     // Never decided yet. A device that already has a legacy viewer identity
     // saved (from before this check existed) belongs to the legacy room —
     // remember that and carry on so Mark/Nikita's existing devices aren't
@@ -5244,7 +5245,8 @@ const RAW = String.raw`<!doctype html>
     try { legacyViewer = localStorage.getItem(VIEWER_LS_KEY) || localStorage.getItem("sameSkyViewer"); } catch (e) {}
     if (legacyViewer === "mark" || legacyViewer === "nikita") {
       try { localStorage.setItem(MY_ROOM_LS_KEY, ""); } catch (e) {}
-      return false;
+      location.href = "/home";
+      return true;
     }
     // Manual escape hatch (linked from the "Create my room" screen) for a
     // legacy-room device that lost ALL of its localStorage at once (e.g.

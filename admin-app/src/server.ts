@@ -76,13 +76,16 @@ Bun.serve({
             lastActive,
             daysAnswered: answerKeys.length,
             pushCount,
+            remindable: (["mark", "nikita"] as PersonKey[])
+              .filter((k) => state.people?.[k] && state.people[k]!.emailVerified === false && !!state.pendingConfirm?.[k]?.email)
+              .map((k) => ({ who: k, name: state.people![k]!.name, reminders: state.pendingConfirm![k]!.reminders || 0, remindedAt: state.pendingConfirm![k]!.remindedAt || null })),
           });
         } catch (err) {
           console.error("[admin] failed to load room " + id, err);
         }
       }
       summaries.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || ""), {
+      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }
@@ -107,6 +110,36 @@ Bun.serve({
         await deleteRoom(targetRoomId);
       }
       return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || ""), 303);
+    }
+
+    if (req.method === "POST" && url.pathname === "/remind-room") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let rid = "", who = "";
+      try {
+        const body = await req.formData();
+        rid = String(body.get("roomId") || "");
+        who = String(body.get("who") || "");
+      } catch {}
+      let msg = "error";
+      const appUrl = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const cron = Bun.env.CRON_SECRET || "";
+      if (!appUrl || !cron) {
+        msg = "not_configured";
+      } else if (rid && (who === "mark" || who === "nikita")) {
+        try {
+          const r = await fetch(appUrl + "/api/admin/remind", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-cron-secret": cron },
+            body: JSON.stringify({ roomId: rid, who }),
+          });
+          const d: any = await r.json().catch(() => ({}));
+          const known = ["too_soon", "max_reminders", "nothing_pending", "no_email_kept"];
+          msg = d && d.ok ? "sent" : d && known.includes(d.error) ? d.error : "send_failed";
+        } catch (err) {
+          console.error("[admin] remind failed", err);
+        }
+      }
+      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + msg, 303);
     }
 
     return new Response("Not found", { status: 404 });

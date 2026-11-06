@@ -2782,6 +2782,37 @@ const RAW = String.raw`<!doctype html>
     var prof = { name: me.name, location: me.location, language: me.language || "" };
     try { localStorage.setItem("nearuneProfile", JSON.stringify(prof)); } catch (e) {}
   }
+  // A device that has an account in another room but never saved a profile
+  // (signed up before this existed, or went straight to an invite link) reads
+  // its name, city and language from that room, then refills the form.
+  function seedProfileFromRooms() {
+    if (savedProfile) return;
+    var ids = [];
+    try {
+      var rl = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
+      if (Array.isArray(rl)) rl.forEach(function (r) { if (r && typeof r.id === "string" && r.id !== ROOM) ids.push(r.id); });
+    } catch (e) {}
+    if (ROOM) ids.push("");
+    var seen = {};
+    ids = ids.filter(function (i) { if (seen[i]) return false; seen[i] = 1; return true; });
+    var tryNext = function () {
+      var id = ids.shift();
+      if (id === undefined) return;
+      var who = null;
+      try { who = localStorage.getItem("sameSkyViewer:" + id); } catch (e) {}
+      if (who !== "mark" && who !== "nikita") { tryNext(); return; }
+      fetch(id ? "/r/" + id + "/api/state" : "/api/state").then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
+        var pp = st && st.people && st.people[who];
+        if (pp && pp.name && pp.location) {
+          savedProfile = { name: pp.name, location: pp.location, language: pp.language || "" };
+          try { localStorage.setItem("nearuneProfile", JSON.stringify(savedProfile)); } catch (e) {}
+          registerDraft.prefilled = false; acceptDraft.prefilled = false;
+          try { renderApp(); } catch (e) {}
+        } else tryNext();
+      }).catch(tryNext);
+    };
+    tryNext();
+  }
   // Looks up the typed location and, unless the person has already picked
   // a language themselves, pre-selects the language most likely spoken
   // there — still just a starting point, freely changeable via the
@@ -3148,7 +3179,7 @@ const RAW = String.raw`<!doctype html>
     // Only the first person through sets this: it's shared by the room
     // (questionPoolFor() uses it for both people's daily question).
     if (soloRegistration) {
-      form.appendChild(h("div", { class: "reg-label", text: t("Your partner is your...") }));
+      form.appendChild(h("div", { class: "reg-label", text: t("Your Nearune partner is your...") }));
       var chips = h("div", { class: "reg-chips" });
       RELATIONSHIPS.forEach(function (pair) {
         var chip = h("button", { type: "button", class: "reg-chip" + (registerDraft.relationship === pair[0] ? " on" : ""), text: t(pair[1]) });
@@ -5442,6 +5473,7 @@ const RAW = String.raw`<!doctype html>
   }
 
   initialLoad();
+  seedProfileFromRooms();
   setInterval(tickClocks, 30000);
   setInterval(poll, POLL_MS);
   setInterval(loadWeather, WEATHER_POLL_MS);

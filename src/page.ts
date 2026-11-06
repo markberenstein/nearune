@@ -5746,7 +5746,9 @@ document.getElementById("go").addEventListener("click", function () {
       if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
       var msg = res.data && res.data.error === "registrations_paused"
         ? (res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.")
-        : (res.data && res.data.error === "inappropriate_name"
+        : (res.data && res.data.error === "name_taken"
+          ? "That room name is already taken. If it is your room, go to Open an existing room below and enter the code: " + (res.data.code || "") + ". Otherwise pick a different name."
+          : res.data && res.data.error === "inappropriate_name"
           ? "Please choose a different room name."
           : res.data && res.data.error === "rate_limited"
           ? "Too many rooms created from here recently — wait a bit and try again."

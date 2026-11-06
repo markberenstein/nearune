@@ -22,6 +22,7 @@ import {
   lookupEmailIndex,
   removeFromEmailIndex,
   listRoomIds,
+  roomSlug,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
@@ -233,6 +234,14 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
       const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
       const via = device + " " + kind + " " + lang;
+      // A name that is already a room is almost always someone trying to get
+      // back into their own room. Say so instead of quietly making an empty
+      // look-alike ("oursky" -> "oursky72") that has none of their history.
+      const takenStem = roomSlug(useName);
+      if (takenStem && (await roomExists(takenStem))) {
+        console.log("[room-name] taken: " + takenStem);
+        return json({ error: "name_taken", code: takenStem }, { status: 409 });
+      }
       const id = await createRoom(useName, via, useName || undefined);
       regToday.n++;
       console.log("[room-created] " + id + " via " + via);

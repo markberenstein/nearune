@@ -5579,7 +5579,7 @@ function routeFromText(v) {
   v = (v || "").trim();
   if (v.toLowerCase() === "original") {
     try { localStorage.setItem("nearuneMyRoom", ""); } catch (e) {}
-    location.href = "/";
+    location.href = "/?legacy=1";
     return true;
   }
   var inv = v.match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
@@ -5590,7 +5590,12 @@ function routeFromText(v) {
   if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return true; }
   var code = m[1].toLowerCase();
   fetch("/api/join-code?code=" + encodeURIComponent(code)).then(function (r) { return r.json(); }).then(function (d) {
-    location.href = (d && d.dest) || ("/r/" + code + "/");
+    var dest = (d && d.dest) || ("/r/" + code + "/");
+    if (dest.indexOf("/new?notfound") === 0) {
+      var em = document.getElementById("roomMsg");
+      if (em) { em.textContent = "We couldn't find a room with the code \u201c" + code + "\u201d. Check the spelling and try again."; em.scrollIntoView({ block: "center" }); return; }
+    }
+    location.href = dest;
   }).catch(function () { location.href = "/r/" + code + "/"; });
   return true;
 }

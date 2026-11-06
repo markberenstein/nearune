@@ -3223,12 +3223,8 @@ const RAW = String.raw`<!doctype html>
   // The text a person sends: app link, invite link, and the room code so the
   // partner can still get in by typing it if the link gets lost.
   function inviteMessage(url) {
-    var store = inviteStoreUrl();
-    var lines = [t("Join me on Nearune!")];
-    if (store) lines.push("1. " + t("Get the app:") + " " + store);
-    lines.push((store ? "2. " : "") + t("Open this link:") + " " + url);
-    if (ROOM) lines.push(t("Or open the app, tap Open an existing room, and enter the room code:") + " " + ROOM);
-    lines.push(t("No iPhone? Use it in your browser at nearune.ai"));
+    var lines = [t("Join me on Nearune!"), url];
+    if (ROOM) lines.push(t("Room code:") + " " + ROOM);
     return lines.join("\n");
   }
   function submitInviteLink() {
@@ -5564,7 +5560,10 @@ function routeFromText(v) {
   if (!m) return false;
   var q = v.match(new RegExp("[?&]invite=(mark|nikita)&token=([a-z0-9-]{6,64})", "i"));
   if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return true; }
-  location.href = "/r/" + m[1].toLowerCase() + "/";
+  var code = m[1].toLowerCase();
+  fetch("/api/join-code?code=" + encodeURIComponent(code)).then(function (r) { return r.json(); }).then(function (d) {
+    location.href = (d && d.dest) || ("/r/" + code + "/");
+  }).catch(function () { location.href = "/r/" + code + "/"; });
   return true;
 }
 try { if (new URLSearchParams(location.search).get("notfound") === "1") document.getElementById("roomMsg").textContent = "We couldn't find that room. Check the link or code and try again."; } catch (e) {}

@@ -38,6 +38,7 @@ import { APP_STORE_BADGE_B64 } from "./badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
+import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock } from "./friend";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
@@ -158,10 +159,33 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken) sWho = k;
       }
       const dest = "/r/" + sRoom + "/" + (sWho ? "?invite=" + sWho + "&token=" + sToken : "");
-      return new Response(null, { status: 302, headers: { location: dest } });
+      // The inviter's first name is shown on the landing page and in the link
+      // preview ("Mark invited you to Nearune").
+      const sOther = sWho === "mark" ? "nikita" : "mark";
+      const sInviter = sState.people && sState.people[sOther] && sState.people[sOther]!.confirmed ? sState.people[sOther]!.name : "";
+      return new Response(buildInvitePage({ origin: publicOrigin, inviter: sInviter, roomId: sRoom, dest }), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
     }
     const roomPrefix = roomId ? "/r/" + roomId : "";
     const HOUR = 60 * 60 * 1000;
+
+    // Typing a room code on the Join screen: if that room is waiting for a
+    // partner, go straight to its invite (name, city, language); otherwise
+    // just open the room. A made-up code goes back with "not found".
+    if (req.method === "GET" && url.pathname === "/api/join-code") {
+      if (!rateLimit("join-code:" + clientIp(req, server), 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const jc = (url.searchParams.get("code") || "").trim().toLowerCase();
+      if (!/^[a-z0-9]{4,40}$/.test(jc) || !(await roomExists(jc))) return json({ dest: "/new?notfound=1" });
+      const jst = await loadState(jc);
+      if (jst.origin !== "friend") {
+        for (const k of ["mark", "nikita"] as const) {
+          const inv = jst.pendingInvite && jst.pendingInvite[k];
+          if (inv && inv.token && !(jst.people && jst.people[k] && jst.people[k]!.confirmed)) return json({ dest: "/j/" + jc + "/" + inv.token });
+        }
+      }
+      return json({ dest: "/r/" + jc + "/" });
+    }
 
     if (req.method === "GET" && url.pathname === "/api/music-preview") {
       if (!rateLimit("music-preview:" + clientIp(req, server), 120, HOUR)) return json({ error: "rate_limited" }, { status: 429 });

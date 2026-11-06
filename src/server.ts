@@ -489,25 +489,38 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           const state = await loadState(id);
           if (!state.pushSubs) continue;
           const today = todayKeyFor(state);
-          // "Still waiting" nudge: an invite unanswered for 2+ days, at most
-          // once every 3 days, pushed to whoever sent it.
+          // "Still waiting" nudges for someone whose invited partner hasn't
+          // joined: at most three, spaced out, each worded differently and
+          // led by what they get, not by what's missing. Only people who
+          // turned notifications on can receive them. Not for Make a friend
+          // rooms (the match arrives on its own).
           const DAY_MS = 24 * 60 * 60 * 1000;
+          const NUDGES = [
+            { after: 1 * DAY_MS, title: "Your Nearune is almost ready", body: "One text from you and your first question opens for the two of you. Your invite link is waiting." },
+            { after: 3 * DAY_MS, title: "Your partner is one tap away", body: "Send your link again. It takes ten seconds, and a daily question is better with two." },
+            { after: 7 * DAY_MS, title: "Your room is still open", body: "Whenever you're ready, share your invite and start the daily question together." },
+          ];
           for (const other of ["mark", "nikita"] as PersonKey[]) {
+            if (state.origin === "friend") break;
             const inv = state.pendingInvite && state.pendingInvite[other];
             const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
             const inviterSub = state.pushSubs[inviterKey];
             if (!inv || !inviterSub) continue;
             if (state.people && state.people[other] && state.people[other]!.confirmed) continue;
+            const sentCount = state.inviteNudgeCount || (state.inviteNudgeAt ? 1 : 0);
+            if (sentCount >= NUDGES.length) continue;
             const lastNudge = state.inviteNudgeAt ? Date.parse(state.inviteNudgeAt) : 0;
-            if (Date.now() - Date.parse(inv.at) < 2 * DAY_MS || Date.now() - lastNudge < 3 * DAY_MS) continue;
+            const startAt = Date.parse(inv.at);
+            if (!startAt || Date.now() - startAt < NUDGES[sentCount].after || Date.now() - lastNudge < 2 * DAY_MS) continue;
             const nres = await sendPush(inviterSub, {
-              title: "Still waiting for your Nearune partner",
-              body: "Open Nearune to get a fresh invite link and send it to them yourself — text, Instagram or email.",
+              title: NUDGES[sentCount].title,
+              body: NUDGES[sentCount].body,
               tag: "invite-nudge",
             });
             if (nres.ok) {
               sent++;
-              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); });
+              console.log("[invite-nudge] room=" + (id || "main") + " #" + (sentCount + 1));
+              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = sentCount + 1; });
             }
             if (nres.gone) {
               await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });

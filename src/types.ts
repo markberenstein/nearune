@@ -130,6 +130,8 @@ export type State = {
   pendingInviteAt?: Partial<Record<PersonKey, string>>;
   // ISO time the inviter was last sent the "still waiting" push (persisted).
   inviteNudgeAt?: string;
+  // How many "still waiting" pushes the inviter has had (capped at 3).
+  inviteNudgeCount?: number;
   // Safety tools (App Store requirement for user-shared content):
   // blocked[x] = true means person x has hidden their partner's content from
   // their own screen. reports is a server-side log for the app owner and is

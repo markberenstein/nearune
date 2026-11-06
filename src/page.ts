@@ -2960,6 +2960,7 @@ const RAW = String.raw`<!doctype html>
 
   function acceptInviteForm() {
     var card = h("div", { class: "card" }, [
+      h("a", { class: "reg-back", href: "/home", style: "display:inline-block;margin:-6px 0 6px -4px;", text: "\u2039 " + t("Rooms") }),
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
       h("p", { class: "question", text: t("Finish setting up your Nearune.") })
     ]);
@@ -3088,7 +3089,8 @@ const RAW = String.raw`<!doctype html>
       h("img", { src: "/apple-touch-icon.png", alt: "" }),
       h("div", { class: "reg-name", text: "Nearune" })
     ]);
-    return h("div", {}, [top, card]);
+    var lv = leaveRoomButton();
+    return h("div", {}, [top, card, lv ? h("div", { class: "switch-row", style: "justify-content:center;margin-top:10px;" }, [lv]) : null]);
   }
 
   function registrationFlow() {
@@ -3447,6 +3449,30 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "puzzle-guess-note", text: msg }),
       h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })
     ]);
+  }
+  // "Leave room": forget this room on this device and go back to the rooms
+  // screen. Your partner's side and the room's history are not touched (use
+  // "Delete my data" for that). Make a friend rooms end for both people.
+  function leaveRoomLocal() {
+    if (state && state.origin === "friend" && viewerKey) { leaveFriend(false); return; }
+    if (!window.confirm(t("Leave this room? It will be removed from your rooms on this device. Your partner keeps the room, and you can rejoin with the room code."))) return;
+    try {
+      var list = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
+      if (Array.isArray(list)) {
+        list = list.filter(function (r) { return r.id !== ROOM; });
+        localStorage.setItem("nearuneRooms", JSON.stringify(list));
+      }
+      localStorage.removeItem(VIEWER_LS_KEY);
+      localStorage.removeItem(TAB_LS_KEY);
+      if (localStorage.getItem(MY_ROOM_LS_KEY) === ROOM) localStorage.removeItem(MY_ROOM_LS_KEY);
+    } catch (e) {}
+    location.href = "/home";
+  }
+  function leaveRoomButton() {
+    if (!ROOM) return null;
+    var b = h("button", { class: "switch-link", type: "button", text: t("Leave room") });
+    b.addEventListener("click", leaveRoomLocal);
+    return b;
   }
   function leaveFriend(report) {
     var q = report
@@ -4038,7 +4064,7 @@ const RAW = String.raw`<!doctype html>
       try { navigator.clipboard.writeText(code); roomLine.textContent = t("Copied!"); setTimeout(function () { roomLine.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
     });
     var titleLine = state && state.roomName ? h("div", { class: "room-code", style: "font-size: 1rem; font-weight: 700; color: var(--ink); margin-bottom: 2px;", text: state.roomName }) : null;
-    var back = h("a", { href: "/home", style: "display:inline-block; align-self:flex-start; margin:0 0 6px -4px; padding:8px 10px; font-size:0.95rem; font-weight:700; color:var(--accent); text-decoration:none;", text: "\u2039 " + t("Rooms") });
+    var back = h("a", { href: "/home", style: "display:inline-block; align-self:flex-start; margin:0 0 6px -4px; padding:10px 12px; font-size:1.05rem; font-weight:800; color:var(--accent); text-decoration:none;", text: "\u2039 " + t("Rooms") });
     return h("div", {}, [back, wordmark, titleLine, roomLine, clocks]);
   }
 
@@ -5174,6 +5200,8 @@ const RAW = String.raw`<!doctype html>
       quiet.appendChild(blockLink);
       quiet.appendChild(footSepEl());
     }
+    var leaveBtn = state && state.origin === "friend" ? null : leaveRoomButton();
+    if (leaveBtn) { quiet.appendChild(leaveBtn); quiet.appendChild(footSepEl()); }
     var deleteLink = h("button", { class: "switch-link", text: t("Delete my data") });
     deleteLink.addEventListener("click", function () { showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp(); });
     quiet.appendChild(deleteLink);

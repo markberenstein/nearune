@@ -403,8 +403,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
 
-  .tab-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
-  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
+  .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
+  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; text-align: center; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
   .tab-ico { font-size: 1.2rem; line-height: 1; }
   .puzzle-card .translate-inline { color: #5a4a3f; }

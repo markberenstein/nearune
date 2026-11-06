@@ -5738,6 +5738,8 @@ document.getElementById("pasteInvite").addEventListener("click", function () {
 });
 document.getElementById("go").addEventListener("click", function () {
   var btn = document.getElementById("go");
+  var typedName = (document.getElementById("roomName").value || "").trim();
+  if (typedName && !window.confirm("Your room name will be " + typedName + " and it cannot be changed later. If that name is already taken, two numbers will be added to the end of it. Create this room?")) return;
   btn.disabled = true;
   btn.textContent = "Creating…";
   fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: (document.getElementById("roomName").value || "").trim() }) })
@@ -5746,9 +5748,7 @@ document.getElementById("go").addEventListener("click", function () {
       if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
       var msg = res.data && res.data.error === "registrations_paused"
         ? (res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.")
-        : (res.data && res.data.error === "name_taken"
-          ? "That room name is already taken. If it is your room, go to Open an existing room below and enter the code: " + (res.data.code || "") + ". Otherwise pick a different name."
-          : res.data && res.data.error === "inappropriate_name"
+        : (res.data && res.data.error === "inappropriate_name"
           ? "Please choose a different room name."
           : res.data && res.data.error === "rate_limited"
           ? "Too many rooms created from here recently — wait a bit and try again."

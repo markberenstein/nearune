@@ -71,6 +71,7 @@ Bun.serve({
           const pushCount = (["mark", "nikita"] as PersonKey[]).filter((k) => !!state.pushSubs?.[k]).length;
           summaries.push({
             roomId: id,
+            roomName: state.roomName || undefined,
             createdAt: state.createdAt || null,
             people,
             via: state.createdVia || null,
@@ -142,6 +143,36 @@ Bun.serve({
         }
       }
       return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + cmsg, 303);
+    }
+
+    // Changes a room's display name (the title at the top of the room). The
+    // room code and invite links never change. Goes through the main app so
+    // its in-memory copy of the room is updated rather than overwritten.
+    if (req.method === "POST" && url.pathname === "/rename-room") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let rid = "", newName = "";
+      try {
+        const body = await req.formData();
+        rid = String(body.get("roomId") || "");
+        newName = String(body.get("name") || "");
+      } catch {}
+      let rmsg = "rename_failed";
+      const rApp = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const rCron = Bun.env.CRON_SECRET || "";
+      if (!rApp || !rCron) rmsg = "not_configured";
+      else if (rid) {
+        try {
+          const r = await fetch(rApp + "/api/admin/rename", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-cron-secret": rCron },
+            body: JSON.stringify({ roomId: rid, name: newName }),
+          });
+          rmsg = r.ok ? "renamed" : "rename_failed";
+        } catch (err) {
+          console.error("[admin] rename failed", err);
+        }
+      }
+      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + rmsg, 303);
     }
 
     if (req.method === "POST" && url.pathname === "/remind-room") {

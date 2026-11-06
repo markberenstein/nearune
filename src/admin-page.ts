@@ -4,6 +4,8 @@
 
 export type AdminRoomSummary = {
   roomId: string;
+  // Display name the first partner typed (shown as the room title), if any.
+  roomName?: string;
   createdAt: string | null;
   people: { name: string; confirmed: boolean; location?: string }[];
   // Device, app-or-web and language the room was created from (no IP kept).
@@ -39,6 +41,8 @@ function adminEsc(s: string): string {
 const NOTICES: Record<string, string> = {
   sent: "Reminder email sent.",
   closed: "Room closed. Both people will see that it has ended.",
+  renamed: "Room name updated.",
+  rename_failed: "Could not rename that room. Check the logs.",
   too_soon: "A reminder went out in the last 20 hours; try again later.",
   max_reminders: "3 reminders already sent to this person.",
   nothing_pending: "Nothing pending for that person (they may have just confirmed).",
@@ -121,14 +125,21 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
             <button type="submit" class="del-btn">Close</button>
           </form>`
         : "";
-      const action = remind + closeBtn + (r.roomId
+      const renameBtn = r.roomId && !r.closed
+        ? `<form method="POST" action="/rename-room?${secretQS}" style="margin-bottom:6px" data-cur="${adminEsc(r.roomName || "")}" onsubmit="var n = prompt('New display name for this room (leave blank to remove the name):', this.dataset.cur); if (n === null) return false; this.elements.name.value = n; return true;">
+            <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
+            <input type="hidden" name="name" value="">
+            <button type="submit" class="remind-btn">Rename</button>
+          </form>`
+        : "";
+      const action = remind + renameBtn + closeBtn + (r.roomId
         ? `<form method="POST" action="/delete-room?${secretQS}" onsubmit="return confirm('Delete room ${adminEsc(r.roomId)}? This permanently erases its answers, comments, and photos. This cannot be undone.');">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
             <button type="submit" class="del-btn">Delete</button>
           </form>`
         : `<span class="muted">—</span>`);
       return `<tr>
-        <td>${label}</td>
+        <td>${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
         <td><span class="pill pill-${status}">${status}</span>${flags}</td>
         <td>${created}</td>
         <td>${people}</td>

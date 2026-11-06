@@ -112,6 +112,9 @@ export type State = {
   // The room name the first person typed, in any language (shown as the
   // room's title). The room code/link is built separately from a-z/0-9.
   roomName?: string;
+  // A newer, friendlier room code set by the admin. The original code keeps
+  // working (it is the stored id); this is only what the app displays.
+  roomCode?: string;
   answers: Record<string, Partial<Record<PersonKey, Answer>>>;
   status: Partial<Record<PersonKey, { text: string; at: string }>>;
   comments: Record<string, Comment[]>;

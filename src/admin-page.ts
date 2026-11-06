@@ -41,7 +41,9 @@ function adminEsc(s: string): string {
 const NOTICES: Record<string, string> = {
   sent: "Reminder email sent.",
   closed: "Room closed. Both people will see that it has ended.",
-  renamed: "Room name updated.",
+  renamed: "Room updated.",
+  code_taken: "That room code is already in use. Nothing was changed.",
+  bad_code: "Room codes use only letters and numbers (4 to 40 characters). Nothing was changed.",
   rename_failed: "Could not rename that room. Check the logs.",
   too_soon: "A reminder went out in the last 20 hours; try again later.",
   max_reminders: "3 reminders already sent to this person.",
@@ -126,9 +128,10 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
           </form>`
         : "";
       const renameBtn = r.roomId && !r.closed
-        ? `<form method="POST" action="/rename-room?${secretQS}" style="margin-bottom:6px" data-cur="${adminEsc(r.roomName || "")}" onsubmit="var n = prompt('New display name for this room (leave blank to remove the name):', this.dataset.cur); if (n === null) return false; this.elements.name.value = n; return true;">
+        ? `<form method="POST" action="/rename-room?${secretQS}" style="margin-bottom:6px" data-cur="${adminEsc(r.roomName || "")}" onsubmit="var n = prompt('New display name for this room (leave blank to remove the name):', this.dataset.cur); if (n === null) return false; this.elements.name.value = n; var c = prompt('New room code too? Letters and numbers only. The old code keeps working. Leave blank to keep the current code:', n.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16)); if (c === null) return false; this.elements.code.value = c; return true;">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
             <input type="hidden" name="name" value="">
+            <input type="hidden" name="code" value="">
             <button type="submit" class="remind-btn">Rename</button>
           </form>`
         : "";

@@ -18,8 +18,31 @@ const MAX_HISTORY = 400;
 // Nikita can reach it the same way as every other room, while the legacy
 // "/" URL and its stored data keep working untouched.
 const ROOM_ALIASES: Record<string, string> = { q7mvx3ke: "" };
+// Aliases added later by the admin (a room given a friendlier code). Kept in
+// a side file and loaded at startup; the room's data stays under its original id.
+const DYN_ALIASES = new Map<string, string>();
 export function canonRoom(roomId: string): string {
-  return Object.prototype.hasOwnProperty.call(ROOM_ALIASES, roomId) ? ROOM_ALIASES[roomId] : roomId;
+  if (Object.prototype.hasOwnProperty.call(ROOM_ALIASES, roomId)) return ROOM_ALIASES[roomId];
+  const dyn = DYN_ALIASES.get(roomId);
+  return dyn !== undefined ? dyn : roomId;
+}
+export async function loadRoomAliases(): Promise<void> {
+  try {
+    const raw = await readSideFile("room-aliases.json");
+    const obj = raw ? JSON.parse(raw) : {};
+    for (const k of Object.keys(obj)) if (typeof obj[k] === "string") DYN_ALIASES.set(k, obj[k]);
+  } catch (e) { console.error("[aliases] load failed", e); }
+}
+// Makes `code` open the same room as `roomId`. Returns false if `code` is
+// already used by another room or alias.
+export async function addRoomAlias(code: string, roomId: string): Promise<boolean> {
+  const target = canonRoom(roomId);
+  if (!target) return false;
+  if (DYN_ALIASES.get(code) === target) return true;
+  if (canonRoom(code) !== code || (await readRaw(code)) !== null) return false;
+  DYN_ALIASES.set(code, target);
+  await writeSideFile("room-aliases.json", JSON.stringify(Object.fromEntries(DYN_ALIASES)));
+  return true;
 }
 
 export function defaultState(): State {

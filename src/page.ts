@@ -520,6 +520,8 @@ const RAW = String.raw`<!doctype html>
 
   var ROOM = "__ROOM__";
   var RP = ROOM ? "/r/" + ROOM : "";
+  // The code shown to people: the admin may have given the room a newer one.
+  function displayCode() { return (typeof state !== "undefined" && state && state.roomCode) || ROOM; }
   try {
     var manifestLinkEl = document.getElementById("manifestLink");
     if (manifestLinkEl) manifestLinkEl.href = RP + "/manifest.json";
@@ -3348,10 +3350,10 @@ const RAW = String.raw`<!doctype html>
     if (ROOM) {
       var codeBox = h("div", { class: "inv-code", title: t("Tap to copy") }, [
         h("div", { class: "inv-code-label", text: t("Room code") }),
-        h("div", { class: "inv-code-value", text: ROOM })
+        h("div", { class: "inv-code-value", text: displayCode() })
       ]);
       codeBox.addEventListener("click", function () {
-        try { navigator.clipboard.writeText(ROOM); codeBox.querySelector(".inv-code-label").textContent = t("Copied!"); setTimeout(function () { codeBox.querySelector(".inv-code-label").textContent = t("Room code"); }, 1500); } catch (e) {}
+        try { navigator.clipboard.writeText(displayCode()); codeBox.querySelector(".inv-code-label").textContent = t("Copied!"); setTimeout(function () { codeBox.querySelector(".inv-code-label").textContent = t("Room code"); }, 1500); } catch (e) {}
       });
       card.appendChild(codeBox);
     }
@@ -4167,7 +4169,7 @@ const RAW = String.raw`<!doctype html>
     var nikitaClock = solo && !isConfirmedKey("nikita") ? pendingClockBlock("nikita") : clockBlock("nikita");
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    var code = ROOM || "q7mvx3ke";
+    var code = displayCode() || "q7mvx3ke";
     var roomLine = h("div", { class: "room-code", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
     roomLine.addEventListener("click", function () {
       try { navigator.clipboard.writeText(code); roomLine.textContent = t("Copied!"); setTimeout(function () { roomLine.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}

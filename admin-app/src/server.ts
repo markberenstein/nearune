@@ -150,11 +150,12 @@ Bun.serve({
     // its in-memory copy of the room is updated rather than overwritten.
     if (req.method === "POST" && url.pathname === "/rename-room") {
       if (!checkSecret(url)) return new Response("Not found", { status: 404 });
-      let rid = "", newName = "";
+      let rid = "", newName = "", newCode = "";
       try {
         const body = await req.formData();
         rid = String(body.get("roomId") || "");
         newName = String(body.get("name") || "");
+        newCode = String(body.get("code") || "");
       } catch {}
       let rmsg = "rename_failed";
       const rApp = (Bun.env.APP_URL || "").replace(/\/$/, "");
@@ -165,9 +166,10 @@ Bun.serve({
           const r = await fetch(rApp + "/api/admin/rename", {
             method: "POST",
             headers: { "content-type": "application/json", "x-cron-secret": rCron },
-            body: JSON.stringify({ roomId: rid, name: newName }),
+            body: JSON.stringify({ roomId: rid, name: newName, code: newCode }),
           });
-          rmsg = r.ok ? "renamed" : "rename_failed";
+          const rd: any = await r.json().catch(() => ({}));
+          rmsg = r.ok ? "renamed" : rd && rd.error === "code_taken" ? "code_taken" : rd && rd.error === "bad_code" ? "bad_code" : "rename_failed";
         } catch (err) {
           console.error("[admin] rename failed", err);
         }

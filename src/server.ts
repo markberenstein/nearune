@@ -22,6 +22,8 @@ import {
   lookupEmailIndex,
   removeFromEmailIndex,
   listRoomIds,
+  loadRoomAliases,
+  addRoomAlias,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
@@ -128,6 +130,8 @@ function logSignupFailure(req: Request, pathname: string, res: Response): void {
     });
   } catch {}
 }
+
+await loadRoomAliases();
 
 Bun.serve({
   port: PORT,
@@ -453,9 +457,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const rb = await readJson(req);
       const rid = typeof rb?.roomId === "string" ? rb.roomId : "";
       const nm = typeof rb?.name === "string" ? rb.name.trim().slice(0, 40) : "";
+      const newCode = typeof rb?.code === "string" ? rb.code.trim().toLowerCase() : "";
       if (!rid || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
-      await saveState(rid, (s) => { if (nm) s.roomName = nm; else delete s.roomName; });
-      console.log("[admin] renamed room " + rid + " -> " + (nm || "(no name)"));
+      if (newCode) {
+        // A friendlier room code. The old code keeps working as the stored id.
+        if (!/^[a-z0-9]{4,40}$/.test(newCode)) return json({ error: "bad_code" }, { status: 400 });
+        if (!(await addRoomAlias(newCode, rid))) return json({ error: "code_taken" }, { status: 409 });
+      }
+      await saveState(rid, (s) => { if (nm) s.roomName = nm; else delete s.roomName; if (newCode) s.roomCode = newCode; });
+      console.log("[admin] renamed room " + rid + " -> " + (nm || "(no name)") + (newCode ? " code " + newCode : ""));
       return json({ ok: true });
     }
 

@@ -3222,10 +3222,10 @@ const RAW = String.raw`<!doctype html>
   }
   // The text a person sends: app link, invite link, and the room code so the
   // partner can still get in by typing it if the link gets lost.
+  // Just the link: iMessage and WhatsApp only turn a message into a preview
+  // card (logo + "Mark invited you to Nearune") when the link is all it holds.
   function inviteMessage(url) {
-    var lines = [t("Join me on Nearune!"), url];
-    if (ROOM) lines.push(t("Room code:") + " " + ROOM);
-    return lines.join("\n");
+    return url;
   }
   function submitInviteLink() {
     regBusy = true; regError = ""; renderApp();
@@ -3271,7 +3271,7 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       if (navigator.share) {
-        var shareObj = url === lastInviteUrl ? { title: "Nearune", text: inviteMessage(url) } : { title: "Nearune", url: url };
+        var shareObj = url === lastInviteUrl ? { url: url } : { url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});

@@ -5,7 +5,7 @@ import { topLocalStory } from "./localnews";
 // from the logs and refreshes the admin artifact.
 import { listRoomIds, loadState } from "./storage";
 import { resolveCoords, resolveCountryCode } from "./geo";
-import { topSongs, previewClip } from "./music";
+import { topSongs, previewClip, trackRef } from "./music";
 import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
 import { elevenLabsUsage, voiceSelfTest } from "./voice";
@@ -96,7 +96,7 @@ export async function computeStats() {
       // Apple's chart feed fails briefly and at random; retry up to twice, bypassing the short failure cache, before calling it down.
       for (let r = 0; r < 2 && (!chart || !chart.length); r++) { await new Promise((res) => setTimeout(res, 6000)); chart = await topSongs(loc, 5, true); }
       if (!chart || !chart.length) { music.push({ country, chart: false, previewsOk: 0, total: 0, songs: [] }); continue; }
-      const res = await Promise.all(chart.map((e) => previewClip(e.title, e.artist).then((c) => !!c).catch(() => false)));
+      const res = await Promise.all(chart.map((e) => previewClip(e.title, e.artist, trackRef(e.url)).then((c) => !!c).catch(() => false)));
       music.push({ country, chart: true, previewsOk: res.filter(Boolean).length, total: res.length, songs: chart.map((e, i) => ({ label: "#" + e.rank + " " + e.title + (e.artist ? " - " + e.artist : ""), ok: res[i] })) });
     } catch { music.push({ country, chart: false, previewsOk: 0, total: 0, songs: [] }); }
   }

@@ -78,7 +78,14 @@ async function grab(url: string): Promise<{ type: string; bytes: ArrayBuffer } |
     return { type: res.headers.get("content-type") || "audio/mpeg", bytes };
   } catch { return null; }
 }
-export async function previewClip(title: string, artist: string): Promise<{ type: string; bytes: ArrayBuffer } | null> {
+// Apple chart entries carry the track's own id and store country in their
+// link (".../hk/album/...?i=123"). Looking the track up by that id finds its
+// preview even when the title is in another script or has "(feat. ...)" text.
+export function trackRef(url: string): { id: string; cc: string } | null {
+  const m = /music\.apple\.com\/([a-z]{2})\/.*[?&]i=(\d+)/i.exec(url || "");
+  return m ? { cc: m[1].toLowerCase(), id: m[2] } : null;
+}
+export async function previewClip(title: string, artist: string, ref?: { id: string; cc: string } | null): Promise<{ type: string; bytes: ArrayBuffer } | null> {
   title = title.slice(0, 120); artist = artist.slice(0, 120);
   if (!title) return null;
   const key = (title + "|" + artist).toLowerCase();
@@ -88,6 +95,22 @@ export async function previewClip(title: string, artist: string): Promise<{ type
   let via = "";
   const deezer = await fetchPreviewUrl(title, artist);
   if (deezer) { got = await grab(deezer); via = "deezer"; }
+  if (!got && ref && /^\d+$/.test(ref.id) && /^[a-z]{2}$/.test(ref.cc)) {
+    try {
+      const res = await fetch("https://itunes.apple.com/lookup?id=" + ref.id + "&country=" + ref.cc, { signal: AbortSignal.timeout(8000) });
+      const j: any = res.ok ? await res.json() : null;
+      const u = j && j.results && j.results[0] && j.results[0].previewUrl;
+      if (typeof u === "string") { got = await grab(u); via = "itunes-id"; }
+    } catch {}
+  }
+  if (!got) {
+    // Same search again with "(feat. ...)" and bracketed text removed.
+    const clean = title.replace(/[(\[][^)\]]*[)\]]/g, " ").replace(/\s+/g, " ").trim();
+    if (clean && clean !== title) {
+      const d2 = await fetchPreviewUrl(clean, artist);
+      if (d2) { got = await grab(d2); via = "deezer-clean"; }
+    }
+  }
   if (!got) {
     try {
       const q = [title, artist].filter(Boolean).join(" ");
@@ -135,7 +158,7 @@ export async function topSongs(location: string, limit = 5, fresh = false): Prom
             artist: r.artistName || "",
             url: r.url || "",
             artworkUrl: r.artworkUrl100 || "",
-            previewUrl: r.name ? "/api/music-preview?t=" + encodeURIComponent(r.name || "") + "&a=" + encodeURIComponent(r.artistName || "") : null,
+            previewUrl: r.name ? "/api/music-preview?t=" + encodeURIComponent(r.name || "") + "&a=" + encodeURIComponent(r.artistName || "") + (trackRef(r.url || "") ? "&i=" + trackRef(r.url || "")!.id + "&c=" + trackRef(r.url || "")!.cc : "") : null,
           }));
         } else {
           console.log("[music] fetch " + country + " -> HTTP 200 but no results");

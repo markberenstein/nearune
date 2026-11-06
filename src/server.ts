@@ -189,7 +189,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
 
     if (req.method === "GET" && url.pathname === "/api/music-preview") {
       if (!rateLimit("music-preview:" + clientIp(req, server), 120, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
-      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "");
+      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "", { id: url.searchParams.get("i") || "", cc: url.searchParams.get("c") || "" });
       if (!clip) return json({ error: "no_preview" }, { status: 404 });
       return new Response(clip.bytes, { headers: { "content-type": clip.type, "cache-control": "public, max-age=3600", "accept-ranges": "none" } });
     }

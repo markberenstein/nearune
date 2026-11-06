@@ -76,6 +76,7 @@ Bun.serve({
             via: state.createdVia || null,
             lastActive,
             daysAnswered: answerKeys.length,
+            bothDays: answerKeys.filter((d) => { const a: any = state.answers[d]; return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text); }).length,
             pushCount,
             friend: state.origin === "friend",
             reported: !!state.reported,

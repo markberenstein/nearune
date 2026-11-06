@@ -3550,6 +3550,63 @@ const RAW = String.raw`<!doctype html>
     return box;
   }
   var soloFeedOpen = false;
+  // "Higher or lower" — a tiny game for the days before a partner joins.
+  // Pairs come from one category, so the comparison is always fair. Streak and
+  // best streak stay on this device.
+  var HL_SETS = [
+    { q: "Which is taller?", unit: "m", items: [["Eiffel Tower", 330], ["Statue of Liberty (with base)", 93], ["Big Ben", 96], ["Burj Khalifa", 828], ["Golden Gate Bridge towers", 227], ["Space Needle", 184], ["Empire State Building (with antenna)", 443]] },
+    { q: "Which mountain is higher?", unit: "m", items: [["Mount Everest", 8849], ["K2", 8611], ["Mont Blanc", 4806], ["Mount Fuji", 3776], ["Kilimanjaro", 5895], ["Denali", 6190], ["The Matterhorn", 4478], ["Ben Nevis", 1345]] },
+    { q: "Which river is longer?", unit: "km", items: [["The Nile", 6650], ["The Amazon", 6400], ["The Mississippi", 3730], ["The Thames", 346], ["The Mekong", 4350]] },
+    { q: "Which animal is faster?", unit: "km/h", items: [["Cheetah", 110], ["Peregrine falcon (diving)", 390], ["Horse (gallop)", 88], ["Usain Bolt (top speed)", 44], ["Greyhound", 72]] },
+    { q: "Which came later?", unit: "", items: [["The Eiffel Tower opening", 1889], ["The Golden Gate Bridge opening", 1937], ["The first iPhone", 2007], ["The first Moon landing", 1969], ["The Titanic sinking", 1912], ["The fall of the Berlin Wall", 1989], ["The Statue of Liberty dedication", 1886], ["The Wright brothers' first flight", 1903]] }
+  ];
+  var hlState = null;
+  function hlLoad() { try { return JSON.parse(localStorage.getItem("nearuneHL") || "{}") || {}; } catch (e) { return {}; } }
+  function hlSave(o) { try { localStorage.setItem("nearuneHL", JSON.stringify(o)); } catch (e) {} }
+  function hlFmt(set, v) { return (set.unit === "" ? String(v) : v.toLocaleString() + " " + set.unit); }
+  function hlNewRound() {
+    var set = HL_SETS[Math.floor(Math.random() * HL_SETS.length)];
+    var i = Math.floor(Math.random() * set.items.length), j = i;
+    while (j === i) j = Math.floor(Math.random() * set.items.length);
+    hlState = { set: set, a: set.items[i], b: set.items[j], picked: null };
+  }
+  function waitingGameCard() {
+    if (!hlState) hlNewRound();
+    var saved = hlLoad();
+    var streak = saved.streak || 0, best = saved.best || 0;
+    var g = hlState;
+    var card = h("div", { class: "card" });
+    card.appendChild(h("div", { class: "eyebrow" }, [h("span", { text: t("While you wait") })]));
+    card.appendChild(h("p", { class: "reg-title", text: t("Higher or lower?") }));
+    card.appendChild(h("p", { class: "puzzle-guess-note", text: t(g.set.q) }));
+    card.appendChild(h("p", { style: "font-weight:700;font-size:1.05rem;margin:6px 0 2px;", text: g.a[0] + ": " + hlFmt(g.set, g.a[1]) }));
+    card.appendChild(h("p", { style: "margin:0 0 12px;", text: g.set.unit === "" ? t("Did this come later or earlier?") + " " + g.b[0] : t("Is") + " " + g.b[0] + " " + t("higher or lower?") }));
+    function pick(guessHigher) {
+      if (g.picked !== null) return;
+      var higher = g.b[1] > g.a[1];
+      g.picked = (guessHigher === higher) ? "right" : "wrong";
+      var cur = hlLoad();
+      if (g.picked === "right") { cur.streak = (cur.streak || 0) + 1; if (cur.streak > (cur.best || 0)) cur.best = cur.streak; }
+      else cur.streak = 0;
+      hlSave(cur);
+      renderApp();
+    }
+    if (g.picked === null) {
+      var up = h("button", { class: "puzzle-upload-btn reg-cta", style: "margin-right:8px;", text: "↑ " + (g.set.unit === "" ? t("Later") : t("Higher")) });
+      var down = h("button", { class: "puzzle-choose-btn", text: "↓ " + (g.set.unit === "" ? t("Earlier") : t("Lower")) });
+      up.addEventListener("click", function () { pick(true); });
+      down.addEventListener("click", function () { pick(false); });
+      card.appendChild(h("div", { class: "inv-actions" }, [up, down]));
+    } else {
+      card.appendChild(h("p", { style: "font-weight:700;margin:0 0 4px;", text: (g.picked === "right" ? t("Right!") : t("Not quite.")) + " " + g.b[0] + ": " + hlFmt(g.set, g.b[1]) }));
+      var nxt = h("button", { class: "puzzle-upload-btn reg-cta", text: t("Next one") });
+      nxt.addEventListener("click", function () { hlNewRound(); renderApp(); });
+      card.appendChild(nxt);
+    }
+    if (streak || best) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;", text: t("Streak") + " " + streak + " · " + t("Best") + " " + best }));
+    return card;
+  }
+
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
@@ -3578,6 +3635,7 @@ const RAW = String.raw`<!doctype html>
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {
       app.appendChild(soloQuestionCard(otherKey));
+      if (state.origin !== "friend") app.appendChild(waitingGameCard());
       var streak = soloStreakCard();
       if (streak) app.appendChild(streak);
       // The example only helps until they've answered once themselves.

@@ -312,6 +312,11 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json(generic);
     }
 
+    if (req.method === "GET" && (url.pathname === "/military" || url.pathname === "/military/")) {
+      return new Response(buildGetPage("military"), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
+    }
     if (req.method === "GET" && (url.pathname === "/get" || url.pathname === "/get/")) {
       return new Response(buildGetPage(), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },

@@ -10,6 +10,8 @@ export type AdminRoomSummary = {
   via?: string | null;
   lastActive: string | null;
   daysAnswered: number;
+  // Number of days on which BOTH people answered (for the funnel).
+  bothDays?: number;
   pushCount: number;
   // People whose email sign-up is unconfirmed AND whose email we still hold,
   // so a reminder can be sent. reminders = how many have gone out already.
@@ -45,6 +47,37 @@ const NOTICES: Record<string, string> = {
   not_configured: "Reminders aren't set up on this service yet (CRON_SECRET / APP_URL).",
   error: "Something went wrong sending the reminder.",
 };
+
+// Sign-up funnel over normal (invite) rooms: not the original room, not Make a
+// friend matches. "Last 7 days" counts rooms created in the past week.
+function funnelHtml(rooms: AdminRoomSummary[]): string {
+  const base = rooms.filter((r) => r.roomId && !r.friend && !r.closed);
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const stages = (list: AdminRoomSummary[]) => {
+    const registered = list.filter((r) => r.people.some((p) => p.confirmed));
+    const joined = list.filter((r) => r.people.filter((p) => p.confirmed).length >= 2);
+    const bothOnce = list.filter((r) => (r.bothDays || 0) >= 1);
+    const back = list.filter((r) => (r.bothDays || 0) >= 2);
+    return [list.length, registered.length, joined.length, bothOnce.length, back.length];
+  };
+  const all = stages(base);
+  const wk = stages(base.filter((r) => r.createdAt && Date.parse(r.createdAt) >= weekAgo));
+  const labels = ["Room created", "Signed up", "Partner joined", "Both answered a day", "Both answered 2+ days"];
+  const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) + "%" : "\u2014");
+  const rowsHtml = labels
+    .map((l, i) => `<tr><td>${l}</td><td>${all[i]}</td><td>${i === 0 ? "" : pct(all[i], all[i - 1])}</td><td>${wk[i]}</td><td>${i === 0 ? "" : pct(wk[i], wk[i - 1])}</td></tr>`)
+    .join("");
+  // Who is stuck, and who can still be reached by a notification.
+  const waiting = base.filter((r) => r.people.some((p) => p.confirmed) && r.people.filter((p) => p.confirmed).length < 2);
+  const oldWaiting = waiting.filter((r) => r.createdAt && Date.parse(r.createdAt) < Date.now() - 24 * 3600 * 1000);
+  const reachable = oldWaiting.filter((r) => r.pushCount > 0).length;
+  return `<h2>Funnel</h2>
+  <div class="tblwrap"><table class="funnel">
+    <thead><tr><th>Step</th><th>All time</th><th>of previous</th><th>Last 7 days</th><th>of previous</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>
+  <p class="sub" style="margin-top:10px">${waiting.length} room${waiting.length === 1 ? " is" : "s are"} waiting for a partner; ${oldWaiting.length} for over 24 hours, and ${reachable} of those can still get a notification. Excludes the original room and Make a friend matches.</p>`;
+}
 
 export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice = ""): string {
   const noticeHtml = notice && NOTICES[notice] ? `<p class="notice">${adminEsc(NOTICES[notice])}</p>` : "";
@@ -131,6 +164,8 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; padding:32px 16px 80px; }
   .wrap { max-width:920px; margin:0 auto; }
   h1 { font-weight:800; font-size:1.4rem; margin:0 0 4px; }
+  h2 { font-weight:800; font-size:1.05rem; margin:22px 0 10px; }
+  table.funnel td:nth-child(n+2), table.funnel th:nth-child(n+2) { text-align:right; }
   .sub { color:var(--ink-soft); font-size:0.85rem; margin:0 0 24px; }
   table { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:0.85rem; }
   th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
@@ -167,6 +202,8 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>
   <p class="updated" id="updated"></p>
   ${noticeHtml}
+  ${funnelHtml(rooms)}
+  <h2>All rooms</h2>
   <div class="tblwrap"><table>
     <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Where</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
     <tbody>${rows}</tbody>

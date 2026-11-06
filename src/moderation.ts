@@ -8,7 +8,12 @@ const WORDS = [
   "cunt", "whore", "slut", "twat", "wank", "wanker", "cum", "cumming", "jizz", "blowjob", "handjob", "rimjob", "anal",
   "porn", "porno", "nude", "nudes", "naked", "sexting", "sext", "horny", "boner", "erection", "orgasm", "masturbate",
   "masturbating", "dildo", "vibrator", "fetish", "bdsm", "hentai", "onlyfans", "nsfw", "tits", "titties", "boobs", "nipple",
-  "nipples", "penis", "vagina", "genitals", "send pics", "dick pic", "nigger", "nigga", "faggot", "retard", "tranny",
+  "nipples", "penis", "vagina", "genitals", "breast", "boob", "boobie", "boobies", "testicle", "testicles", "scrotum", "clitoris", "vulva", "butthole", "arse", "send pics", "dick pic", "nigger", "nigga", "faggot", "retard", "tranny",
+  // Milder profanity and insults: the writer is only asked to double-check
+  // (in rooms between people who know each other), so lean toward flagging.
+  "damn", "dammit", "goddamn", "crap", "crappy", "piss", "pissed", "wtf", "stfu", "gtfo", "screw you", "go to hell",
+  "idiot", "moron", "stupid", "loser", "dumbass", "jackass", "asshat", "arsehole", "douche", "douchebag", "prick", "scumbag", "jerkoff",
+  "fag", "dyke", "spic", "chink", "kike", "gook", "wetback", "retarded", "slutty", "skank", "hoe",
 ];
 
 const SUBS: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i" };

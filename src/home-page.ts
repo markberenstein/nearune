@@ -253,6 +253,18 @@ export function buildHomePage(): string {
 
   render();
   Promise.all(rooms.map(function (r) { return loadBrief(r.id); })).then(function () {
+    // Remember name, city and language from an existing room, so the next
+    // sign-up form on this device can be filled in already.
+    try {
+      if (!localStorage.getItem("nearuneProfile")) {
+        rooms.some(function (r) {
+          var b = briefs[r.id], me = viewerOf(r.id);
+          var pp = b && b.s && b.s.people && me && b.s.people[me];
+          if (pp && pp.name && pp.location) { jset("nearuneProfile", { name: pp.name, location: pp.location, language: pp.language || "" }); return true; }
+          return false;
+        });
+      }
+    } catch (e) {}
     // A friend room that has ended frees the friend spot again.
     var changed = false;
     rooms = rooms.filter(function (r) {

@@ -2765,6 +2765,23 @@ const RAW = String.raw`<!doctype html>
   })();
   var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
+  // Name, city and language from an earlier sign-up on this device (kept only
+  // on the device) so starting another room doesn't mean typing them again.
+  var savedProfile = null;
+  try { savedProfile = JSON.parse(localStorage.getItem("nearuneProfile") || "null"); } catch (e) {}
+  function applySavedProfile(d) {
+    if (!savedProfile || d.prefilled) return;
+    d.prefilled = true;
+    if (!d.name && savedProfile.name) d.name = savedProfile.name;
+    if (!d.location && savedProfile.location) d.location = savedProfile.location;
+    if (!d.language && savedProfile.language) { d.language = savedProfile.language; d.languageTouched = true; }
+  }
+  function rememberProfile() {
+    var me = state && state.people && viewerKey && state.people[viewerKey];
+    if (!me || !me.name || !me.location) return;
+    var prof = { name: me.name, location: me.location, language: me.language || "" };
+    try { localStorage.setItem("nearuneProfile", JSON.stringify(prof)); } catch (e) {}
+  }
   // Looks up the typed location and, unless the person has already picked
   // a language themselves, pre-selects the language most likely spoken
   // there — still just a starting point, freely changeable via the
@@ -2957,6 +2974,7 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your invite link is copied when you tap this. After installing, open Nearune and paste it into the box on the first screen. Or just continue below in your browser.") }));
     }
     var form = h("div", { class: "puzzle-setup" });
+    applySavedProfile(acceptDraft);
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(acceptDraft));
@@ -3114,6 +3132,7 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "reg-sub", text: soloRegistration ? t("A few quick details, then you can invite your partner.") : "" })
     ]);
     var form = h("div", { class: "puzzle-setup" });
+    applySavedProfile(registerDraft);
     form.appendChild(h("div", { class: "reg-label", text: t("Where are you?") }));
     lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
@@ -3544,6 +3563,7 @@ const RAW = String.raw`<!doctype html>
       }
     }
 
+    rememberProfile();
     rememberRoom();
     // The legacy room (no ROOM id) predates this registration/confirm
     // system entirely — Mark and Nikita have real hardcoded placeholder

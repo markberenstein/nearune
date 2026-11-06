@@ -4913,6 +4913,11 @@ const RAW = String.raw`<!doctype html>
     try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
   }
 
+  // "android" inside the Android app shell, otherwise "ios" / "web".
+  function nativePlatform() {
+    try { return (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || ""; } catch (e) { return ""; }
+  }
+
   function pushSupported() {
     // The native app doesn't have the Web Push API (WKWebView never does),
     // but it has its own native path via the PushNotifications plugin below.
@@ -5001,17 +5006,23 @@ const RAW = String.raw`<!doctype html>
     if (isNativeApp()) {
       try {
         var PN = window.Capacitor.Plugins.PushNotifications;
+        // Android 8+ needs a notification channel before a push can show.
+        if (nativePlatform() === "android") {
+          try { await PN.createChannel({ id: "nearune", name: "Nearune", description: "Daily question and partner updates", importance: 4, visibility: 1 }); } catch (e) {}
+        }
         var perm = await PN.requestPermissions();
         if (perm.receive !== "granted") {
           pushState = "off";
-          pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
+          pushError = nativePlatform() === "android"
+            ? t("Notifications are blocked for this app — enable them in Android Settings → Apps → Nearune → Notifications, then try again.")
+            : t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
           renderApp(); return;
         }
         await new Promise(function (resolve, reject) {
           var settled = false;
           var timeoutId = setTimeout(function () {
             if (settled) return; settled = true;
-            reject(new Error("Timed out waiting for Apple to register this device for push (no response after 45s)."));
+            reject(new Error(nativePlatform() === "android" ? "Timed out waiting for Google to register this device for push (no response after 45s)." : "Timed out waiting for Apple to register this device for push (no response after 45s)."));
           }, 45000);
           PN.addListener("registration", function (token) {
             if (settled) return; settled = true;
@@ -5019,7 +5030,7 @@ const RAW = String.raw`<!doctype html>
             fetch(RP + "/api/push-subscribe", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ who: viewerKey, subscription: { kind: "apns", token: token.value } })
+              body: JSON.stringify({ who: viewerKey, subscription: { kind: (nativePlatform() === "android" ? "fcm" : "apns"), token: token.value } })
             }).then(function () { resolve(); }).catch(reject);
           });
           PN.addListener("registrationError", function (err) {

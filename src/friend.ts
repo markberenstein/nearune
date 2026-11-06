@@ -5,8 +5,24 @@
 // as the email index.
 
 import { readSideFile, writeSideFile, createRoom, saveState } from "./storage";
+import { sendPush } from "./push";
 
-type Waiter = { ticket: string; device: string; at: number; seen: number };
+// Native app waiters can leave a push token so we can tell them the moment
+// someone matches (the app may be closed by then).
+type WaiterPush = { kind: "apns" | "fcm"; token: string };
+type Waiter = { ticket: string; device: string; at: number; seen: number; push?: WaiterPush };
+
+function notifyMatch(push: WaiterPush | undefined): void {
+  if (!push) return;
+  sendPush({ kind: push.kind, token: push.token } as any, {
+    title: "You have a match 🎉",
+    body: "Someone wants to be your Nearune friend. Tap to meet them.",
+    badge: 1,
+    tag: "friend-match",
+  })
+    .then((r) => console.log("[friend] match push " + (r.ok ? "sent" : "failed") + " (" + push.kind + ")"))
+    .catch(() => {});
+}
 type Match = { roomId: string; token: string; at: number };
 type Data = { queue: Waiter[]; matches: Record<string, Match>; blocks: Record<string, string[]> };
 
@@ -67,6 +83,7 @@ async function handToAdmin(d: Data): Promise<void> {
     s.pendingInvite = { nikita: { token: tokWaiter, at, link: true }, mark: { token: tokAdmin, at, link: true } };
   });
   d.matches[w.ticket] = { roomId, token: tokWaiter, at: Date.now() };
+  notifyMatch(w.push);
   console.log("[friend] queue over " + QUEUE_LIMIT + ": oldest requester handed to admin room=" + roomId);
 }
 
@@ -108,6 +125,7 @@ export function friendJoin(device: string): Promise<JoinResult> {
     });
     d.matches[waiter.ticket] = { roomId, token: tokWaiter, at: now };
     await save();
+    notifyMatch(waiter.push);
     return { status: "matched", roomId, token: tokJoiner } as JoinResult;
   });
 }
@@ -125,6 +143,18 @@ export function friendStatus(ticket: string): Promise<StatusResult> {
     w.seen = Date.now();
     await save();
     return { status: "waiting", long: Date.now() - w.at > LONG_WAIT } as StatusResult;
+  });
+}
+
+// A waiting person's app registers its push token for the match alert.
+export function friendSetPush(ticket: string, push: WaiterPush): Promise<boolean> {
+  return locked(async () => {
+    const d = await load();
+    const w = d.queue.find((x) => x.ticket === ticket);
+    if (!w) return false;
+    w.push = push;
+    await save();
+    return true;
   });
 }
 

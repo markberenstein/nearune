@@ -161,6 +161,36 @@ export function buildHomePage(): string {
   var pollTimer = null;
   function setFriend(v) { if (v) jset(LS_FRIEND, v); else jdel(LS_FRIEND); }
 
+  // In the app, ask for notifications while waiting so we can tell the person
+  // the moment someone matches (even if the app is closed).
+  function registerFriendPush(ticket) {
+    try {
+      var cap = window.Capacitor;
+      if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+      var PN = cap.Plugins && cap.Plugins.PushNotifications;
+      if (!PN) return;
+      var android = cap.getPlatform && cap.getPlatform() === "android";
+      var f0 = jget(LS_FRIEND, null);
+      if (f0 && f0.pushed === ticket) return;
+      var chain = android && PN.createChannel
+        ? PN.createChannel({ id: "nearune", name: "Nearune", description: "Daily question and partner updates", importance: 4, visibility: 1 }).catch(function () {})
+        : Promise.resolve();
+      chain.then(function () { return PN.requestPermissions(); }).then(function (perm) {
+        if (!perm || perm.receive !== "granted") {
+          friendMsg = "Turn on notifications for Nearune in Settings and we will tell you the moment you match.";
+          render(); return;
+        }
+        PN.addListener("registration", function (token) {
+          fetch("/api/friend/push", { method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ticket: ticket, subscription: { kind: android ? "fcm" : "apns", token: token.value } }) })
+            .then(function () { var f = jget(LS_FRIEND, null); if (f && f.ticket === ticket) { f.pushed = ticket; setFriend(f); } })
+            .catch(function () {});
+        });
+        PN.register();
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function startFriend() {
     friendMsg = "";
     fetch("/api/friend/join", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device: deviceId(), adult: true }) })
@@ -174,7 +204,7 @@ export function buildHomePage(): string {
         }
         var d = x.d;
         if (d.status === "matched") setFriend({ status: "matched", roomId: d.roomId, token: d.token });
-        else setFriend({ status: "waiting", ticket: d.ticket });
+        else { setFriend({ status: "waiting", ticket: d.ticket }); registerFriendPush(d.ticket); }
         render();
       })
       .catch(function () { friendMsg = "Couldn't reach Nearune."; render(); });
@@ -227,6 +257,7 @@ export function buildHomePage(): string {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     var f = jget(LS_FRIEND, null);
     if (!f || f.status !== "waiting") return;
+    registerFriendPush(f.ticket);
     function check() {
       fetch("/api/friend/status?ticket=" + encodeURIComponent(f.ticket)).then(function (r) { return r.json(); }).then(function (d) {
         if (d.status === "matched") { setFriend({ status: "matched", roomId: d.roomId, token: d.token }); render(); }

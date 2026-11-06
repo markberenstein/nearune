@@ -40,7 +40,7 @@ import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
-import { friendJoin, friendStatus, friendCancel, friendBlock } from "./friend";
+import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush } from "./friend";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
@@ -267,6 +267,16 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!/^[a-f0-9]{24}$/.test(t)) return json({ status: "none" });
       return json(await friendStatus(t));
     }
+    if (req.method === "POST" && url.pathname === "/api/friend/push") {
+      if (!rateLimit("friend-push:" + clientIp(req, server), 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const pb = await readJson(req);
+      const t = typeof pb?.ticket === "string" ? pb.ticket : "";
+      const sub = pb?.subscription;
+      const kind = sub && (sub.kind === "fcm" ? "fcm" : sub.kind === "apns" ? "apns" : "");
+      if (!/^[a-f0-9]{24}$/.test(t) || !kind || typeof sub.token !== "string" || !sub.token || sub.token.length > 4096) return json({ error: "invalid" }, { status: 400 });
+      const okp = await friendSetPush(t, { kind: kind as "apns" | "fcm", token: sub.token });
+      return json({ ok: okp });
+    }
     if (req.method === "POST" && url.pathname === "/api/friend/cancel") {
       const cb = await readJson(req);
       const t = typeof cb?.ticket === "string" ? cb.ticket : "";
@@ -364,13 +374,14 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!isPerson(who) || !subscription) {
         return json({ error: "invalid" }, { status: 400 });
       }
-      if (subscription.kind === "apns") {
+      if (subscription.kind === "apns" || subscription.kind === "fcm") {
         if (typeof subscription.token !== "string" || !subscription.token) {
           return json({ error: "invalid" }, { status: 400 });
         }
+        const nativeKind = subscription.kind === "fcm" ? "fcm" : "apns";
         await saveState(roomId, (s) => {
           if (!s.pushSubs) s.pushSubs = {};
-          s.pushSubs[who] = { kind: "apns", token: subscription.token };
+          s.pushSubs[who] = { kind: nativeKind, token: subscription.token };
         });
         return json({ ok: true });
       }
@@ -734,7 +745,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           // only targets APNs.
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
-            if (!sub || sub.kind !== "apns") continue;
+            if (!sub || (sub.kind !== "apns" && sub.kind !== "fcm")) continue;
             const solo = isSoloRoom(state);
             sendPush(sub, {
               title: solo ? "Answer saved" : "You're all caught up",
@@ -1822,6 +1833,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           ],
         },
       };
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
+    }
+
+    // Android app links: tells Android that invite links (/j/...) open the
+    // Nearune app. The SHA-256 fingerprint(s) of the app's signing key come
+    // from ANDROID_SHA256_FINGERPRINTS (comma-separated, from Play Console →
+    // App integrity → App signing, plus the upload key if testing locally).
+    if (req.method === "GET" && url.pathname === "/.well-known/assetlinks.json") {
+      const fps = (Bun.env.ANDROID_SHA256_FINGERPRINTS || "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (!fps.length) return new Response("Not found", { status: 404 });
+      const body = [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: "com.nearune.app", sha256_cert_fingerprints: fps } }];
       return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
     }
 

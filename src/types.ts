@@ -82,7 +82,9 @@ export type WebPushSubscriptionRecord = { kind?: "web"; endpoint: string; keys: 
 // A device token from the native iOS app (Capacitor's PushNotifications
 // plugin), delivered via Apple Push Notification service instead.
 export type ApnsSubscriptionRecord = { kind: "apns"; token: string };
-export type PushSubscriptionRecord = WebPushSubscriptionRecord | ApnsSubscriptionRecord;
+// A device token from the native Android app, delivered via Firebase Cloud Messaging.
+export type FcmSubscriptionRecord = { kind: "fcm"; token: string };
+export type PushSubscriptionRecord = WebPushSubscriptionRecord | ApnsSubscriptionRecord | FcmSubscriptionRecord;
 
 // How the two people in a room relate to each other — set once, by whoever
 // registers first, and shared by the room rather than tracked per-person

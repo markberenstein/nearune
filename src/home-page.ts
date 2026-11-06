@@ -29,6 +29,8 @@ export function buildHomePage(): string {
   .box { position:relative; aspect-ratio:1; border-radius:24px; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:14px; text-align:center; color:var(--ink); text-decoration:none; font:inherit; cursor:pointer; overflow:hidden; }
   .box.empty { background:transparent; border:2px dashed var(--line); box-shadow:none; }
   .box.empty .plus { font-size:2.6rem; font-weight:300; color:var(--ink-soft); line-height:1; }
+  .box.empty.first { background:var(--accent); border:none; box-shadow:var(--shadow); }
+  .box.empty.first .plus, .box.empty.first .big { color:var(--on-accent); }
   .box.friend { background:var(--friend); }
   .box .big { font-weight:800; font-size:1.15rem; line-height:1.2; word-break:break-word; max-width:100%; }
   .box .small { font-size:0.78rem; color:var(--ink-soft); word-break:break-word; max-width:100%; }
@@ -147,9 +149,10 @@ export function buildHomePage(): string {
     return box;
   }
 
-  function emptyBox() {
-    var box = el("a", { class: "box empty", href: "/new", "aria-label": "Start a room" });
+  function emptyBox(first) {
+    var box = el("a", { class: "box empty" + (first ? " first" : ""), href: "/new", "aria-label": first ? "Invite your first Nearune partner" : "Start a room" });
     box.appendChild(el("div", { class: "plus", text: "+" }));
+    if (first) box.appendChild(el("div", { class: "big", text: "Invite your first Nearune partner" }));
     return box;
   }
 
@@ -204,7 +207,7 @@ export function buildHomePage(): string {
     if (f && f.status === "waiting") {
       var w = el("div", { class: "box friend" });
       w.appendChild(el("div", { class: "glyph pulse", text: "✨" }));
-      w.appendChild(el("div", { class: "big pulse", text: "Finding a friend…" }));
+      w.appendChild(el("div", { class: "big pulse", text: f.long ? "Sorry, still waiting for your new friend to appear" : "Finding a friend…" }));
       var cx = el("button", { class: "x", type: "button", text: "×", "aria-label": "Cancel" });
       cx.addEventListener("click", function () {
         fetch("/api/friend/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ticket: f.ticket }) }).catch(function () {});
@@ -227,6 +230,7 @@ export function buildHomePage(): string {
     function check() {
       fetch("/api/friend/status?ticket=" + encodeURIComponent(f.ticket)).then(function (r) { return r.json(); }).then(function (d) {
         if (d.status === "matched") { setFriend({ status: "matched", roomId: d.roomId, token: d.token }); render(); }
+        else if (d.status === "waiting" && d.long && !f.long) { f.long = true; setFriend(f); render(); }
         else if (d.status === "none") { setFriend(null); friendMsg = "Your wait timed out. Please try again."; render(); }
       }).catch(function () {});
     }
@@ -241,7 +245,7 @@ export function buildHomePage(): string {
     // A friend room that now exists makes the pending match record obsolete.
     if (rooms.some(function (r) { return r.friend; })) setFriend(null);
     regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
-    for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox());
+    for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox(regular.length === 0 && i === 0));
     slots.appendChild(friendBox());
     document.getElementById("msg").textContent = friendMsg;
     pollFriend();

@@ -12,7 +12,8 @@ type Data = { queue: Waiter[]; matches: Record<string, Match>; blocks: Record<st
 
 const KEY = "friend-queue.json";
 const HOUR = 60 * 60 * 1000;
-const QUEUE_MAX_AGE = 24 * HOUR; // a waiting entry is dropped after a day
+const LONG_WAIT = 24 * HOUR; // after this the waiting person is told we are still looking
+const QUEUE_MAX_AGE = 30 * 24 * HOUR; // a waiting entry is only dropped after 30 days
 const ACTIVE_WINDOW = 2 * HOUR; // only pair people who checked in recently
 const MATCH_KEEP = 72 * HOUR;
 
@@ -111,18 +112,19 @@ export function friendJoin(device: string): Promise<JoinResult> {
   });
 }
 
-export type StatusResult = { status: "waiting" } | { status: "none" } | { status: "matched"; roomId: string; token: string };
+export type StatusResult = { status: "waiting"; long?: boolean } | { status: "none" } | { status: "matched"; roomId: string; token: string };
 
 export function friendStatus(ticket: string): Promise<StatusResult> {
   return locked(async () => {
     const d = await load();
+    prune(d);
     const m = d.matches[ticket];
     if (m) return { status: "matched", roomId: m.roomId, token: m.token } as StatusResult;
     const w = d.queue.find((x) => x.ticket === ticket);
     if (!w) return { status: "none" } as StatusResult;
     w.seen = Date.now();
     await save();
-    return { status: "waiting" } as StatusResult;
+    return { status: "waiting", long: Date.now() - w.at > LONG_WAIT } as StatusResult;
   });
 }
 

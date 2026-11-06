@@ -361,6 +361,23 @@ const RAW = String.raw`<!doctype html>
   }
   .puzzle-setup input[type="date"] { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .reg-top { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 4px 0 18px; }
+  .reg-top img { width: 52px; height: 52px; border-radius: 13px; display: block; box-shadow: 0 6px 18px rgba(80,50,30,0.12); }
+  .reg-top .reg-name { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 1.7rem; letter-spacing: -0.01em; }
+  .reg-back { align-self: flex-start; padding: 6px 4px; font-size: 0.95rem; font-weight: 700; color: var(--accent); text-decoration: none; }
+  .reg-title { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 1.45rem; line-height: 1.2; margin: 0 0 4px; text-align: left; }
+  .reg-sub { color: var(--ink-soft); font-size: 0.92rem; margin: 0 0 6px; text-align: left; }
+  .reg-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin: 10px 0 -2px 8px; text-align: left; }
+  .reg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .reg-chip { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 10px 16px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+  .reg-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .reg-more { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.82rem; text-decoration: underline; cursor: pointer; padding: 6px 4px; align-self: center; }
+  .inv-code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 14px 0 12px; text-align: center; cursor: pointer; }
+  .inv-code-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+  .inv-code-value { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 1.6rem; letter-spacing: 0.02em; margin-top: 2px; word-break: break-all; }
+  .inv-link { font-size: 0.82rem; color: var(--ink-soft); word-break: break-all; text-align: center; margin: 0 0 12px; }
+  .inv-actions { display: flex; flex-direction: column; gap: 8px; }
+  .reg-cta { padding: 14px 22px !important; font-size: 1rem !important; margin-top: 8px; }
   .travel-until-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .travel-until-label { font-size: 0.8rem; color: var(--ink-soft); white-space: nowrap; }
   .puzzle-setup-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
@@ -2983,7 +3000,7 @@ const RAW = String.raw`<!doctype html>
     });
     form.appendChild(btn);
     card.appendChild(form);
-    return card;
+    return regShell(card);
   }
 
   var lastConfirmUrl = "";
@@ -3008,7 +3025,7 @@ const RAW = String.raw`<!doctype html>
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
     if (locCityError) { regError = locCityError; renderApp(); return; }
-    if (!name || !email) { regError = t("Name and email (or Instagram handle) required."); renderApp(); return; }
+    if (!name) { regError = t("Enter your name."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
@@ -3032,8 +3049,10 @@ const RAW = String.raw`<!doctype html>
           renderApp(); return;
         }
         lastConfirmUrl = res.data._confirmUrl || "";
-        lastConfirmEmail = email;
-        try { localStorage.setItem(confirmEmailKey(), email); } catch (e) {}
+        if (email) {
+          lastConfirmEmail = email;
+          try { localStorage.setItem(confirmEmailKey(), email); } catch (e) {}
+        }
         state = res.data;
         showRegisterForm = false;
         if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
@@ -3041,6 +3060,17 @@ const RAW = String.raw`<!doctype html>
         renderApp();
       })
       .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
+  }
+
+  var regShowEmail = false;
+  // Logo + name (and a way back to the rooms screen) above the sign-up card.
+  function regShell(card) {
+    var top = h("div", { class: "reg-top" }, [
+      h("a", { class: "reg-back", href: "/home", text: "\u2039 " + t("Rooms") }),
+      h("img", { src: "/apple-touch-icon.png", alt: "" }),
+      h("div", { class: "reg-name", text: "Nearune" })
+    ]);
+    return h("div", {}, [top, card]);
   }
 
   function registrationFlow() {
@@ -3079,38 +3109,49 @@ const RAW = String.raw`<!doctype html>
       wait.appendChild(h("div", { class: "switch-row" }, rowBtns));
       return wait;
     }
-    var subtitle = soloRegistration
-      ? t("You're the first one here — tell us a bit about yourself.")
-      : tTemplate("You're registering as {name}.", { name: personName(viewerKey) });
     var card = h("div", { class: "card" }, [
-      h("div", { class: "eyebrow" }, [h("span", { text: t("Set up your account") })]),
-      h("p", { class: "question", text: subtitle })
+      h("p", { class: "reg-title", text: soloRegistration ? t("Let's set up your Nearune") : tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) }),
+      h("p", { class: "reg-sub", text: soloRegistration ? t("A few quick details, then you can invite your partner.") : "" })
     ]);
     var form = h("div", { class: "puzzle-setup" });
-    lastLocInputEl = textField(registerDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
+    form.appendChild(h("div", { class: "reg-label", text: t("Where are you?") }));
+    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
+    form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
-    var regEmailInput = textField(registerDraft.email, "Your email", function (v) { registerDraft.email = v; });
-    regEmailInput.setAttribute("inputmode", "email");
-    regEmailInput.setAttribute("autocapitalize", "off");
-    regEmailInput.setAttribute("autocorrect", "off");
-    regEmailInput.setAttribute("autocomplete", "email");
-    form.appendChild(regEmailInput);
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your email is used only to confirm your account and help you get back into your room. If you don't confirm, we keep it for up to 7 days to send a reminder, then delete it. Once you confirm, Nearune doesn't save your email address.") }));
-    form.appendChild(h("p", { class: "puzzle-guess-note", text: t("No email? Enter your Instagram handle instead. Registered with an email? Tap Find your room below if you ever lose your link. With an Instagram handle we can't look your room up, so keep your Nearune link handy.") }));
+    form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
-    // Only the first person through sets this — it's shared by the room
-    // (questionPoolFor() uses it for both people's daily question), so
-    // asking again on the second person's own registration would just be
-    // a choice that silently gets thrown away.
+    // Only the first person through sets this: it's shared by the room
+    // (questionPoolFor() uses it for both people's daily question).
     if (soloRegistration) {
-      form.appendChild(relationshipSelectField(registerDraft.relationship, function (v) { registerDraft.relationship = v; }));
+      form.appendChild(h("div", { class: "reg-label", text: t("Your partner is your...") }));
+      var chips = h("div", { class: "reg-chips" });
+      RELATIONSHIPS.forEach(function (pair) {
+        var chip = h("button", { type: "button", class: "reg-chip" + (registerDraft.relationship === pair[0] ? " on" : ""), text: t(pair[1]) });
+        chip.addEventListener("click", function () { registerDraft.relationship = pair[0]; renderApp(); });
+        chips.appendChild(chip);
+      });
+      form.appendChild(chips);
     }
-    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Sending…") : t("Register") });
+    // Email is optional: only for getting the room back on a new phone.
+    if (regShowEmail || registerDraft.email) {
+      var regEmailInput = textField(registerDraft.email, "Email (optional)", function (v) { registerDraft.email = v; });
+      regEmailInput.setAttribute("inputmode", "email");
+      regEmailInput.setAttribute("autocapitalize", "off");
+      regEmailInput.setAttribute("autocorrect", "off");
+      regEmailInput.setAttribute("autocomplete", "email");
+      form.appendChild(regEmailInput);
+      form.appendChild(h("p", { class: "puzzle-guess-note", text: t("Only used to confirm it's you and help you find your room again.") }));
+    } else {
+      var more = h("button", { type: "button", class: "reg-more", text: t("Add an email to recover your room later") });
+      more.addEventListener("click", function () { regShowEmail = true; renderApp(); });
+      form.appendChild(more);
+    }
+    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
+    var btn = h("button", { class: "puzzle-upload-btn reg-cta", text: regBusy ? t("Just a moment…") : t("Continue") });
     btn.disabled = regBusy;
     btn.addEventListener("click", submitRegister);
     form.appendChild(btn);
@@ -3120,10 +3161,7 @@ const RAW = String.raw`<!doctype html>
       sw.addEventListener("click", function () { viewerKey = null; previewKey = null; weatherExpanded = false; try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {} renderApp(); });
       card.appendChild(h("div", { class: "switch-row" }, [sw]));
     }
-    var lost = h("div", { class: "switch-row" }, [h("a", { href: "/recover", class: "switch-link", text: t("Find your room") })]);
-    card.appendChild(lost);
-    card.appendChild(h("div", { class: "switch-row" }, [h("a", { href: "/new", class: "switch-link", text: t("Open an existing room") })]));
-    return card;
+    return regShell(card);
   }
 
   var lastInviteUrl = "";
@@ -3230,90 +3268,42 @@ const RAW = String.raw`<!doctype html>
   }
 
   var showEmailInvite = false;
+  var inviteAutoTried = false;
+  // Right after setting up a room: just the room code and the invite link, with
+  // buttons to share or copy them. The link is fetched automatically (the
+  // server keeps the same link every time, so asking again is harmless).
   function inviteFlow(otherKey) {
-    var pending = state.pendingInvite && state.pendingInvite[otherKey];
-    var pendingLink = !!(state.pendingInviteLink && state.pendingInviteLink[otherKey]);
-    var pendingHandle = (state.pendingInviteHandle && state.pendingInviteHandle[otherKey]) || (pendingLink ? "link" : "");
-    var otherLabel = inviteeLabel(otherKey);
-    var card = h("div", { class: "card" }, [h("div", { class: "eyebrow" }, [h("span", { text: tTemplate("Invite {name}", { name: otherLabel }) })])]);
-    if (pending && !showInviteForm) {
-      if (pendingHandle) {
-        // Instagram-handle invite: nothing was sent anywhere — the link is
-        // the invite, and the inviter delivers it themselves.
-        card.appendChild(h("p", { class: "question", text: pendingLink ? tTemplate("Send {name} this link by text, WhatsApp or any app.", { name: otherLabel }) : tTemplate("Send {name} this link — Nearune can't message Instagram for you.", { name: "@" + pendingHandle }) }));
-        if (!lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Tap below to get a fresh link to send.") }));
-        if (lastInviteUrl) {
-          // Show the link itself, with real buttons and a next-step hint.
-          card.appendChild(h("p", { class: "puzzle-guess-note", style: "word-break: break-all; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0 0 12px;", text: lastInviteUrl }));
-          card.appendChild(h("div", { class: "puzzle-setup-row", style: "margin-bottom: 10px;" }, [
-            shareLinkButton(lastInviteUrl, t("Share link"), "puzzle-upload-btn"),
-            copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
-          ]));
-          card.appendChild(h("p", { class: "puzzle-guess-note", text: pendingLink ? capFirst(tTemplate("{name} taps the link and sets up their side.", { name: otherLabel })) : tTemplate("Paste it into an Instagram message to {name}. They tap it and set up their side.", { name: "@" + pendingHandle }) }));
-        }
-        if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: t("Room code:") + " " + ROOM }));
-      } else {
-        card.appendChild(h("p", { class: "question", text: tTemplate("Invite emailed — waiting for {name} to accept.", { name: otherLabel }) }));
-        var invSentTo = sentInviteEmail();
-        if (invSentTo) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600; word-break: break-all;", text: tTemplate("Sent to {email}", { email: invSentTo }) }));
-        card.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Ask {name} to check their spam folder if it doesn't show up soon.", { name: otherLabel }) }));
-        if (lastInviteUrl) card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Email may not land — safer to send this link yourself.") }));
-        if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: t("Room code:") + " " + ROOM }));
-        var textInstead = h("button", { class: "puzzle-choose-btn", style: "margin-top: 6px;", text: t("Send by text instead") });
-        textInstead.addEventListener("click", submitInviteLink);
-        card.appendChild(textInstead);
-      }
-      // After two days with no sign-up, nudge the inviter to send the link
-      // themselves (text, Instagram or email) — emails can sit in spam.
-      var invAt = state.pendingInviteAt && state.pendingInviteAt[otherKey];
-      var invDays = invAt ? Math.floor((Date.now() - Date.parse(invAt)) / 86400000) : 0;
-      if (invDays >= 2) {
-        card.appendChild(h("p", { class: "puzzle-guess-note", style: "font-weight: 600;", text: tTemplate("It's been {days} days and {name} hasn't joined yet. Tap below for a fresh link, then send it yourself by text, Instagram or email.", { days: String(invDays), name: otherLabel }) }));
-      }
-      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-      var row = [];
-      // With a handle invite and the link already on screen, Share/Copy are
-      // all that's needed. The regenerate button only appears when the link
-      // is gone (e.g. after a reload), since that's the only way to get it back.
-      if (!(pendingHandle && lastInviteUrl)) {
-        var again = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px;", text: pendingHandle ? t("Get invite link") : t("Resend invite") });
-        again.addEventListener("click", function () { if (pendingLink) { submitInviteLink(); return; } showInviteForm = true; renderApp(); });
-        row.push(again);
-      }
-      if (lastInviteUrl && !pendingHandle) row.push(copyLinkButton(lastInviteUrl));
-      // Escape hatch so nobody feels stuck on this waiting screen.
-      if (row.length) card.appendChild(h("div", { class: "switch-row" }, row));
-      card.appendChild(h("div", { class: "switch-row", style: "margin-top: 4px;" }, [
-        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new", text: t("Start over with a new room") }),
-        h("a", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 6px; display: block;", href: "/new#existing", text: t("Open an existing room") })
+    var card = h("div", { class: "card" }, [
+      h("p", { class: "reg-title", text: t("Invite your partner") }),
+      h("p", { class: "reg-sub", text: t("Send them this link, or give them the room code.") })
+    ]);
+    if (!lastInviteUrl && !regBusy && !inviteAutoTried) {
+      inviteAutoTried = true;
+      setTimeout(submitInviteLink, 0);
+    }
+    if (ROOM) {
+      var codeBox = h("div", { class: "inv-code", title: t("Tap to copy") }, [
+        h("div", { class: "inv-code-label", text: t("Room code") }),
+        h("div", { class: "inv-code-value", text: ROOM })
+      ]);
+      codeBox.addEventListener("click", function () {
+        try { navigator.clipboard.writeText(ROOM); codeBox.querySelector(".inv-code-label").textContent = t("Copied!"); setTimeout(function () { codeBox.querySelector(".inv-code-label").textContent = t("Room code"); }, 1500); } catch (e) {}
+      });
+      card.appendChild(codeBox);
+    }
+    if (lastInviteUrl) {
+      card.appendChild(h("p", { class: "inv-link", text: lastInviteUrl }));
+      card.appendChild(h("div", { class: "inv-actions" }, [
+        shareLinkButton(lastInviteUrl, t("Share invite"), "puzzle-upload-btn reg-cta"),
+        copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
       ]));
+    } else if (regError) {
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
+      var retry = h("button", { class: "puzzle-upload-btn reg-cta", text: t("Try again") });
+      retry.addEventListener("click", submitInviteLink);
+      card.appendChild(retry);
     } else {
-      // Kept short on purpose: one clear action (send a link), with email
-      // or Instagram tucked behind a small toggle.
-      card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:left; margin:0 0 12px;", text: t("Send a link to the one person you want to share Nearune with.") }));
-      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-      var textBtn = h("button", { class: "puzzle-upload-btn", style: "width: 100%;", text: regBusy ? t("Sending…") : t("Get invite link") });
-      textBtn.disabled = regBusy;
-      textBtn.addEventListener("click", submitInviteLink);
-      card.appendChild(textBtn);
-      if (showEmailInvite) {
-        var form = h("div", { class: "puzzle-setup", style: "margin-top: 12px;" });
-        var invInput = textField(inviteEmailDraft, t("Their email or Instagram handle"), function (v) { inviteEmailDraft = v; });
-        invInput.setAttribute("inputmode", "email");
-        invInput.setAttribute("autocapitalize", "off");
-        invInput.setAttribute("autocorrect", "off");
-        form.appendChild(invInput);
-        var btn = h("button", { class: "puzzle-choose-btn", text: regBusy ? t("Sending…") : t("Send invite") });
-        btn.disabled = regBusy;
-        btn.addEventListener("click", submitInvite);
-        form.appendChild(btn);
-        card.appendChild(form);
-      } else {
-        var emailToggle = h("button", { class: "switch-link", style: "color: var(--ink); font-size: 0.9rem; padding: 8px 6px 0; display: block; margin: 0 auto;", text: t("Invite by email or Instagram instead") });
-        emailToggle.addEventListener("click", function () { showEmailInvite = true; renderApp(); });
-        card.appendChild(emailToggle);
-      }
-      if (ROOM) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 10px 0 0;", text: t("Room code:") + " " + ROOM }));
+      card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Getting your link…") }));
     }
     return card;
   }
@@ -3490,7 +3480,6 @@ const RAW = String.raw`<!doctype html>
       ]));
     } else {
       var invCard = inviteFlow(otherKey);
-      invCard.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 12px 0 0;", text: t("When they join: Local Feel from their city, a shared Puzzle, and Never Have I Ever.") }));
       app.appendChild(invCard);
     }
     var weatherBlock = weatherWidgetBlock();
@@ -5724,7 +5713,7 @@ export function buildPrivacyPage() {
     </ul>
 
     <h2>What we do with your email</h2>
-    <p>We ask for an email address once, during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. Once your email is confirmed we do not store it in plain text anywhere. If you start registering but never confirm, we keep the address for up to 7 days solely so we can send you a reminder to finish, then delete it. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
+    <p>You can optionally give an email address during registration, solely to send a one-time confirmation link and (if you ever lose your room link) a recovery link. Once your email is confirmed we do not store it in plain text anywhere. If you start registering but never confirm, we keep the address for up to 7 days solely so we can send you a reminder to finish, then delete it. Instead we store a one-way cryptographic fingerprint of it (an HMAC hash) that lets us recognize the same email again later without being able to reverse it back into the original address. Your email is never shared, sold, or used for marketing.</p>
 
     <h2>Where data lives</h2>
     <p>Room data and uploaded photos are stored in a cloud object-storage bucket. Outgoing emails (confirmations, invites, recovery links) are sent through a transactional email provider (Resend or SendGrid) — the email content passes through that provider but isn't retained by us beyond what's needed to send it. Location text you enter is sent to a free geocoding service (Open-Meteo) solely to resolve a timezone and language default; it isn't stored by us beyond the fields above.</p>

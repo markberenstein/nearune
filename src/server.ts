@@ -977,12 +977,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         body?.relationship === "its_complicated"
           ? body.relationship
           : undefined;
-      if (!isPerson(who) || !name || (!email && !handle)) {
+      // Email / Instagram is optional: a contact that is given must still be
+      // valid, but none at all is fine (the person just can't recover the
+      // room by email later, so they keep their Nearune link).
+      if (!isPerson(who) || !name || (contact && !email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
       if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
-      if (handle) {
+      if (!email) {
         // Instagram-handle sign-up: nothing is emailed (there's no address),
         // so there's nothing to confirm and nothing that could be used to
         // spam anyone — an IP limit is enough. The handle is just a label
@@ -998,7 +1001,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
         const stateH = await saveState(roomId, (s) => {
           if (!s.people) s.people = {};
-          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, instagram: handle };
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}) };
           if (s.pendingConfirm) delete s.pendingConfirm[who];
           if (relationship && !s.relationship) s.relationship = relationship;
         });

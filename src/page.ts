@@ -3321,9 +3321,25 @@ const RAW = String.raw`<!doctype html>
   // buttons to share or copy them. The link is fetched automatically (the
   // server keeps the same link every time, so asking again is harmless).
   function inviteFlow(otherKey) {
+    // Nearune only starts once the other person joins, so this card is the
+    // one thing that matters on a new room. After a day of waiting it turns
+    // into a gentle nudge (no push needed: it shows whenever the app opens).
+    var ageMs = 0;
+    try {
+      var created = state && state.createdAt ? Date.parse(state.createdAt) : 0;
+      if (!created) {
+        var fk = "nearuneFirstSeen:" + ROOM;
+        created = parseInt(localStorage.getItem(fk) || "0", 10);
+        if (!created) { created = Date.now(); localStorage.setItem(fk, String(created)); }
+      }
+      ageMs = Date.now() - created;
+    } catch (e) {}
+    var stillWaiting = ageMs > 24 * 3600 * 1000;
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: t("Invite your partner") }),
-      h("p", { class: "reg-sub", text: t("Send them this link, or give them the room code.") })
+      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
+      h("p", { class: "reg-sub", text: stillWaiting
+        ? t("Your Nearune partner hasn't joined yet. A quick text from you is the best nudge. Tap Text it and just hit send.")
+        : t("Nearune starts the moment they join. It takes ten seconds: text them the link, or give them the room code.") })
     ]);
     if (!lastInviteUrl && !regBusy && !inviteAutoTried) {
       inviteAutoTried = true;
@@ -3344,6 +3360,10 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(h("div", { class: "inv-actions" }, [
         shareLinkButton(lastInviteUrl, t("Share invite"), "puzzle-upload-btn reg-cta"),
         copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
+      ]));
+      // One tap opens Messages with the link already in the message.
+      card.appendChild(h("div", { style: "text-align:center;margin-top:12px;" }, [
+        h("a", { class: "switch-link", href: "sms:&body=" + encodeURIComponent(lastInviteUrl), text: "\u2709\uFE0F " + t("Text it") })
       ]));
     } else if (regError) {
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));

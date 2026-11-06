@@ -58,6 +58,12 @@ function apnsProviderToken(): string {
   return token;
 }
 
+// Set by server.ts: returns the true app-icon number for a device token (the
+// total across every room that device is in), or null to keep the number the
+// caller computed. Keeps one room's push from overwriting the others'.
+export let badgeResolver: ((token: string) => Promise<number | null>) | null = null;
+export function setBadgeResolver(fn: (token: string) => Promise<number | null>) { badgeResolver = fn; }
+
 export type PushPayload = {
   // Omitted (or silent: true) for a badge-only sync — see `silent` below.
   title?: string;
@@ -120,8 +126,12 @@ function sendApnsPushToHost(
       // A silent badge-sync push must go as a "background" push type — Apple
       // requires apns-priority 5 (not 10) for those, and rejects the
       // combination otherwise.
-      "apns-push-type": payload.silent ? "background" : "alert",
-      "apns-priority": payload.silent ? "5" : "10",
+      // A badge-only update goes as an ordinary "alert" push carrying just
+      // the badge number (no banner, no sound). Unlike a "background" push,
+      // iOS does not throttle or drop these, and it applies the badge itself
+      // without waking the app.
+      "apns-push-type": "alert",
+      "apns-priority": "10",
       ...(payload.tag ? { "apns-collapse-id": payload.tag.slice(0, 64) } : {}),
       "content-type": "application/json",
     });
@@ -161,7 +171,7 @@ function sendApnsPushToHost(
     req.end(
       JSON.stringify({
         aps: payload.silent
-          ? { "content-available": 1, badge: payload.badge }
+          ? { badge: payload.badge }
           : { alert: { title: payload.title, body: payload.body }, badge: payload.badge, sound: "default" },
       })
     );
@@ -170,6 +180,12 @@ function sendApnsPushToHost(
 
 async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
   if (!apnsConfigured) return { ok: false, gone: false };
+  if (badgeResolver) {
+    try {
+      const total = await badgeResolver(deviceToken);
+      if (total !== null && total >= 0) payload = { ...payload, badge: total };
+    } catch (e) {}
+  }
   const first = await sendApnsPushToHost(APNS_HOST_PRODUCTION, deviceToken, payload);
   if (first.ok || !first.wrongEnvironment) return { ok: first.ok, gone: first.gone };
   // Production rejected it as a sandbox token — this device's build is

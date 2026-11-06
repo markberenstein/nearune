@@ -43,7 +43,7 @@ import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock } from "./friend";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
-import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured } from "./push";
+import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
 
 // Vulgar / NSFW screen for text people write. Returns a Response to send back
 // when the text is rejected (friend rooms), otherwise null. Every hit is
@@ -1418,7 +1418,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const who = body && body.who;
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      if (!rateLimit("badge-sync:" + roomId + ":" + who, 4, 10 * 60 * 1000)) return json({ ok: true, skipped: true });
+      if (!rateLimit("badge-sync:" + roomId + ":" + who, 20, 10 * 60 * 1000)) return json({ ok: true, skipped: true });
       const cur = await loadState(roomId);
       const sub = cur.pushSubs && cur.pushSubs[who];
       if (!anyPushConfigured || !sub || sub.kind !== "apns") return json({ ok: true, skipped: true });
@@ -1902,6 +1902,58 @@ setTimeout(purgeStaleEmails, 6 * 60 * 1000);
 setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
 setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
 setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
+
+// ---- App-icon badge: always the true total, refreshed regularly ----------
+// A device can be in several rooms; the icon number is the sum of "people who
+// still need to answer today" across all of them. Scanned from storage (a
+// short cache keeps a burst of pushes from re-reading every room).
+let badgeScan: { at: number; byToken: Map<string, number> } | null = null;
+async function scanBadges(force = false): Promise<Map<string, number>> {
+  if (!force && badgeScan && Date.now() - badgeScan.at < 15000) return badgeScan.byToken;
+  const byToken = new Map<string, number>();
+  const ids = await listRoomIds();
+  for (const id of ids) {
+    try {
+      const st = await loadState(id);
+      if (st.closed || !st.pushSubs) continue;
+      const n = unansweredCount(st, todayKeyFor(st));
+      const seen = new Set<string>();
+      for (const who of ["mark", "nikita"] as PersonKey[]) {
+        const sub: any = st.pushSubs[who];
+        if (!sub || sub.kind !== "apns" || !sub.token || seen.has(sub.token)) continue;
+        seen.add(sub.token);
+        byToken.set(sub.token, (byToken.get(sub.token) || 0) + n);
+      }
+    } catch (e) {}
+  }
+  badgeScan = { at: Date.now(), byToken };
+  return byToken;
+}
+setBadgeResolver(async (token) => {
+  const m = await scanBadges();
+  return m.has(token) ? m.get(token)! : null;
+});
+// Every 10 minutes, push the right number to any device whose icon is out of
+// date (a missed push, a new day, an answer on another device).
+const lastBadgeSent = new Map<string, number>();
+async function badgeSweep() {
+  if (!anyPushConfigured) return;
+  try {
+    const m = await scanBadges(true);
+    for (const [token, n] of m) {
+      if (lastBadgeSent.get(token) === n) continue;
+      const r = await sendPush({ kind: "apns", token } as any, { title: "", body: "", badge: n, tag: "badge-sync", silent: true });
+      if (r.ok) lastBadgeSent.set(token, n);
+    }
+  } catch (err) {
+    console.error("[badge-sweep] failed", err);
+  }
+}
+setTimeout(badgeSweep, 60 * 1000);
+setInterval(badgeSweep, 10 * 60 * 1000);
+// Forget what was last sent every 6 hours so a badge that was cleared by hand
+// or never arrived gets corrected even when the number hasn't changed.
+setInterval(() => lastBadgeSent.clear(), 6 * 60 * 60 * 1000);
 
 startQaSchedule();
 startStatsSchedule();

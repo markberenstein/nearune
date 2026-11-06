@@ -4830,7 +4830,7 @@ const RAW = String.raw`<!doctype html>
     // true count to this device (rate-limited here and on the server).
     if (!isNativeApp() || !viewerKey) return;
     var now = Date.now();
-    if (now - lastNativeBadgeSync < 120000) return;
+    if (now - lastNativeBadgeSync < 30000) return;
     lastNativeBadgeSync = now;
     try {
       fetch(RP + "/api/badge-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey }) }).catch(function () {});
@@ -5383,7 +5383,7 @@ const RAW = String.raw`<!doctype html>
     renderApp();
   }
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") { loadWeather(); loadNews(); loadMusic(); loadMovies(); }
+    if (document.visibilityState === "visible") { lastNativeBadgeSync = 0; syncAppBadge(); loadWeather(); loadNews(); loadMusic(); loadMovies(); }
   });
   // Picks dark or pale text, whichever reads better against BOTH ends of the
   // sky gradient (WCAG contrast), instead of assuming day = dark, night = pale.

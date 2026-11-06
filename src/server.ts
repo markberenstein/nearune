@@ -50,9 +50,14 @@ import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeRe
 // Vulgar / NSFW screen for text people write. Returns a Response to send back
 // when the text is rejected (friend rooms), otherwise null. Every hit is
 // recorded for the admin page.
-async function moderate(roomId: string, who: string, kind: string, text: string): Promise<Response | null> {
+async function moderate(roomId: string, who: string, kind: string, text: string, confirmed = false): Promise<Response | null> {
   const word = screenText(text);
   if (!word) return null;
+  // Rooms between people who know each other: warn first and let the writer
+  // edit. Nothing is saved or logged until they choose to post it anyway.
+  if (!confirmed && (await loadState(roomId)).origin !== "friend") {
+    return new Response(JSON.stringify({ error: "flagged_confirm" }), { status: 409, headers: { "content-type": "application/json" } });
+  }
   let friend = false;
   await saveState(roomId, (s) => {
     friend = s.origin === "friend";
@@ -713,7 +718,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 4000);
-      const blockedA = await moderate(roomId, who, "answer", trimmed);
+      const blockedA = await moderate(roomId, who, "answer", trimmed, body.confirmFlagged === true);
       if (blockedA) return blockedA;
       const state = await saveState(roomId, (s) => {
         if (!s.answers[date]) s.answers[date] = {};
@@ -890,7 +895,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 300);
-      const blockedC = await moderate(roomId, who, "comment", trimmed);
+      const blockedC = await moderate(roomId, who, "comment", trimmed, body.confirmFlagged === true);
       if (blockedC) return blockedC;
       const state = await saveState(roomId, (s) => {
         if (!s.comments[date]) s.comments[date] = [];
@@ -1475,7 +1480,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who, round, text } = body || {};
       const trimmed = typeof text === "string" ? text.trim().slice(0, 300) : "";
       if (!isPerson(who) || !Number.isInteger(round) || round < 1 || !trimmed) return json({ error: "invalid" }, { status: 400 });
-      const blockedN = await moderate(roomId, who, "nhie-comment", trimmed);
+      const blockedN = await moderate(roomId, who, "nhie-comment", trimmed, body.confirmFlagged === true);
       if (blockedN) return blockedN;
       const state = await saveState(roomId, (s) => {
         if (!s.nhie || round > s.nhie.round) return;

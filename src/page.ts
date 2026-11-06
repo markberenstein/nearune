@@ -1335,7 +1335,18 @@ const RAW = String.raw`<!doctype html>
 
   async function api(path, body) {
     var res = await fetch(RP + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) { var er = new Error("request failed"); try { er.code = (await res.json()).error; } catch (x) {} throw er; }
+    if (!res.ok) {
+      var er = new Error("request failed"); try { er.code = (await res.json()).error; } catch (x) {}
+      // The message has words the screen flags: warn, and let the writer edit
+      // it (Cancel) or post it anyway (OK).
+      if (er.code === "flagged_confirm" && !(body && body.confirmFlagged)) {
+        if (window.confirm(t("This message contains language that some people may find offensive. Post it anyway? Tap Cancel to edit it first."))) {
+          return api(path, Object.assign({}, body, { confirmFlagged: true }));
+        }
+        var ec = new Error("cancelled"); ec.code = "flag_cancelled"; throw ec;
+      }
+      throw er;
+    }
     var next = await res.json();
     state = next;
     online = true;
@@ -2604,7 +2615,7 @@ const RAW = String.raw`<!doctype html>
     var text = editDraftText.trim();
     if (!text) return;
     try { await api("/api/answer", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+    catch (e) { if (e && e.code === "flag_cancelled") return; if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
     editingEntry = null;
     renderApp();
   }
@@ -2630,7 +2641,7 @@ const RAW = String.raw`<!doctype html>
     var text = (commentDrafts[dateKeyVal] || "").trim();
     if (!text) return;
     try { await api("/api/comment", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+    catch (e) { if (e && e.code === "flag_cancelled") return; if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
     commentDrafts[dateKeyVal] = "";
     renderApp();
   }
@@ -3432,7 +3443,7 @@ const RAW = String.raw`<!doctype html>
         if (!text) return;
         btn.disabled = true;
         try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
-        catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+        catch (e) { if (e && e.code === "flag_cancelled") { btn.disabled = false; return; } if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
         renderApp();
       });
       form.appendChild(textarea); form.appendChild(btn);
@@ -4845,7 +4856,7 @@ const RAW = String.raw`<!doctype html>
         if (!text) return;
         btn.disabled = true;
         try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
-        catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+        catch (e) { if (e && e.code === "flag_cancelled") { btn.disabled = false; return; } if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
         renderApp();
       });
       form.appendChild(textarea); form.appendChild(btn);

@@ -7,7 +7,7 @@ export type AdminRoomSummary = {
   // Display name the first partner typed (shown as the room title), if any.
   roomName?: string;
   createdAt: string | null;
-  people: { name: string; confirmed: boolean; location?: string }[];
+  people: { who?: string; name: string; confirmed: boolean; location?: string }[];
   // Device, app-or-web and language the room was created from (no IP kept).
   via?: string | null;
   lastActive: string | null;
@@ -42,6 +42,9 @@ const NOTICES: Record<string, string> = {
   sent: "Reminder email sent.",
   closed: "Room closed. Both people will see that it has ended.",
   renamed: "Room updated.",
+  location_set: "Location updated.",
+  city_required: "That location needs to be a city (for example, Palo Alto, CA). Nothing was changed.",
+  location_failed: "Could not update the location. Check the logs.",
   code_taken: "That room code is already in use. Nothing was changed.",
   bad_code: "Room codes use only letters and numbers (4 to 40 characters). Nothing was changed.",
   rename_failed: "Could not rename that room. Check the logs.",
@@ -135,7 +138,15 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
             <button type="submit" class="remind-btn">Rename</button>
           </form>`
         : "";
-      const action = remind + renameBtn + closeBtn + (r.roomId
+      const locBtns = r.roomId && !r.closed
+        ? r.people.filter((p) => p.who).map((p) => `<form method="POST" action="/set-location?${secretQS}" style="margin-bottom:6px" data-cur="${adminEsc(p.location || "")}" data-nm="${adminEsc(p.name)}" onsubmit="var l = prompt('City for ' + this.dataset.nm + ' (for example Palo Alto, CA):', this.dataset.cur); if (l === null || !l.trim()) return false; this.elements.location.value = l.trim(); return true;">
+            <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
+            <input type="hidden" name="who" value="${adminEsc(p.who || "")}">
+            <input type="hidden" name="location" value="">
+            <button type="submit" class="remind-btn">Set ${adminEsc(p.name)}\u2019s city</button>
+          </form>`).join("")
+        : "";
+      const action = remind + renameBtn + locBtns + closeBtn + (r.roomId
         ? `<form method="POST" action="/delete-room?${secretQS}" onsubmit="return confirm('Delete room ${adminEsc(r.roomId)}? This permanently erases its answers, comments, and photos. This cannot be undone.');">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
             <button type="submit" class="del-btn">Delete</button>

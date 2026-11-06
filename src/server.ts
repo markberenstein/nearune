@@ -469,6 +469,32 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json({ ok: true });
     }
 
+    // Admin tool: correct a person's registered city (and timezone). Body:
+    // { roomId, who, location }.
+    if (req.method === "POST" && url.pathname === "/api/admin/location") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const lb = await readJson(req);
+      const rid = typeof lb?.roomId === "string" ? lb.roomId : "";
+      const who = lb?.who;
+      let loc = typeof lb?.location === "string" ? lb.location.trim().slice(0, 80) : "";
+      if (!rid || !isPerson(who) || !loc || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
+      if (!(await isCityLevelLocation(loc))) return json({ error: "city_required" }, { status: 400 });
+      loc = await canonicalPlaceLabel(loc);
+      const tzNew = await resolveTimezoneFromLocation(loc);
+      let found = false;
+      await saveState(rid, (s) => {
+        const p = s.people && s.people[who];
+        if (!p) return;
+        found = true;
+        p.location = loc;
+        if (tzNew) p.tz = tzNew;
+      });
+      if (!found) return json({ error: "no_person" }, { status: 404 });
+      console.log("[admin] location room=" + rid + " who=" + who + " -> " + loc + (tzNew ? " (" + tzNew + ")" : ""));
+      return json({ ok: true, location: loc });
+    }
+
     // Admin tool: email a "finish registering" reminder to someone whose email
     // sign-up is still unconfirmed. Called by the nearune-admin service with
     // the x-cron-secret header. Body: { roomId, who }.

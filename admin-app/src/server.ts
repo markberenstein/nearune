@@ -63,9 +63,8 @@ Bun.serve({
           dropCachedState(id);
           const state = await loadState(id);
           const people = (["mark", "nikita"] as PersonKey[])
-            .map((k) => state.people?.[k])
-            .filter((p): p is NonNullable<typeof p> => !!p)
-            .map((p) => ({ name: p.name, confirmed: p.confirmed, location: p.location || "" }));
+            .filter((k) => !!state.people?.[k])
+            .map((k) => ({ who: k as string, name: state.people![k]!.name, confirmed: state.people![k]!.confirmed, location: state.people![k]!.location || "" }));
           const answerKeys = Object.keys(state.answers).sort();
           const lastActive = answerKeys.length > 0 ? answerKeys[answerKeys.length - 1] : null;
           const pushCount = (["mark", "nikita"] as PersonKey[]).filter((k) => !!state.pushSubs?.[k]).length;
@@ -175,6 +174,36 @@ Bun.serve({
         }
       }
       return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + rmsg, 303);
+    }
+
+    // Corrects where a person is registered (city and timezone).
+    if (req.method === "POST" && url.pathname === "/set-location") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let lrid = "", lwho = "", lloc = "";
+      try {
+        const body = await req.formData();
+        lrid = String(body.get("roomId") || "");
+        lwho = String(body.get("who") || "");
+        lloc = String(body.get("location") || "");
+      } catch {}
+      let lmsg = "location_failed";
+      const lApp = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const lCron = Bun.env.CRON_SECRET || "";
+      if (!lApp || !lCron) lmsg = "not_configured";
+      else if (lrid && lloc) {
+        try {
+          const r = await fetch(lApp + "/api/admin/location", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-cron-secret": lCron },
+            body: JSON.stringify({ roomId: lrid, who: lwho, location: lloc }),
+          });
+          const rd: any = await r.json().catch(() => ({}));
+          lmsg = r.ok ? "location_set" : rd && rd.error === "city_required" ? "city_required" : "location_failed";
+        } catch (err) {
+          console.error("[admin] set-location failed", err);
+        }
+      }
+      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + lmsg, 303);
     }
 
     if (req.method === "POST" && url.pathname === "/remind-room") {

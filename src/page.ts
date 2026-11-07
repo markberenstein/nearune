@@ -334,6 +334,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
   .puzzle-grid-wrap { position: relative; border-radius: 14px; overflow: hidden; touch-action: none; }
+  .zoomable { touch-action: pan-x pan-y; -webkit-touch-callout: none; }
+  .puzzle-grid-wrap.zoomable { touch-action: none; }
   .puzzle-zoom-overlay { position: fixed; inset: 0; background: #14100C; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; }
   .puzzle-zoom-overlay .puzzle-grid-wrap { width: 100vw; height: 100vh; border-radius: 0; box-shadow: none; }
   .puzzle-zoom-overlay .puzzle-grid { width: 100vmax; height: 100vmax; }
@@ -1353,6 +1355,96 @@ const RAW = String.raw`<!doctype html>
     return next;
   }
 
+  // ---- Pinch-to-zoom for every photo and video (house standard) -------------
+  // Instagram-style: put two fingers anywhere on or around a photo or video
+  // marked class "zoomable". It lifts over the whole screen, follows your
+  // fingers, and springs back when you let go. Scrolling is paused while two
+  // fingers are down. Photos are lifted into a top-level layer (a placeholder
+  // keeps the page layout); videos are scaled in place so they keep playing.
+  var pinchG = null;
+  function pinchDist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
+  function pinchInside(r, x, y, pad) { return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad; }
+  function pinchFind(a, b) {
+    var mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
+    var list = document.querySelectorAll(".zoomable"), best = null, bestScore = 99, bestArea = 1e12;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      if (r.width < 40 || r.height < 40) continue;
+      var score = 99;
+      if (pinchInside(r, mx, my, 0)) score = 0;
+      else if (pinchInside(r, a.clientX, a.clientY, 0) || pinchInside(r, b.clientX, b.clientY, 0)) score = 1;
+      else if (pinchInside(r, mx, my, 70)) score = 2;
+      if (score === 99) continue;
+      var area = r.width * r.height;
+      if (score < bestScore || (score === bestScore && area < bestArea)) { best = list[i]; bestScore = score; bestArea = area; }
+    }
+    return best;
+  }
+  function pinchBegin(el, a, b) {
+    var r = el.getBoundingClientRect();
+    var g = { el: el, startDist: pinchDist(a, b) || 1, cx: (a.clientX + b.clientX) / 2, cy: (a.clientY + b.clientY) / 2, inPlace: el.tagName === "VIDEO", styleAttr: el.getAttribute("style"), ph: null, ov: null, done: false };
+    if (g.inPlace) {
+      if (window.getComputedStyle(el).position === "static") el.style.position = "relative";
+      el.style.zIndex = "10001";
+    } else {
+      var cs = window.getComputedStyle(el);
+      var ph = document.createElement("div");
+      ph.style.cssText = "width:" + r.width + "px;height:" + r.height + "px;margin:" + cs.margin + ";flex:none;display:" + (cs.display === "inline" ? "inline-block" : cs.display) + ";";
+      if (el.parentNode) el.parentNode.insertBefore(ph, el);
+      g.ph = ph;
+      var ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;z-index:10000;pointer-events:none;background:rgba(0,0,0,0);transition:background 0.2s;";
+      document.body.appendChild(ov);
+      g.ov = ov;
+      el.style.position = "fixed"; el.style.left = r.left + "px"; el.style.top = r.top + "px";
+      el.style.width = r.width + "px"; el.style.height = r.height + "px"; el.style.margin = "0"; el.style.maxHeight = "none";
+      ov.appendChild(el);
+    }
+    el.style.transformOrigin = (g.cx - r.left) + "px " + (g.cy - r.top) + "px";
+    el.style.willChange = "transform";
+    el.style.transition = "none";
+    pinchG = g;
+    document.documentElement.style.overflow = "hidden";
+  }
+  function pinchMove(a, b) {
+    var g = pinchG; if (!g || g.done) return;
+    var s = Math.min(Math.max(pinchDist(a, b) / g.startDist, 1), 6);
+    var tx = (a.clientX + b.clientX) / 2 - g.cx, ty = (a.clientY + b.clientY) / 2 - g.cy;
+    g.el.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + s + ")";
+    if (g.ov) g.ov.style.background = "rgba(0,0,0," + Math.min(0.7, (s - 1) * 0.5) + ")";
+  }
+  function pinchEnd() {
+    var g = pinchG; if (!g || g.done) return;
+    g.done = true;
+    pinchG = null;
+    document.documentElement.style.overflow = "";
+    g.el.style.transition = "transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15)";
+    g.el.style.transform = "translate(0px,0px) scale(1)";
+    if (g.ov) g.ov.style.background = "rgba(0,0,0,0)";
+    setTimeout(function () {
+      if (g.styleAttr === null) g.el.removeAttribute("style"); else g.el.setAttribute("style", g.styleAttr);
+      if (g.ph) {
+        if (g.ph.parentNode) g.ph.parentNode.replaceChild(g.el, g.ph);
+        else if (g.el.parentNode) g.el.parentNode.removeChild(g.el);
+      }
+      if (g.ov && g.ov.parentNode) g.ov.parentNode.removeChild(g.ov);
+    }, 320);
+  }
+  document.addEventListener("touchstart", function (e) {
+    if (pinchG) { if (e.touches.length >= 2) e.preventDefault(); return; }
+    if (e.touches.length !== 2) return;
+    var el = pinchFind(e.touches[0], e.touches[1]);
+    if (!el) return;
+    e.preventDefault();
+    pinchBegin(el, e.touches[0], e.touches[1]);
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    if (!pinchG) return;
+    if (e.touches.length >= 2) { e.preventDefault(); pinchMove(e.touches[0], e.touches[1]); }
+  }, { passive: false });
+  document.addEventListener("touchend", function (e) { if (pinchG && e.touches.length < 2) pinchEnd(); }, { passive: true });
+  document.addEventListener("touchcancel", function () { if (pinchG) pinchEnd(); }, { passive: true });
+
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
     attrs = attrs || {};
@@ -1964,101 +2056,8 @@ const RAW = String.raw`<!doctype html>
   }
 
   function puzzleZoomableGrid(imgSrc) {
-    var wrap = h("div", { class: "puzzle-grid-wrap" });
-    var grid = puzzleGrid(imgSrc);
-    wrap.appendChild(grid);
-
-    var scale = 1, panX = 0, panY = 0;
-    var pinchStartDist = 0, pinchStartScale = 1;
-    var panStartX = 0, panStartY = 0, pointerStartX = 0, pointerStartY = 0;
-    var lastTapTime = 0;
-    var overlay = null, placeholder = null;
-
-    function ensurePlaceholder() {
-      if (!placeholder && wrap.parentNode) {
-        placeholder = document.createComment("puzzle-zoom-placeholder");
-        wrap.parentNode.insertBefore(placeholder, wrap);
-      }
-    }
-    function activateZoom() {
-      ensurePlaceholder();
-      if (!overlay) {
-        overlay = h("div", { class: "puzzle-zoom-overlay" });
-        overlay.addEventListener("click", function (e) { if (e.target === overlay) resetZoom(); });
-      }
-      if (!overlay.parentNode) {
-        document.body.appendChild(overlay);
-        overlay.appendChild(wrap);
-      }
-    }
-    function deactivateZoom() {
-      if (overlay && overlay.parentNode) {
-        if (placeholder && placeholder.parentNode) {
-          placeholder.parentNode.insertBefore(wrap, placeholder);
-        }
-        overlay.parentNode.removeChild(overlay);
-      }
-    }
-    function updateZoomState() {
-      if (scale > 1) activateZoom(); else deactivateZoom();
-    }
-    function resetZoom() {
-      scale = 1; panX = 0; panY = 0;
-      applyTransform();
-    }
-    function clampPan() {
-      var gw = grid.offsetWidth * scale;
-      var gh = grid.offsetHeight * scale;
-      var maxX = Math.max(0, (gw - wrap.clientWidth) / 2);
-      var maxY = Math.max(0, (gh - wrap.clientHeight) / 2);
-      panX = Math.min(Math.max(panX, -maxX), maxX);
-      panY = Math.min(Math.max(panY, -maxY), maxY);
-    }
-    function applyTransform() {
-      updateZoomState();
-      clampPan();
-      grid.style.transform = "translate(-50%,-50%) translate(" + panX + "px," + panY + "px) scale(" + scale + ")";
-      grid.style.position = "relative";
-      grid.style.left = "50%";
-      grid.style.top = "50%";
-    }
-    function clampScale(s) { return Math.min(Math.max(s, 1), 8); }
-    function dist(t1, t2) {
-      var dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
-      return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    wrap.addEventListener("touchstart", function (e) {
-      if (e.touches.length === 2) {
-        pinchStartDist = dist(e.touches[0], e.touches[1]);
-        pinchStartScale = scale;
-      } else if (e.touches.length === 1) {
-        pointerStartX = e.touches[0].clientX;
-        pointerStartY = e.touches[0].clientY;
-        panStartX = panX; panStartY = panY;
-        var now = Date.now();
-        if (now - lastTapTime < 300) {
-          scale = scale > 1 ? 1 : 2.5;
-          if (scale === 1) { panX = 0; panY = 0; }
-          applyTransform();
-        }
-        lastTapTime = now;
-      }
-    }, { passive: true });
-    wrap.addEventListener("touchmove", function (e) {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        var d = dist(e.touches[0], e.touches[1]);
-        scale = clampScale(pinchStartScale * (d / pinchStartDist));
-        applyTransform();
-      } else if (e.touches.length === 1 && scale > 1) {
-        e.preventDefault();
-        panX = panStartX + (e.touches[0].clientX - pointerStartX);
-        panY = panStartY + (e.touches[0].clientY - pointerStartY);
-        applyTransform();
-      }
-    }, { passive: false });
-
+    var wrap = h("div", { class: "puzzle-grid-wrap zoomable" });
+    wrap.appendChild(puzzleGrid(imgSrc));
     return wrap;
   }
 
@@ -2367,7 +2366,8 @@ const RAW = String.raw`<!doctype html>
     ov.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; gap: 16px;";
     var vid = document.createElement("video");
     vid.src = "/nhie-howto.mp4";
-    vid.controls = true; vid.autoplay = true; vid.playsInline = true;
+    vid.controls = false; vid.autoplay = true; vid.playsInline = true;
+    vid.className = "zoomable";
     vid.setAttribute("playsinline", ""); vid.setAttribute("webkit-playsinline", "");
     vid.style.cssText = "max-width: 100%; max-height: 78vh; border-radius: 12px; background: #000;";
     var closeBtn = document.createElement("button");
@@ -2380,9 +2380,43 @@ const RAW = String.raw`<!doctype html>
     }
     closeBtn.addEventListener("click", shut);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
+    // Custom controls (not the browser's own) so a two-finger pinch anywhere
+    // on the video is never swallowed by the native player.
+    var bar = document.createElement("div");
+    bar.style.cssText = "display: flex; align-items: center; gap: 10px; width: 100%; max-width: 560px; color: #fff;";
+    function barBtn(label) {
+      var bb = document.createElement("button");
+      bb.type = "button"; bb.textContent = label;
+      bb.style.cssText = "border: 0; border-radius: 999px; min-width: 40px; height: 40px; padding: 0 12px; font: inherit; font-weight: 700; background: rgba(255,255,255,0.18); color: #fff; cursor: pointer;";
+      return bb;
+    }
+    var pp = barBtn("\u275A\u275A");
+    var seek = document.createElement("input");
+    seek.type = "range"; seek.min = "0"; seek.max = "1000"; seek.value = "0"; seek.style.cssText = "flex: 1; min-width: 0;";
+    var tm = document.createElement("span");
+    tm.style.cssText = "font-size: 13px; min-width: 82px; text-align: right;";
+    var mu = barBtn("\uD83D\uDD0A");
+    var seeking = false;
+    function fmt(x) { x = Math.max(0, Math.floor(x || 0)); return Math.floor(x / 60) + ":" + ("0" + (x % 60)).slice(-2); }
+    function sync() {
+      pp.textContent = vid.paused ? "\u25B6" : "\u275A\u275A";
+      if (vid.duration && !seeking) seek.value = String(Math.round(vid.currentTime / vid.duration * 1000));
+      tm.textContent = fmt(vid.currentTime) + " / " + fmt(vid.duration);
+      mu.textContent = vid.muted ? "\uD83D\uDD07" : "\uD83D\uDD0A";
+    }
+    function toggle() { try { if (vid.paused) { var q = vid.play(); if (q && q.catch) q.catch(function () {}); } else { vid.pause(); } } catch (e) {} }
+    ["timeupdate", "play", "pause", "loadedmetadata", "ended", "volumechange"].forEach(function (n) { vid.addEventListener(n, sync); });
+    pp.addEventListener("click", toggle);
+    vid.addEventListener("click", toggle);
+    mu.addEventListener("click", function () { vid.muted = !vid.muted; });
+    seek.addEventListener("input", function () { seeking = true; if (vid.duration) vid.currentTime = Number(seek.value) / 1000 * vid.duration; });
+    seek.addEventListener("change", function () { seeking = false; });
+    bar.appendChild(pp); bar.appendChild(seek); bar.appendChild(tm); bar.appendChild(mu);
     ov.appendChild(vid);
+    ov.appendChild(bar);
     ov.appendChild(closeBtn);
     document.body.appendChild(ov);
+    sync();
     try { var pr = vid.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) {}
   }
   function nhieVideo() {
@@ -4510,75 +4544,13 @@ const RAW = String.raw`<!doctype html>
   // pan; the close button or zooming back out returns it inline.
   function zoomablePhoto(src, alt) {
     var wrap = h("div", { class: "photo-zoom-wrap" });
-    var img = h("img", { class: "shared-photo", src: src, alt: alt });
-    wrap.appendChild(img);
-    var scale = 1, panX = 0, panY = 0, startDist = 0, startScale = 1;
-    var startX = 0, startY = 0, startPanX = 0, startPanY = 0, lastTap = 0;
-    var overlay = null, placeholder = null;
-    function openOverlay() {
-      if (overlay) return;
-      placeholder = document.createComment("photo-zoom");
-      if (wrap.parentNode) wrap.parentNode.insertBefore(placeholder, wrap);
-      overlay = h("div", { class: "puzzle-zoom-overlay photo-zoom-overlay" });
-      var closeBtn = h("button", { class: "photo-zoom-close", text: "\u2715" });
-      closeBtn.addEventListener("click", closeOverlay);
-      overlay.appendChild(wrap);
-      overlay.appendChild(closeBtn);
-      document.body.appendChild(overlay);
-    }
-    function closeOverlay() {
-      scale = 1; panX = 0; panY = 0;
-      draw();
-      if (!overlay) return;
-      if (placeholder && placeholder.parentNode) {
-        placeholder.parentNode.insertBefore(wrap, placeholder);
-        placeholder.parentNode.removeChild(placeholder);
-      }
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      overlay = null; placeholder = null;
-    }
-    function draw() {
-      var maxX = Math.max(0, (wrap.clientWidth * scale - wrap.clientWidth) / 2);
-      var maxY = Math.max(0, (wrap.clientHeight * scale - wrap.clientHeight) / 2);
-      panX = Math.min(Math.max(panX, -maxX), maxX);
-      panY = Math.min(Math.max(panY, -maxY), maxY);
-      img.style.transform = scale > 1 ? "translate(" + panX + "px," + panY + "px) scale(" + scale + ")" : "";
-    }
-    function dist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
-    wrap.addEventListener("touchstart", function (e) {
-      if (e.touches.length === 2) {
-        startDist = dist(e.touches[0], e.touches[1]);
-        startScale = scale;
-      } else if (e.touches.length === 1) {
-        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-        startPanX = panX; startPanY = panY;
-        var now = Date.now();
-        if (now - lastTap < 300) {
-          if (scale > 1) { closeOverlay(); } else { scale = 2.5; openOverlay(); draw(); }
-        }
-        lastTap = now;
-      }
-    }, { passive: true });
-    wrap.addEventListener("touchmove", function (e) {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        scale = Math.min(Math.max(startScale * (dist(e.touches[0], e.touches[1]) / startDist), 1), 8);
-        if (scale > 1) openOverlay();
-        draw();
-      } else if (e.touches.length === 1 && scale > 1) {
-        e.preventDefault();
-        panX = startPanX + (e.touches[0].clientX - startX);
-        panY = startPanY + (e.touches[0].clientY - startY);
-        draw();
-      }
-    }, { passive: false });
-    wrap.addEventListener("touchend", function () { if (scale <= 1.02 && overlay) closeOverlay(); }, { passive: true });
+    wrap.appendChild(h("img", { class: "shared-photo zoomable", src: src, alt: alt }));
     return wrap;
   }
   function photoRow(personKey, label, photoAt, caption, expanded, onToggle, canReport) {
     var box = h("div", {});
     var row = h("div", { class: "photo-row" });
-    var img = h("img", { class: "photo-thumb", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label });
+    var img = h("img", { class: "photo-thumb zoomable", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label });
     img.addEventListener("click", onToggle);
     row.appendChild(img);
     var meta = h("div", { class: "photo-meta" });

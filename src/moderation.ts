@@ -9,10 +9,10 @@ const WORDS = [
   "porn", "porno", "nude", "nudes", "naked", "sexting", "sext", "horny", "boner", "erection", "orgasm", "masturbate",
   "masturbating", "dildo", "vibrator", "fetish", "bdsm", "hentai", "onlyfans", "nsfw", "tits", "titties", "boobs", "nipple",
   "nipples", "penis", "vagina", "genitals", "breast", "boob", "boobie", "boobies", "testicle", "testicles", "scrotum", "clitoris", "vulva", "butthole", "arse", "send pics", "dick pic", "nigger", "nigga", "faggot", "retard", "tranny",
-  // Milder profanity and insults: the writer is only asked to double-check
-  // (in rooms between people who know each other), so lean toward flagging.
-  "damn", "dammit", "goddamn", "crap", "crappy", "piss", "pissed", "wtf", "stfu", "gtfo", "screw you", "go to hell",
-  "idiot", "moron", "stupid", "loser", "dumbass", "jackass", "asshat", "arsehole", "douche", "douchebag", "prick", "scumbag", "jerkoff",
+  // Insults and more slurs: the writer is only asked to double-check (in rooms
+  // between people who know each other), so lean toward flagging. Mild
+  // profanity (damn, crap, piss, wtf...) is deliberately allowed.
+  "idiot", "moron", "loser", "dumbass", "jackass", "asshat", "arsehole", "douche", "douchebag", "prick", "scumbag", "jerkoff",
   "fag", "dyke", "spic", "chink", "kike", "gook", "wetback", "retarded", "slutty", "skank", "hoe",
 ];
 

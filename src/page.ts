@@ -5435,7 +5435,9 @@ const RAW = String.raw`<!doctype html>
     // the app was deleted and reinstalled) — there's nothing left on the
     // device to recognize automatically, so this has to be a deliberate,
     // explicit click rather than something auto-detected.
-    location.href = "/new";
+    // Brand-new visitors land on the rooms page (welcome + "Invite your first
+    // Nearune partner" + "Make a friend"), not straight on the bare form.
+    location.href = "/home";
     return true;
   }
 
@@ -5698,6 +5700,7 @@ export function buildNewRoomPage(): string {
   button.ghost { display:block; width:100%; background:transparent; color:var(--accent); border:1px solid var(--line); border-radius:999px; padding:13px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; margin:0 0 12px; }
   .or { text-align:center; color:var(--ink-soft); font-size:0.8rem; margin:0 0 12px; }
   .err { color:var(--danger); font-size:0.85rem; text-align:center; margin:12px 0 0; }
+  .hint { color:var(--ink-soft); font-size:0.88rem; line-height:1.4; margin:-4px 0 12px; }
   .err:empty { display:none; }
   .foot { text-align:center; margin-top:22px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
@@ -5709,7 +5712,8 @@ export function buildNewRoomPage(): string {
   <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
   <div class="card">
     <h2>Start a room</h2>
-    <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Room name" aria-label="Room name">
+    <p class="hint">Name it anything, or leave it blank and we'll pick one. Next you'll add your city, then invite your person.</p>
+    <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Room name (optional)" aria-label="Room name (optional)">
     <button class="main" id="go" type="button">Create room</button>
     <p class="err" id="msg"></p>
   </div>

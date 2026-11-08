@@ -41,6 +41,9 @@ export function buildHomePage(): string {
   .x { position:absolute; top:8px; right:10px; background:none; border:none; font:inherit; font-size:1.25rem; line-height:1; color:var(--ink-soft); padding:6px; cursor:pointer; }
   .pulse { animation:pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.45; } }
+  .welcome { text-align:center; margin:0 4px 18px; }
+  .welcome .w1 { font-size:1.15rem; font-weight:700; color:var(--ink); margin:0 0 6px; }
+  .welcome .w2 { font-size:0.92rem; line-height:1.45; color:var(--ink-soft); margin:0; }
   .msg { text-align:center; font-size:0.85rem; color:var(--danger); margin:14px 0 0; min-height:1em; }
   .foot { text-align:center; margin-top:26px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
@@ -54,6 +57,10 @@ export function buildHomePage(): string {
 <body>
 <div class="wrap">
   <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
+  <div class="welcome" id="welcome" hidden>
+    <p class="w1">One question a day with someone you care about.</p>
+    <p class="w2">You both answer, then see each other&#39;s answer, plus a peek at their weather, time and local life. Invite your person, or tap <strong>Make a friend</strong> to be matched with someone new.</p>
+  </div>
   <div class="grid" id="slots"></div>
   <p class="msg" id="msg"></p>
   <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a></p>
@@ -275,6 +282,8 @@ export function buildHomePage(): string {
     var regular = rooms.filter(function (r) { return !r.friend; });
     // A friend room that now exists makes the pending match record obsolete.
     if (rooms.some(function (r) { return r.friend; })) setFriend(null);
+    var wel = document.getElementById("welcome");
+    if (wel) wel.hidden = rooms.length > 0 || !!jget(LS_FRIEND, null);
     regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
     for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox(regular.length === 0 && i === 0));
     slots.appendChild(friendBox());

@@ -1039,7 +1039,19 @@ const RAW = String.raw`<!doctype html>
     var d = new Date(keyToUtcMs(key) + 12 * 3600000);
     return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(d);
   }
-  function clockFor(tz) { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date()); }
+  function clockFor(tz, military) {
+    if (military) {
+      // Military (24-hour) time, written the military way: 0730, 1930.
+      var hh = "", mm = "";
+      new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).forEach(function (p) {
+        if (p.type === "hour") hh = p.value; else if (p.type === "minute") mm = p.value;
+      });
+      if (hh === "24") hh = "00";
+      return hh + mm;
+    }
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date());
+  }
+  function isMilitaryKey(key) { return !!(state && state.people && state.people[key] && state.people[key].military); }
   // The registering browser's own IANA zone — captured automatically so the
   // other person's clock is correct without asking anyone to pick a
   // timezone by hand (free-text "location" alone can't reliably give us one).
@@ -2810,7 +2822,7 @@ const RAW = String.raw`<!doctype html>
       if (CapApp.getLaunchUrl) CapApp.getLaunchUrl().then(function (r) { if (r && r.url) handleAppUrl(r.url, true); }, function () {});
     } catch (e) {}
   })();
-  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
+  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "", military: false };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Name, city and language from an earlier sign-up on this device (kept only
   // on the device) so starting another room doesn't mean typing them again.
@@ -3131,7 +3143,7 @@ const RAW = String.raw`<!doctype html>
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined })
+      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined, military: !!registerDraft.military })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -3223,6 +3235,15 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
+    var milRow = h("label", { style: "display:flex; align-items:center; gap:10px; margin:10px 2px 4px; cursor:pointer;" });
+    var milBox = document.createElement("input");
+    milBox.type = "checkbox";
+    milBox.style.cssText = "width:20px; height:20px; flex:0 0 auto; margin:0; accent-color: var(--accent, #a8552a);";
+    milBox.checked = !!registerDraft.military;
+    milBox.addEventListener("change", function () { registerDraft.military = milBox.checked; });
+    milRow.appendChild(milBox);
+    milRow.appendChild(h("span", { style: "font-size:0.95rem; line-height:1.3; text-align:left;", text: t("I'm in the military (show my time as 1930, not 7:30 PM)") }));
+    form.appendChild(milRow);
     // Only the first person through sets this: it's shared by the room
     // (questionPoolFor() uses it for both people's daily question).
     if (soloRegistration) {
@@ -4185,7 +4206,7 @@ const RAW = String.raw`<!doctype html>
     var isMe = key === (soloMode() ? viewerKey : (previewKey || otherKeyOf(viewerKey)));
     var block = h("div", { class: "clock-block" + (isMe ? " clock-me" : "") }, [
       h("div", { class: "clock-city", text: cityLabel }),
-      h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
+      h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key), isMilitaryKey(key)) }),
     ]);
     // Tapping a clock switches the view the same way tapping that person's
     // status chip does (preview only — never changes who you are).
@@ -5177,6 +5198,7 @@ const RAW = String.raw`<!doctype html>
   // registered location. Travel can start immediately or be scheduled
   // ahead of time via the "Starts" date, and — once scheduled — optionally
   // shown to your partner a couple of days before it actually starts.
+  var milBusy = false;
   function travelBlock() {
     var my = state.people && state.people[viewerKey];
     if (!my) return null;
@@ -5244,6 +5266,17 @@ const RAW = String.raw`<!doctype html>
       link.addEventListener("click", openTravelForm);
       row.appendChild(link);
       wrap.appendChild(row);
+      var milOn = !!my.military;
+      var milRow2 = h("div", { class: "switch-row top-action-row" });
+      var milLink = h("button", { class: "switch-link", text: milBusy ? t("Working…") : milOn ? t("🎖️ Military time is on — turn off") : t("🎖️ In the military? Show my clock in military time") });
+      milLink.disabled = milBusy;
+      milLink.addEventListener("click", async function () {
+        milBusy = true; renderApp();
+        try { await api("/api/military", { who: viewerKey, on: !milOn }); } catch (e) {}
+        milBusy = false; renderApp();
+      });
+      milRow2.appendChild(milLink);
+      wrap.appendChild(milRow2);
     }
     return wrap;
   }
@@ -5353,7 +5386,7 @@ const RAW = String.raw`<!doctype html>
 
   function tickClocks() {
     document.querySelectorAll(".clock-time[data-key]").forEach(function (el) {
-      el.textContent = clockFor(effectiveClockTz(el.getAttribute("data-key")));
+      el.textContent = clockFor(effectiveClockTz(el.getAttribute("data-key")), isMilitaryKey(el.getAttribute("data-key")));
     });
     var cd = document.getElementById("cd-note");
     if (cd) cd.textContent = countdownText();

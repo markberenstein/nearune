@@ -72,6 +72,9 @@ export type PersonProfile = {
   travelFrom?: string;
   travelUntil?: string;
   travelShowEarly?: boolean;
+  // Ticked "I'm in the military": this person's clock is shown in 24-hour
+  // military time (e.g. 1930) to everyone in the room.
+  military?: boolean;
 };
 
 // A browser's Web Push subscription (from the PushSubscription object) —

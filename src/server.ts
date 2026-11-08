@@ -1049,6 +1049,21 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json(forClient(state));
     }
 
+    // Turn military (24-hour) time on or off for this person's clock.
+    if (req.method === "POST" && restPath === "/api/military") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const on = body.on === true;
+      const state = await saveState(roomId, (s) => {
+        if (!s.people || !s.people[who]) return;
+        if (on) s.people[who]!.military = true;
+        else delete s.people[who]!.military;
+      });
+      return json(forClient(state));
+    }
+
     if (req.method === "POST" && restPath === "/api/status") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
@@ -1085,6 +1100,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         body?.relationship === "its_complicated"
           ? body.relationship
           : undefined;
+      const military = body?.military === true;
       // Email / Instagram is optional: a contact that is given must still be
       // valid, but none at all is fine (the person just can't recover the
       // room by email later, so they keep their Nearune link).
@@ -1109,7 +1125,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
         const stateH = await saveState(roomId, (s) => {
           if (!s.people) s.people = {};
-          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}) };
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}), ...(military ? { military: true } : {}) };
           if (s.pendingConfirm) delete s.pendingConfirm[who];
           if (relationship && !s.relationship) s.relationship = relationship;
         });
@@ -1144,7 +1160,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash, ...(military ? { military: true } : {}) };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         const prevPc = s.pendingConfirm[who];
         s.pendingConfirm[who] = {

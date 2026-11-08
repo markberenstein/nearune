@@ -3616,9 +3616,11 @@ const RAW = String.raw`<!doctype html>
     var box = h("div", { class: "card" });
     box.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 0 0 8px;", text: t("You met this person through Make a friend. Be kind and keep personal details private. Photo sharing is off in this room.") }));
     var row = h("div", { class: "switch-row" });
-    var rep = h("button", { class: "switch-link", type: "button", text: t("Report and leave") });
+    // Fixed colors: this row sits in a light card, so the night-sky light link
+    // color would make these safety links nearly invisible.
+    var rep = h("button", { class: "switch-link", type: "button", style: "color:#B3361F; font-size:0.9rem; font-weight:600; opacity:1;", text: t("Report and leave") });
     rep.addEventListener("click", function () { leaveFriend(true); });
-    var lv = h("button", { class: "switch-link", type: "button", text: t("Leave this room") });
+    var lv = h("button", { class: "switch-link", type: "button", style: "color:#4A3B30; font-size:0.9rem; opacity:1;", text: t("Leave this room") });
     lv.addEventListener("click", function () { leaveFriend(false); });
     row.appendChild(rep);
     row.appendChild(lv);

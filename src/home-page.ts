@@ -52,6 +52,9 @@ export function buildHomePage(): string {
   .sheet h2 { margin:0 0 18px; font-size:1.25rem; font-weight:800; }
   .btn { display:block; width:100%; background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:14px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; margin:0 0 10px; }
   .btn.ghost { background:transparent; color:var(--ink-soft); }
+  .sheet-note { margin:-8px 0 16px; color:var(--ink-soft); font-size:0.9rem; line-height:1.4; }
+  .sheet-input { display:block; width:100%; box-sizing:border-box; margin:0 0 10px; padding:13px 14px; border:1px solid var(--line, #E3D6C6); border-radius:14px; background:var(--bg, #fff); color:var(--ink); font:inherit; font-size:1rem; }
+  .sheet-err { color:#B3361F; font-size:0.88rem; min-height:1.2em; margin:0 0 8px; }
 </style>
 </head>
 <body>
@@ -201,37 +204,67 @@ export function buildHomePage(): string {
   // Go straight into the match room to sign up, instead of only changing the
   // tile (people missed "Meet your match"). Done once per match, so backing
   // out to the rooms page doesn't bounce them in again.
-  function openMatch(roomId, token) {
-    setFriend({ status: "matched", roomId: roomId, token: token, opened: true });
+  function openMatch(roomId, token, who, ready) {
+    setFriend({ status: "matched", roomId: roomId, token: token, who: who, ready: ready, opened: true });
+    if (ready && (who === "mark" || who === "nikita")) {
+      // Already signed up on the server: remember which side is ours and go
+      // straight to today's question.
+      try { localStorage.setItem("sameSkyViewer:" + roomId, who); } catch (e) {}
+      if (!rooms.some(function (r) { return r.id === roomId; })) { rooms.push({ id: roomId, friend: true }); saveRooms(); }
+      location.href = "/r/" + roomId + "/";
+      return;
+    }
     location.href = "/j/" + roomId + "/" + token;
   }
 
-  function startFriend() {
+  function browserTz() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } }
+  function startFriend(profile) {
     friendMsg = "";
-    fetch("/api/friend/join", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device: deviceId(), adult: true }) })
+    var body = { device: deviceId(), adult: true };
+    if (profile) body.profile = { name: profile.name, location: profile.location, language: profile.language, tz: browserTz() };
+    fetch("/api/friend/join", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (x) {
         if (!x.ok) {
           friendMsg = x.d && x.d.error === "rate_limited" ? "Too many tries. Please wait a bit."
             : x.d && x.d.error === "registrations_paused" ? "Please check back tomorrow."
+            : x.d && x.d.error === "city_required" ? "Please enter a city, like San Diego, CA."
+            : x.d && x.d.error === "region_unavailable" ? "Make a friend isn't available in your area yet."
             : "Something went wrong. Please try again.";
           render(); return;
         }
         var d = x.d;
-        if (d.status === "matched") { openMatch(d.roomId, d.token); return; }
+        if (d.status === "matched") { openMatch(d.roomId, d.token, d.who, d.ready); return; }
         else { setFriend({ status: "waiting", ticket: d.ticket }); registerFriendPush(d.ticket); }
         render();
       })
       .catch(function () { friendMsg = "Couldn't reach Nearune."; render(); });
   }
 
+  var FRIEND_LANGS = ["Arabic", "Bengali", "Czech", "Dutch", "English", "Farsi (Persian)", "French", "German", "Gibberish", "Greek", "Gujarati", "Hebrew", "Hindi", "Indonesian", "Italian", "Japanese", "Klingon", "Korean", "Mandarin Chinese", "Marathi", "Norwegian", "Polish", "Portuguese", "Punjabi", "Romanian", "Russian", "Spanish", "Swahili", "Swedish", "Tagalog (Filipino)", "Tamil", "Telugu", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese"];
   function ageSheet() {
+    var prof = jget("nearuneProfile", null) || {};
     var bg = el("div", { class: "sheet-bg" });
     var sh = el("div", { class: "sheet" });
-    sh.appendChild(el("h2", { text: "Are you 18 or older?" }));
-    var yes = el("button", { class: "btn", type: "button", text: "Yes, find me a friend" });
-    var no = el("button", { class: "btn ghost", type: "button", text: "No" });
-    yes.addEventListener("click", function () { document.body.removeChild(bg); startFriend(); });
+    sh.appendChild(el("h2", { text: "Make a friend" }));
+    sh.appendChild(el("p", { class: "sheet-note", text: "We'll match you with someone new for a daily question. You'll both see each other's first name, city and local time." }));
+    var nm = el("input", { class: "sheet-input", type: "text", placeholder: "First name", maxlength: "40" }); nm.value = prof.name || "";
+    var ct = el("input", { class: "sheet-input", type: "text", placeholder: "City, e.g. San Diego, CA", maxlength: "80" }); ct.value = prof.location || "";
+    var lg = el("select", { class: "sheet-input" });
+    var ph = el("option", { value: "", text: "Language" }); ph.disabled = true; lg.appendChild(ph);
+    FRIEND_LANGS.forEach(function (n) { var o = el("option", { value: n, text: n }); lg.appendChild(o); });
+    lg.value = prof.language && FRIEND_LANGS.indexOf(prof.language) >= 0 ? prof.language : "English";
+    var err = el("div", { class: "sheet-err" });
+    sh.appendChild(nm); sh.appendChild(ct); sh.appendChild(lg); sh.appendChild(err);
+    var yes = el("button", { class: "btn", type: "button", text: "I'm 18 or older, find me a friend" });
+    var no = el("button", { class: "btn ghost", type: "button", text: "Not now" });
+    yes.addEventListener("click", function () {
+      var p = { name: nm.value.trim(), location: ct.value.trim(), language: lg.value };
+      if (!p.name || !p.location || !p.language) { err.textContent = "Please add your first name, city and language."; return; }
+      jset("nearuneProfile", p);
+      document.body.removeChild(bg);
+      startFriend(p);
+    });
     no.addEventListener("click", function () { document.body.removeChild(bg); });
     bg.addEventListener("click", function (ev) { if (ev.target === bg) document.body.removeChild(bg); });
     sh.appendChild(yes); sh.appendChild(no); bg.appendChild(sh);
@@ -275,7 +308,7 @@ export function buildHomePage(): string {
     registerFriendPush(f.ticket);
     function check() {
       fetch("/api/friend/status?ticket=" + encodeURIComponent(f.ticket)).then(function (r) { return r.json(); }).then(function (d) {
-        if (d.status === "matched") { clearInterval(pollTimer); pollTimer = null; openMatch(d.roomId, d.token); }
+        if (d.status === "matched") { clearInterval(pollTimer); pollTimer = null; openMatch(d.roomId, d.token, d.who, d.ready); }
         else if (d.status === "waiting" && d.long && !f.long) { f.long = true; setFriend(f); render(); }
         else if (d.status === "none") { setFriend(null); friendMsg = "Your wait timed out. Please try again."; render(); }
       }).catch(function () {});
@@ -304,13 +337,13 @@ export function buildHomePage(): string {
   try {
     if (new URLSearchParams(location.search).get("friend") === "1") {
       history.replaceState(null, "", "/home");
-      if (!jget(LS_FRIEND, null)) startFriend();
+      if (!jget(LS_FRIEND, null)) ageSheet();
     }
   } catch (e) {}
   // A match found while the app was closed (or before this update): open it once.
   (function () {
     var f = jget(LS_FRIEND, null);
-    if (f && f.status === "matched" && !f.opened && !rooms.some(function (r) { return r.friend; })) openMatch(f.roomId, f.token);
+    if (f && f.status === "matched" && !f.opened && !rooms.some(function (r) { return r.friend; })) openMatch(f.roomId, f.token, f.who, f.ready);
   })();
   Promise.all(rooms.map(function (r) { return loadBrief(r.id); })).then(function () {
     // A Make a friend room closed because the match never joined: drop it so

@@ -42,7 +42,7 @@ import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
-import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush } from "./friend";
+import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, type FriendProfile } from "./friend";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
@@ -266,8 +266,23 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
         return json({ error: "registrations_paused" }, { status: 503 });
       }
-      const fr = await friendJoin(device);
-      console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId : ""));
+      // Name, city and language (from the Make a friend sheet) so the room is
+      // created with this person already signed up.
+      let profile: FriendProfile | undefined;
+      const fp = fb?.profile;
+      if (fp && typeof fp === "object") {
+        const pName = typeof fp.name === "string" ? fp.name.trim().slice(0, 80) : "";
+        const pLoc = typeof fp.location === "string" ? fp.location.trim().slice(0, 80) : "";
+        const pLang = typeof fp.language === "string" ? fp.language.trim().slice(0, 40) : "";
+        const pTz = typeof fp.tz === "string" ? fp.tz.trim().slice(0, 60) : "";
+        if (!pName || !pLoc || !pLang) return json({ error: "profile_required" }, { status: 400 });
+        if (await isBlockedLocation(pLoc)) return json({ error: "region_unavailable" }, { status: 403 });
+        if (!(await isCityLevelLocation(pLoc))) return json({ error: "city_required" }, { status: 400 });
+        const resolvedTz = await resolveTimezoneFromLocation(pLoc);
+        profile = { name: pName, location: pLoc, language: pLang, ...((resolvedTz || pTz) ? { tz: resolvedTz || pTz } : {}) };
+      }
+      const fr = await friendJoin(device, profile);
+      console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId + " signedUp=" + fr.signedUp : "") + (profile ? " withProfile" : ""));
       return json(fr);
     }
     if (req.method === "GET" && url.pathname === "/api/friend/status") {

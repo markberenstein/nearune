@@ -10,20 +10,24 @@ import { sendPush } from "./push";
 // Native app waiters can leave a push token so we can tell them the moment
 // someone matches (the app may be closed by then).
 type WaiterPush = { kind: "apns" | "fcm"; token: string };
-type Waiter = { ticket: string; device: string; at: number; seen: number; push?: WaiterPush };
+// Name, city and language given when tapping Make a friend, so the room can be
+// created with both people already signed up (no "Pending" step). Held only
+// while waiting in line, then moved into the room.
+export type FriendProfile = { name: string; location: string; language: string; tz?: string };
+type Waiter = { ticket: string; device: string; at: number; seen: number; push?: WaiterPush; profile?: FriendProfile };
 
 function notifyMatch(push: WaiterPush | undefined): void {
   if (!push) return;
   sendPush({ kind: push.kind, token: push.token } as any, {
-    title: "You have a match 🎉",
-    body: "Someone wants to be your Nearune friend. Tap to meet them.",
+    title: "You've been matched! 🎉",
+    body: "Open Nearune to meet your new friend.",
     badge: 1,
     tag: "friend-match",
   })
     .then((r) => console.log("[friend] match push " + (r.ok ? "sent" : "failed") + " (" + push.kind + ")"))
     .catch(() => {});
 }
-type Match = { roomId: string; token: string; at: number };
+type Match = { roomId: string; token: string; at: number; who?: "mark" | "nikita"; ready?: boolean };
 type Data = { queue: Waiter[]; matches: Record<string, Match>; blocks: Record<string, string[]> };
 
 const KEY = "friend-queue.json";
@@ -80,16 +84,18 @@ async function handToAdmin(d: Data): Promise<void> {
   await saveState(roomId, (s) => {
     s.origin = "friend";
     s.friendDevices = { nikita: w.device, mark: "admin" };
-    s.pendingInvite = { nikita: { token: tokWaiter, at, link: true }, mark: { token: tokAdmin, at, link: true } };
+    s.pendingInvite = { mark: { token: tokAdmin, at, link: true } } as any;
+    if (w.profile) { if (!s.people) s.people = {} as any; (s.people as any).nikita = { ...w.profile, confirmed: true }; }
+    else (s.pendingInvite as any).nikita = { token: tokWaiter, at, link: true };
   });
-  d.matches[w.ticket] = { roomId, token: tokWaiter, at: Date.now() };
+  d.matches[w.ticket] = { roomId, token: tokWaiter, at: Date.now(), who: "nikita", ready: !!w.profile };
   notifyMatch(w.push);
   console.log("[friend] queue over " + QUEUE_LIMIT + ": oldest requester handed to admin room=" + roomId);
 }
 
-export type JoinResult = { status: "waiting"; ticket: string } | { status: "matched"; roomId: string; token: string };
+export type JoinResult = { status: "waiting"; ticket: string } | { status: "matched"; roomId: string; token: string; who: "mark" | "nikita"; ready: boolean; signedUp: number };
 
-export function friendJoin(device: string): Promise<JoinResult> {
+export function friendJoin(device: string, profile?: FriendProfile): Promise<JoinResult> {
   return locked(async () => {
     const d = await load();
     prune(d);
@@ -97,6 +103,7 @@ export function friendJoin(device: string): Promise<JoinResult> {
     const mine = d.queue.find((w) => w.device === device);
     if (mine) {
       mine.seen = now;
+      if (profile) mine.profile = profile;
       await save();
       return { status: "waiting", ticket: mine.ticket } as JoinResult;
     }
@@ -104,7 +111,7 @@ export function friendJoin(device: string): Promise<JoinResult> {
     const idx = d.queue.findIndex((w) => w.device !== device && now - w.seen < ACTIVE_WINDOW && !blocked(w.device, device));
     if (idx < 0) {
       const ticket = rand12() + rand12();
-      d.queue.push({ ticket, device, at: now, seen: now });
+      d.queue.push({ ticket, device, at: now, seen: now, ...(profile ? { profile } : {}) });
       // Line is longer than QUEUE_LIMIT: hand the earliest requester to the
       // administrator, who joins their room through a link shown in admin.
       if (d.queue.length > QUEUE_LIMIT) await handToAdmin(d);
@@ -116,28 +123,36 @@ export function friendJoin(device: string): Promise<JoinResult> {
     const tokWaiter = rand12();
     const tokJoiner = rand12();
     const at = new Date().toISOString();
-    // Both people join through the normal "You're invited" form, so neither
-    // is the host and there is no race over who registers first.
+    // Whoever gave their name, city and language is signed up right away;
+    // anyone who didn't (an older app) joins through the "You're invited"
+    // form instead. Neither is the host, so there's no race over who's first.
     await saveState(roomId, (s) => {
       s.origin = "friend";
       s.friendDevices = { nikita: waiter.device, mark: device };
-      s.pendingInvite = { nikita: { token: tokWaiter, at, link: true }, mark: { token: tokJoiner, at, link: true } };
+      const inv: any = {};
+      const ppl: any = s.people || {};
+      if (waiter.profile) ppl.nikita = { ...waiter.profile, confirmed: true };
+      else inv.nikita = { token: tokWaiter, at, link: true };
+      if (profile) ppl.mark = { ...profile, confirmed: true };
+      else inv.mark = { token: tokJoiner, at, link: true };
+      s.people = ppl;
+      s.pendingInvite = inv;
     });
-    d.matches[waiter.ticket] = { roomId, token: tokWaiter, at: now };
+    d.matches[waiter.ticket] = { roomId, token: tokWaiter, at: now, who: "nikita", ready: !!waiter.profile };
     await save();
     notifyMatch(waiter.push);
-    return { status: "matched", roomId, token: tokJoiner } as JoinResult;
+    return { status: "matched", roomId, token: tokJoiner, who: "mark", ready: !!profile, signedUp: (waiter.profile ? 1 : 0) + (profile ? 1 : 0) } as JoinResult;
   });
 }
 
-export type StatusResult = { status: "waiting"; long?: boolean } | { status: "none" } | { status: "matched"; roomId: string; token: string };
+export type StatusResult = { status: "waiting"; long?: boolean } | { status: "none" } | { status: "matched"; roomId: string; token: string; who?: "mark" | "nikita"; ready?: boolean };
 
 export function friendStatus(ticket: string): Promise<StatusResult> {
   return locked(async () => {
     const d = await load();
     prune(d);
     const m = d.matches[ticket];
-    if (m) return { status: "matched", roomId: m.roomId, token: m.token } as StatusResult;
+    if (m) return { status: "matched", roomId: m.roomId, token: m.token, who: m.who, ready: !!m.ready } as StatusResult;
     const w = d.queue.find((x) => x.ticket === ticket);
     if (!w) return { status: "none" } as StatusResult;
     w.seen = Date.now();

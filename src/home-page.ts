@@ -198,6 +198,14 @@ export function buildHomePage(): string {
     } catch (e) {}
   }
 
+  // Go straight into the match room to sign up, instead of only changing the
+  // tile (people missed "Meet your match"). Done once per match, so backing
+  // out to the rooms page doesn't bounce them in again.
+  function openMatch(roomId, token) {
+    setFriend({ status: "matched", roomId: roomId, token: token, opened: true });
+    location.href = "/j/" + roomId + "/" + token;
+  }
+
   function startFriend() {
     friendMsg = "";
     fetch("/api/friend/join", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device: deviceId(), adult: true }) })
@@ -210,7 +218,7 @@ export function buildHomePage(): string {
           render(); return;
         }
         var d = x.d;
-        if (d.status === "matched") setFriend({ status: "matched", roomId: d.roomId, token: d.token });
+        if (d.status === "matched") { openMatch(d.roomId, d.token); return; }
         else { setFriend({ status: "waiting", ticket: d.ticket }); registerFriendPush(d.ticket); }
         render();
       })
@@ -267,7 +275,7 @@ export function buildHomePage(): string {
     registerFriendPush(f.ticket);
     function check() {
       fetch("/api/friend/status?ticket=" + encodeURIComponent(f.ticket)).then(function (r) { return r.json(); }).then(function (d) {
-        if (d.status === "matched") { setFriend({ status: "matched", roomId: d.roomId, token: d.token }); render(); }
+        if (d.status === "matched") { clearInterval(pollTimer); pollTimer = null; openMatch(d.roomId, d.token); }
         else if (d.status === "waiting" && d.long && !f.long) { f.long = true; setFriend(f); render(); }
         else if (d.status === "none") { setFriend(null); friendMsg = "Your wait timed out. Please try again."; render(); }
       }).catch(function () {});
@@ -292,6 +300,11 @@ export function buildHomePage(): string {
   }
 
   render();
+  // A match found while the app was closed (or before this update): open it once.
+  (function () {
+    var f = jget(LS_FRIEND, null);
+    if (f && f.status === "matched" && !f.opened && !rooms.some(function (r) { return r.friend; })) openMatch(f.roomId, f.token);
+  })();
   Promise.all(rooms.map(function (r) { return loadBrief(r.id); })).then(function () {
     // Remember name, city and language from an existing room, so the next
     // sign-up form on this device can be filled in already.

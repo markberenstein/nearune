@@ -165,7 +165,7 @@ export type State = {
   origin?: "friend";
   friendDevices?: Partial<Record<PersonKey, string>>;
   closed?: boolean;
-  closedBy?: PersonKey | "admin";
+  closedBy?: PersonKey | "admin" | "no_show";
   reported?: boolean;
   // Text that tripped the vulgar/NSFW screen (server-only; admin sees the count).
   flags?: { at: string; who: string; kind: string; word: string; excerpt: string }[];

@@ -3571,6 +3571,22 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
   }
   function closedRoomCard() {
+    if (state.closedBy === "no_show") {
+      var again = h("button", { class: "puzzle-upload-btn", type: "button", style: "margin-top: 14px;", text: t("Find me a new friend") });
+      again.addEventListener("click", function () {
+        try {
+          var list = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
+          if (Array.isArray(list)) localStorage.setItem("nearuneRooms", JSON.stringify(list.filter(function (r) { return r.id !== ROOM; })));
+          localStorage.removeItem("nearuneFriend");
+        } catch (e) {}
+        location.href = "/home?friend=1";
+      });
+      return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
+        h("p", { class: "puzzle-guess-note", text: t("Your match didn't join within a day, so this room has closed. Sorry about that!") }),
+        again,
+        h("div", { style: "margin-top: 10px;" }, [h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })])
+      ]);
+    }
     var msg = state.closedBy === "admin" ? t("This room was closed by Nearune.") : (state.closedBy && state.closedBy === viewerKey) ? t("You left this room.") : t("This room has ended.");
     return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
       h("p", { class: "puzzle-guess-note", text: msg }),

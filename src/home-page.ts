@@ -300,12 +300,23 @@ export function buildHomePage(): string {
   }
 
   render();
+  // "Find me a new friend" from a closed no-show room.
+  try {
+    if (new URLSearchParams(location.search).get("friend") === "1") {
+      history.replaceState(null, "", "/home");
+      if (!jget(LS_FRIEND, null)) startFriend();
+    }
+  } catch (e) {}
   // A match found while the app was closed (or before this update): open it once.
   (function () {
     var f = jget(LS_FRIEND, null);
     if (f && f.status === "matched" && !f.opened && !rooms.some(function (r) { return r.friend; })) openMatch(f.roomId, f.token);
   })();
   Promise.all(rooms.map(function (r) { return loadBrief(r.id); })).then(function () {
+    // A Make a friend room closed because the match never joined: drop it so
+    // the Make a friend tile is free again.
+    var stale = rooms.filter(function (r) { var b = briefs[r.id]; return r.friend && b && b.s && b.s.closed && b.s.closedBy === "no_show"; });
+    if (stale.length) { stale.forEach(function (r) { removeRoom(r.id); }); setFriend(null); render(); }
     // Remember name, city and language from an existing room, so the next
     // sign-up form on this device can be filled in already.
     try {

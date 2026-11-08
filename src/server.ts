@@ -2009,6 +2009,46 @@ async function purgeStaleEmails(): Promise<void> {
     console.error("[email-purge] failed", err);
   }
 }
+// "Make a friend" no-shows: if one person signed up but their match hasn't
+// within 24 hours of being matched, close the room and tell the person who
+// showed up, so they can find a new friend instead of waiting forever.
+const FRIEND_NO_SHOW_MS = 24 * 60 * 60 * 1000;
+async function sweepFriendNoShows(): Promise<void> {
+  try {
+    const now = Date.now();
+    for (const id of await listRoomIds()) {
+      if (!id) continue;
+      let st: any;
+      try { st = await loadState(id); } catch { continue; }
+      if (st.origin !== "friend" || st.closed) continue;
+      const keys: PersonKey[] = ["mark", "nikita"];
+      const joined = keys.filter((k) => st.people && st.people[k]);
+      if (joined.length === 2) continue;
+      const missing = keys.filter((k) => !(st.people && st.people[k]));
+      const invAt = missing
+        .map((k) => st.pendingInvite && (st.pendingInvite as any)[k] && (st.pendingInvite as any)[k].at)
+        .filter(Boolean)
+        .map((a: string) => new Date(a).getTime());
+      const matchedAt = invAt.length ? Math.min(...invAt) : (st.createdAt ? new Date(st.createdAt).getTime() : NaN);
+      if (!isFinite(matchedAt) || now - matchedAt < FRIEND_NO_SHOW_MS) continue;
+      await saveState(id, (s) => { s.closed = true; s.closedBy = "no_show"; });
+      console.log("[friend] no-show closed room=" + id + " joined=" + joined.length + " waited=" + Math.round((now - matchedAt) / 3600000) + "h");
+      for (const k of joined) {
+        const sub = st.pushSubs && st.pushSubs[k];
+        if (!sub) continue;
+        sendPush(sub, {
+          title: "Your match didn't show up",
+          body: "Sorry about that. Tap to find a new friend on Nearune.",
+          tag: "friend-no-show",
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("[friend-no-show] failed", err);
+  }
+}
+setTimeout(sweepFriendNoShows, 3 * 60 * 1000);
+setInterval(sweepFriendNoShows, 60 * 60 * 1000);
 setTimeout(purgeStaleEmails, 6 * 60 * 1000);
 setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
 setTimeout(purgeEmptyRooms, 5 * 60 * 1000);

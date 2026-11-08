@@ -66,7 +66,7 @@ export function buildHomePage(): string {
   </div>
   <div class="grid" id="slots"></div>
   <p class="msg" id="msg"></p>
-  <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
+  <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrTip" style="display:none"> · <a href="#" id="nrTipLink">💛 Support Nearune</a></span><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
 </div>
 <script>
 (function () {
@@ -333,6 +333,67 @@ export function buildHomePage(): string {
   }
 
   render();
+  // In-app tip jar (iPhone app only). Tips go through Apple in-app purchase
+  // as Apple requires; they unlock nothing. Hidden unless the app has the
+  // purchase plugin AND Apple returns the tip products, so older app builds
+  // and the website never show it (the website has its own Stripe link).
+  var TIP_IDS = ["com.nearune.app.tip.small", "com.nearune.app.tip.medium", "com.nearune.app.tip.large"];
+  var tipProducts = [];
+  function tipPlugin() {
+    try {
+      var c = window.Capacitor;
+      if (!c || !c.isNativePlatform || !c.isNativePlatform() || !c.getPlatform || c.getPlatform() !== "ios") return null;
+      return (c.Plugins && c.Plugins.NativePurchases) || null;
+    } catch (e) { return null; }
+  }
+  function tipSheet() {
+    var np = tipPlugin();
+    if (!np || !tipProducts.length) return;
+    var bg = el("div", { class: "sheet-bg" });
+    var sh = el("div", { class: "sheet" });
+    sh.appendChild(el("h2", { text: "Support Nearune 💛" }));
+    var note = el("p", { class: "sheet-note", text: "Nearune is free and independent. A tip helps keep it running. It doesn't unlock anything, it's just a thank-you." });
+    sh.appendChild(note);
+    var btns = [];
+    tipProducts.forEach(function (p) {
+      var b = el("button", { class: "btn", type: "button", text: "Tip " + p.priceString });
+      b.addEventListener("click", function () {
+        btns.forEach(function (x) { x.disabled = true; });
+        note.textContent = "Opening Apple payment…";
+        np.purchaseProduct({ productIdentifier: p.identifier }).then(function () {
+          sh.innerHTML = "";
+          sh.appendChild(el("h2", { text: "Thank you! 💛" }));
+          sh.appendChild(el("p", { class: "sheet-note", text: "Your support means a lot and helps keep Nearune going." }));
+          var ok = el("button", { class: "btn", type: "button", text: "Close" });
+          ok.addEventListener("click", function () { if (bg.parentNode) document.body.removeChild(bg); });
+          sh.appendChild(ok);
+          fetch("/api/tip-log", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ product: p.identifier }) }).catch(function () {});
+        }).catch(function (err) {
+          btns.forEach(function (x) { x.disabled = false; });
+          var m = String((err && (err.message || err.code)) || "");
+          note.textContent = /cancel/i.test(m) ? "No problem, maybe another time." : "That didn't go through. Please try again.";
+        });
+      });
+      btns.push(b); sh.appendChild(b);
+    });
+    var no = el("button", { class: "btn ghost", type: "button", text: "Not now" });
+    no.addEventListener("click", function () { document.body.removeChild(bg); });
+    sh.appendChild(no);
+    bg.addEventListener("click", function (ev) { if (ev.target === bg) document.body.removeChild(bg); });
+    bg.appendChild(sh); document.body.appendChild(bg);
+  }
+  (function () {
+    var np = tipPlugin();
+    if (!np) return;
+    np.getProducts({ productIdentifiers: TIP_IDS }).then(function (r) {
+      tipProducts = ((r && r.products) || []).filter(function (p) { return p && p.identifier && p.priceString; })
+        .sort(function (a, b) { return (a.price || 0) - (b.price || 0); });
+      if (!tipProducts.length) return;
+      var s = document.getElementById("nrTip"), a = document.getElementById("nrTipLink");
+      if (s) s.style.display = "";
+      if (a) a.addEventListener("click", function (ev) { ev.preventDefault(); tipSheet(); });
+    }).catch(function () {});
+  })();
   // "Find me a new friend" from a closed no-show room.
   try {
     if (new URLSearchParams(location.search).get("friend") === "1") {

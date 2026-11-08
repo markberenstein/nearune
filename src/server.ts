@@ -285,6 +285,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId + " signedUp=" + fr.signedUp : "") + (profile ? " withProfile" : ""));
       return json(fr);
     }
+    // In-app tip completed (Apple handles the payment; this is only a log line
+    // so tips show up in the server logs). No personal data.
+    if (req.method === "POST" && url.pathname === "/api/tip-log") {
+      if (!rateLimit("tip-log:" + clientIp(req, server), 20, HOUR)) return json({ ok: true });
+      const tb = await readJson(req);
+      const product = typeof tb?.product === "string" ? tb.product.replace(/[^a-z0-9._]/gi, "").slice(0, 60) : "";
+      console.log("[tip] in-app tip " + (product || "unknown"));
+      return json({ ok: true });
+    }
     if (req.method === "GET" && url.pathname === "/api/friend/status") {
       if (!rateLimit("friend-status:" + clientIp(req, server), 900, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
       const t = url.searchParams.get("ticket") || "";

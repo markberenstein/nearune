@@ -5743,7 +5743,7 @@ export function buildNewRoomPage(): string {
     <button class="main" id="openRoom" type="button">Join</button>
     <p class="err" id="roomMsg"></p>
   </div>
-  <p class="foot"><a href="/recover">Find my room</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a></p>
+  <p class="foot"><a href="/recover">Find my room</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
 </div>
 <script>
 function routeFromText(v) {
@@ -5908,7 +5908,7 @@ function legalPageShell(title, bodyHtml) {
     ${bodyHtml}
     <a class="back" href="/new" onclick="if (history.length > 1) { history.back(); return false; }">&larr; Back</a>
   </div>
-  <p class="foot-nav"><a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/support">Support</a></p>
+  <p class="foot-nav"><a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/support">Support</a><span id="nrSupport" style="display:none"> &nbsp;·&nbsp; <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
 </div>
 </body>
 </html>`;

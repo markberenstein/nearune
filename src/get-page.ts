@@ -114,7 +114,7 @@ footer{margin:40px 0 0;font-size:13px;color:var(--muted);text-align:center}
     </a>
   </section>
 
-  <footer>&copy; 2026 Nearune &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/support">Support</a></footer>
+  <footer>&copy; 2026 Nearune &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/support">Support</a><span id="nrSupport" style="display:none"> &middot; <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></footer>
 </main>
 </body>
 </html>

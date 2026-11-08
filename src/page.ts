@@ -1051,6 +1051,14 @@ const RAW = String.raw`<!doctype html>
     }
     return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date());
   }
+  // "3 PM" -> "1500" (weather hour labels come from the server as 12-hour).
+  function militaryHourLabel(label) {
+    var m = /(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M/i.exec(String(label || ""));
+    if (!m) return String(label || "");
+    var hr = parseInt(m[1], 10) % 12;
+    if (m[3].toUpperCase() === "P") hr += 12;
+    return (hr < 10 ? "0" : "") + hr + (m[2] || "00");
+  }
   function isMilitaryKey(key) { return !!(state && state.people && state.people[key] && state.people[key].military); }
   // The registering browser's own IANA zone — captured automatically so the
   // other person's clock is correct without asking anyone to pick a
@@ -4179,17 +4187,19 @@ const RAW = String.raw`<!doctype html>
         var lo = Math.min.apply(null, temps);
         var hi = Math.max.apply(null, temps);
         var span = Math.max(1, hi - lo);
+        var milHours = isMilitaryKey(shownKey);
         var bars = w.recentHours.map(function (p) {
+          var hourText = milHours ? militaryHourLabel(p.hour) : p.hour;
           var pct = Math.round(((p.temp - lo) / span) * 100);
           // The temperature used to only show as a tap-and-hold tooltip
           // (title attribute), which doesn't work on a phone tap — so the
           // chart looked like bare bars with no visible numbers. Now the
           // actual reading sits above each bar, same way a native weather
           // app's hourly strip does.
-          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.temp + "°" + w.unit + (typeof p.humidity === "number" ? ", " + p.humidity + "% humidity" : "") }, [
+          return h("div", { class: "trend-bar-col", title: hourText + ": " + p.temp + "°" + w.unit + (typeof p.humidity === "number" ? ", " + p.humidity + "% humidity" : "") }, [
             h("div", { class: "trend-bar-temp", text: p.temp + "°" }),
             h("div", { class: "trend-bar-fill", style: "height:" + Math.max(pct, 8) + "%" }),
-            h("div", { class: "trend-bar-hour", text: p.hour.replace(/\s?[AP]M/i, "") }),
+            h("div", { class: "trend-bar-hour", text: milHours ? hourText : p.hour.replace(/\s?[AP]M/i, "") }),
             typeof p.humidity === "number" ? h("div", { class: "trend-bar-hum", text: "💧" + p.humidity + "%" }) : null,
           ].filter(Boolean));
         });

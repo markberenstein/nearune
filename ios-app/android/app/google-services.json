@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "439207470158",
+    "project_id": "nearune-e4140",
+    "storage_bucket": "nearune-e4140.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439207470158:android:e8e645703e5e72cb980f1f",
+        "android_client_info": {
+          "package_name": "com.nearune.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-dm9nui6JFHU2ItAE7VhmQRQX47IVLX0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

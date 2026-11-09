@@ -43,6 +43,7 @@ type Device = {
   plat: "app" | "web";
   existing?: boolean; // already a Nearune user when tracking started
   steps: Record<string, number>; // step -> first time, ms
+  ls?: Record<string, number>; // step -> last time, ms
   days: string[]; // YYYY-MM-DD (UTC) days the app was opened, newest last
   secs?: Record<string, number>; // YYYY-MM-DD -> seconds on screen that day
 };
@@ -115,6 +116,8 @@ export async function recordFunnel(device: string, step: string, plat: "app" | "
   }
   if (plat === "app") dev.plat = "app"; // a phone that ever used the app counts as app
   if (!dev.steps[step]) dev.steps[step] = now;
+  if (!dev.ls) dev.ls = {};
+  dev.ls[step] = now;
   if (step === "open") {
     const day = new Date(now).toISOString().slice(0, 10);
     if (dev.days[dev.days.length - 1] !== day) {
@@ -184,7 +187,8 @@ export type FunnelReport = {
   appUsers: number;
   webUsers: number;
   existingActive: number;
-  steps: { key: string; label: string; group: string; count: number }[];
+  steps: { key: string; label: string; group: string; count: number; all: number }[];
+  activeAll: number; // everyone (new and existing) who opened Nearune in the window
   retention: { nextDay: number; nextDayOf: number; week: number; weekOf: number };
   recent: { id: string; first: number; plat: string; reached: string[]; last: string; daysOpen: number; minutes: number }[];
 };
@@ -246,7 +250,9 @@ export async function funnelReport(days: number, fresh = false): Promise<FunnelR
     appUsers: fresh_.filter(([, v]) => v.plat === "app").length,
     webUsers: fresh_.filter(([, v]) => v.plat !== "app").length,
     existingActive: all.filter(([, v]) => v.existing && v.days.some((x) => dayNum(x) * 86400000 >= since)).length,
-    steps: FUNNEL_STEPS.map((s) => ({ key: s.key, label: s.label, group: s.group, count: counts[s.key] || 0 })),
+    steps: FUNNEL_STEPS.map((s) => ({ key: s.key, label: s.label, group: s.group, count: counts[s.key] || 0,
+      all: all.filter(([, v]) => ((v.ls && v.ls[s.key]) || v.steps[s.key] || 0) >= since).length })),
+    activeAll: all.filter(([, v]) => v.days.some((x) => dayNum(x) * 86400000 >= since) || Object.values(v.ls || {}).some((t) => t >= since)).length,
     ...(() => {
       // People who opened Nearune each day (new = first day ever, the rest
       // returning, existing users included), last min(days, 30) days.

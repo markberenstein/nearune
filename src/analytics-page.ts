@@ -54,15 +54,18 @@ function activityChart(rep: FunnelReport): string {
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="People using Nearune each day">${grid}<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" class="base"/>${bars}</svg>`;
 }
 
-function stepsTable(rep: FunnelReport): string {
-  const base = rep.newUsers;
+const EVERYONE_GROUPS = new Set(["Using Nearune", "Features"]);
+function stepsTable(rep: FunnelReport, everyone = false): string {
   let lastGroup = "";
   return rep.steps
+    .filter((st) => EVERYONE_GROUPS.has(st.group) === everyone)
     .map((st) => {
+      const base = everyone ? rep.activeAll : rep.newUsers;
+      const n = everyone ? st.all : st.count;
       const head = st.group !== lastGroup ? `<div class="sg">${esc(st.group)}</div>` : "";
       lastGroup = st.group;
-      const w = base ? Math.max(st.count ? 2 : 0, Math.round((st.count / base) * 100)) : 0;
-      return head + `<div class="srow"><span class="sl">${esc(st.label)}</span><span class="bar"><i style="width:${w}%"></i></span><span class="sn">${st.count}</span><span class="sp">${pct(st.count, base)}</span></div>`;
+      const w = base ? Math.max(n ? 2 : 0, Math.round((n / base) * 100)) : 0;
+      return head + `<div class="srow"><span class="sl">${esc(st.label)}</span><span class="bar"><i style="width:${w}%"></i></span><span class="sn">${n}</span><span class="sp">${pct(n, base)}</span></div>`;
     })
     .join("");
 }
@@ -245,6 +248,9 @@ export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport 
       <h2>New user journey</h2>
       <p class="hint">Share of the ${rep.newUsers} new users who reached each step.</p>
       ${stepsTable(rep)}
+      <h2 style="margin-top:22px">Everyone using Nearune</h2>
+      <p class="hint">All ${rep.activeAll} people active in the last ${rep.days} days, you and existing users included. Counted since Nov 8 evening.</p>
+      ${stepsTable(rep, true)}
     </div>
     <div>
       <div class="card">

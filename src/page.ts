@@ -3121,6 +3121,17 @@ const RAW = String.raw`<!doctype html>
   }
 
   var lastConfirmUrl = "";
+  // Anonymous sign-up funnel: tells the server (once per step per page load)
+  // how far this room got, so the admin view can show where people give up.
+  // Fire-and-forget; a failure here never affects the app.
+  var funnelSent = {};
+  function funnelPing(step) {
+    if (funnelSent[step]) return;
+    funnelSent[step] = true;
+    try {
+      fetch(RP + "/api/funnel", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ step: step }), keepalive: true }).catch(function () {});
+    } catch (e) {}
+  }
   // The address a confirmation was sent to. The server only keeps a one-way
   // hash of it, so it is remembered on this device only, to show "Sent to ..."
   // and to prefill the form when fixing a typo.
@@ -3140,14 +3151,15 @@ const RAW = String.raw`<!doctype html>
   }
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
-    if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
-    if (locCityError) { regError = locCityError; renderApp(); return; }
-    if (!name) { regError = t("Enter your name."); renderApp(); return; }
+    funnelPing("reg_clicked");
+    if (!registerDraft.location.trim()) { funnelPing("reg_err_city"); regError = t("Enter the city where you're based."); renderApp(); return; }
+    if (locCityError) { funnelPing("reg_err_city"); regError = locCityError; renderApp(); return; }
+    if (!name) { funnelPing("reg_err_name"); regError = t("Enter your name."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
     // only required when it's actually shown.
-    if (soloRegistration && !registerDraft.relationship) { regError = t("Pick how you two know each other."); renderApp(); return; }
+    if (soloRegistration && !registerDraft.relationship) { funnelPing("reg_err_relationship"); regError = t("Pick how you two know each other."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -3156,6 +3168,7 @@ const RAW = String.raw`<!doctype html>
       .then(function (res) {
         regBusy = false;
         if (!res.ok) {
+          funnelPing("reg_err_server");
           regError = res.data && res.data.error === "region_unavailable"
             ? t("Nearune isn't available in that location.")
             : res.data && res.data.error === "city_required"
@@ -3195,6 +3208,7 @@ const RAW = String.raw`<!doctype html>
     var mine = state.people && state.people[viewerKey];
     var awaiting = state.pendingConfirm && state.pendingConfirm[viewerKey];
     if (mine && awaiting && !showRegisterForm) {
+      funnelPing("confirm_screen");
       var wait = h("div", { class: "card" }, [
         h("div", { class: "eyebrow" }, [h("span", { text: t("Almost there") })]),
         h("p", { class: "question", text: t("Check your email for a confirmation link.") }),
@@ -3233,14 +3247,15 @@ const RAW = String.raw`<!doctype html>
     ]);
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(registerDraft);
+    funnelPing("reg_screen");
     form.appendChild(h("div", { class: "reg-label", text: t("Where are you?") }));
-    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
+    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; if (v) funnelPing("reg_city"); suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
+    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); }));
     form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
     var milRow = h("label", { style: "display:flex; align-items:center; gap:10px; margin:10px 2px 4px; cursor:pointer;" });
@@ -3266,7 +3281,7 @@ const RAW = String.raw`<!doctype html>
     }
     // Email is optional: only for getting the room back on a new phone.
     if (regShowEmail || registerDraft.email) {
-      var regEmailInput = textField(registerDraft.email, "Email (optional)", function (v) { registerDraft.email = v; });
+      var regEmailInput = textField(registerDraft.email, "Email (optional)", function (v) { registerDraft.email = v; if (v) funnelPing("reg_email"); });
       regEmailInput.setAttribute("inputmode", "email");
       regEmailInput.setAttribute("autocapitalize", "off");
       regEmailInput.setAttribute("autocorrect", "off");
@@ -3397,6 +3412,7 @@ const RAW = String.raw`<!doctype html>
   // buttons to share or copy them. The link is fetched automatically (the
   // server keeps the same link every time, so asking again is harmless).
   function inviteFlow(otherKey) {
+    funnelPing("invite_screen");
     // Nearune only starts once the other person joins, so this card is the
     // one thing that matters on a new room. After a day of waiting it turns
     // into a gentle nudge (no push needed: it shows whenever the app opens).

@@ -106,6 +106,12 @@ async function roomsCreatedToday(): Promise<number> {
 }
 
 
+const FUNNEL_STEPS = new Set([
+  "reg_screen", "reg_city", "reg_name", "reg_email", "reg_clicked",
+  "reg_err_city", "reg_err_name", "reg_err_relationship", "reg_err_server",
+  "confirm_screen", "invite_screen",
+]);
+
 const PORT = Number(Bun.env.PORT) || 3000;
 
 function parseRoom(pathname: string): { roomId: string; restPath: string } {
@@ -1086,6 +1092,25 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         else delete s.people[who]!.military;
       });
       return json(forClient(state));
+    }
+
+    // Anonymous sign-up funnel: records the first time a room reaches each
+    // step of the registration screens, so the admin view can show where
+    // people give up. Whitelisted step names only; no personal data.
+    if (req.method === "POST" && restPath === "/api/funnel") {
+      if (!rateLimit("funnel:" + clientIp(req, server), 60, HOUR)) return json({ ok: false }, { status: 429 });
+      const body = await readJson(req);
+      const step = typeof body?.step === "string" ? body.step : "";
+      if (!FUNNEL_STEPS.has(step)) return json({ ok: false }, { status: 400 });
+      const cur = await loadState(roomId);
+      // Only rooms that were really created (never conjure a room from a made-up id).
+      if (roomId && !cur.createdAt) return json({ ok: false }, { status: 404 });
+      if (cur.funnel && cur.funnel[step]) return json({ ok: true });
+      await saveState(roomId, (s) => {
+        if (!s.funnel) s.funnel = {};
+        if (!s.funnel[step]) s.funnel[step] = new Date().toISOString();
+      });
+      return json({ ok: true });
     }
 
     if (req.method === "POST" && restPath === "/api/status") {

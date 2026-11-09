@@ -42,11 +42,27 @@ async function railwayUsage() {
 
 const coordCache = new Map<string, { lat: number; lon: number; city: string; country: string } | null>();
 
+// How far a room got through setup, in plain words (for the admin list).
+function furthestStep(st: any, ppl: any[], answeredDays: number): string {
+  const f = (st && st.funnel) || {};
+  const allConfirmed = ppl.length >= 2 && ppl.every((p: any) => p.confirmed);
+  if (answeredDays > 0) return "answered a question";
+  if (allConfirmed) return "partner joined";
+  if (st && st.pendingInvite && Object.keys(st.pendingInvite).length > 0) return "invited someone";
+  if (ppl.some((p: any) => p.confirmed)) return "registered";
+  if (ppl.length > 0) return "registered, not confirmed";
+  if (f.reg_clicked) return "clicked Continue (didn't finish)";
+  if (f.reg_name) return "typed name";
+  if (f.reg_city) return "typed city";
+  if (f.reg_screen) return "saw the sign-up form";
+  return "created room only";
+}
+
 export async function computeStats() {
   const ids = await listRoomIds();
   let rooms = 0, active = 0, people = 0, answered = 0;
   const voiceIds: { room: number; who: string; id: string }[] = [];
-  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; people: { name: string; location: string; confirmed: boolean }[] }[] = [];
+  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; furthest: string; funnel: Record<string, string>; people: { name: string; location: string; confirmed: boolean }[] }[] = [];
   const locByCountry = new Map<string, string>();
   const newsLocs = new Set<string>();
   const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
@@ -67,6 +83,8 @@ export async function computeStats() {
         status: ppl.length === 2 && ppl.every((p: any) => p.confirmed) ? "active" : ppl.length < 2 ? "waiting for partner" : "partner not confirmed",
         answeredDays: days.length,
         lastAnswer: days.length ? days[days.length - 1] : null,
+        furthest: furthestStep(st, ppl, days.length),
+        funnel: (st?.funnel && typeof st.funnel === "object") ? st.funnel : {},
         people: ppl.map((p: any) => ({ name: String(p.name || "(no name)").slice(0, 40), location: String(p.location || "").slice(0, 60), confirmed: !!p.confirmed })),
       });
     } catch {}

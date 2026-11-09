@@ -111,6 +111,9 @@ export type State = {
   // Coarse, non-identifying hint about where the room was created (device
   // type, app vs web, browser language) — no IP address. Shown in the logs.
   createdVia?: string;
+  // First time each sign-up step was reached in this room (step -> ISO time).
+  // Anonymous drop-off tracking — no personal data; see /api/funnel.
+  funnel?: Record<string, string>;
   relationship?: RelationshipType;
   // The room name the first person typed, in any language (shown as the
   // room's title). The room code/link is built separately from a-z/0-9.

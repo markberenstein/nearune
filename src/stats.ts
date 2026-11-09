@@ -3,7 +3,7 @@ import { topLocalStory } from "./localnews";
 // ElevenLabs usage. Logged as one "[stats] {json}" line at 12:00 and 00:00
 // Pacific (and shortly after boot); a scheduled task reads the latest line
 // from the logs and refreshes the admin artifact.
-import { listRoomIds, loadState } from "./storage";
+import { listRoomIds, loadState, writeSideFile } from "./storage";
 import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip, trackRef } from "./music";
 import { runQa } from "./qa";
@@ -197,8 +197,24 @@ export async function computeStats() {
   };
 }
 
+// Runs the snapshot, logs it, and saves it as admin-stats.json for the admin
+// Home page. Concurrent calls share one run.
+let running: Promise<any> | null = null;
+export function refreshStats(): Promise<any> {
+  if (!running) {
+    running = (async () => {
+      const d = await computeStats();
+      const j = JSON.stringify(d);
+      console.log("[stats] " + j);
+      try { await writeSideFile("admin-stats.json", j); } catch (e: any) { console.log("[stats] save failed " + (e?.message || e)); }
+      return d;
+    })().finally(() => { running = null; });
+  }
+  return running;
+}
+
 export async function logStats() {
-  try { console.log("[stats] " + JSON.stringify(await computeStats())); }
+  try { await refreshStats(); }
   catch (e: any) { console.log("[stats] ERROR " + (e?.message || e)); }
 }
 

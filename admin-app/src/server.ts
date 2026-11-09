@@ -7,10 +7,11 @@
 // duplicating it — this service and the main app deploy from the same repo,
 // just with a different Railway "root directory", so these relative imports
 // resolve at build time the same way a workspace package would.
-import { listRoomIds, loadState, dropCachedState, deleteRoom, removeFromEmailIndex } from "../../src/storage";
+import { listRoomIds, loadState, dropCachedState, deleteRoom, removeFromEmailIndex, readSideFile } from "../../src/storage";
 import { buildAdminPage, type AdminRoomSummary } from "../../src/admin-page";
 import { funnelReport } from "../../src/funnel";
 import { buildAnalyticsPage } from "../../src/analytics-page";
+import { buildAdminHome } from "../../src/admin-home";
 import type { PersonKey } from "../../src/types";
 import { ICON_180_B64, ICON_512_B64 } from "./icon";
 
@@ -23,7 +24,7 @@ function checkSecret(url: URL): boolean {
 
 Bun.serve({
   port: PORT,
-  idleTimeout: 60,
+  idleTimeout: 200,
   async fetch(req) {
     const url = new URL(req.url);
 
@@ -56,7 +57,32 @@ Bun.serve({
       }), { headers: { "content-type": "application/manifest+json", "cache-control": "no-store" } });
     }
 
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/analytics")) {
+    if (req.method === "GET" && url.pathname === "/") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let raw: string | null = null;
+      try { raw = await readSideFile("admin-stats.json"); } catch (err) { console.error("[admin] stats read failed", err); }
+      return new Response(buildAdminHome(raw, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/refresh-stats") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      const appUrl = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const cron = Bun.env.CRON_SECRET || "";
+      let msg = "refresh_failed";
+      if (!appUrl || !cron) msg = "not_configured";
+      else {
+        try {
+          const r = await fetch(appUrl + "/api/admin/stats-refresh", { method: "POST", headers: { "x-cron-secret": cron }, signal: AbortSignal.timeout(58_000) });
+          const d: any = await r.json().catch(() => ({}));
+          if (d && d.ok) msg = d.pending ? "refresh_pending" : "refreshed";
+        } catch (err) { console.error("[admin] stats refresh failed", err); }
+      }
+      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + msg, 303);
+    }
+
+    if (req.method === "GET" && (url.pathname === "/rooms" || url.pathname === "/analytics")) {
       if (!checkSecret(url)) return new Response("Not found", { status: 404 });
       const ids = await listRoomIds();
       const summaries: AdminRoomSummary[] = [];
@@ -139,7 +165,7 @@ Bun.serve({
         }
         await deleteRoom(targetRoomId);
       }
-      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || ""), 303);
+      return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || ""), 303);
     }
 
     // Ends a room without erasing it: both people see "this room has ended".
@@ -163,7 +189,7 @@ Bun.serve({
           console.error("[admin] close failed", err);
         }
       }
-      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + cmsg, 303);
+      return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + cmsg, 303);
     }
 
     // Changes a room's display name (the title at the top of the room). The
@@ -195,7 +221,7 @@ Bun.serve({
           console.error("[admin] rename failed", err);
         }
       }
-      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + rmsg, 303);
+      return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + rmsg, 303);
     }
 
     // Corrects where a person is registered (city and timezone).
@@ -225,7 +251,7 @@ Bun.serve({
           console.error("[admin] set-location failed", err);
         }
       }
-      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + lmsg, 303);
+      return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + lmsg, 303);
     }
 
     if (req.method === "POST" && url.pathname === "/remind-room") {
@@ -255,7 +281,7 @@ Bun.serve({
           console.error("[admin] remind failed", err);
         }
       }
-      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + msg, 303);
+      return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + msg, 303);
     }
 
     return new Response("Not found", { status: 404 });

@@ -1,3 +1,4 @@
+import { ADMIN_HEAD, ADMIN_THEME_CSS, adminTabs } from "./admin-theme";
 // Nearune — HTML for the standalone admin app's room-list page. Lives here
 // (not in page.ts) so both the main app and the separate admin-app service
 // can import it without either pulling in the other's unrelated code.
@@ -180,8 +181,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Nearune Admin">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#FBF3EC">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+${ADMIN_HEAD}
 <style>
   :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; }
   @media (prefers-color-scheme: dark) {
@@ -225,13 +225,14 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   table.nfun td:nth-child(4) { text-align:left; }
   tr.ngroup td { font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); padding-top:14px; text-align:left !important; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
+${ADMIN_THEME_CSS}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="head">
     <h1>Rooms</h1>
-    <nav class="tabs"><a class="on" href="/?${secretQS}">Rooms</a><a href="/analytics?${secretQS}">Analytics</a></nav>
+    ${adminTabs("rooms", secretQS)}
     <button type="button" class="refresh-btn" id="refresh-btn">&#8635; Refresh</button>
   </div>
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>

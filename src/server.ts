@@ -4,7 +4,7 @@
 
 import { roomExists } from "./storage";
 import { screenText } from "./moderation";
-import { startStatsSchedule } from "./stats";
+import { startStatsSchedule, refreshStats } from "./stats";
 import { isPerson, type PersonKey } from "./types";
 import {
   loadState,
@@ -554,6 +554,18 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     // Admin tool: email a "finish registering" reminder to someone whose email
     // sign-up is still unconfirmed. Called by the nearune-admin service with
     // the x-cron-secret header. Body: { roomId, who }.
+    // Admin Home "Refresh now": run the stats snapshot on demand.
+    if (req.method === "POST" && url.pathname === "/api/admin/stats-refresh") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      // Waits up to 45s (under the 60s idle limit); a slower run keeps going and saves when done.
+      const run = refreshStats().then(() => "done", (e: any) => "error: " + String(e?.message || e).slice(0, 120));
+      const res = await Promise.race([run, new Promise<string>((r) => setTimeout(() => r("pending"), 45_000))]);
+      if (res === "done") return json({ ok: true });
+      if (res === "pending") return json({ ok: true, pending: true });
+      return json({ error: res }, { status: 500 });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/admin/remind") {
       const secret = Bun.env.CRON_SECRET;
       if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });

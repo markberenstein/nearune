@@ -3,6 +3,7 @@
 // notifications, feature use, traffic sources and the room funnel.
 // Server-rendered; the only script is the chart tooltip and local-time fix.
 
+import { ADMIN_HEAD, ADMIN_THEME_CSS, adminTabs } from "./admin-theme";
 import type { FunnelReport } from "./funnel";
 import { adminEsc as esc, funnelHtml, type AdminRoomSummary } from "./admin-page";
 
@@ -160,7 +161,8 @@ export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Nearune Analytics</title>
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="/manifest.webmanifest?${qs}">
+${ADMIN_HEAD}
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
   :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#8B7A6C; --line:#E8D9C8; --accent:#C1673B; --c-ret:#C1673B; --c-new:#3E7CB1; --track:#F1E6DA; }
@@ -223,6 +225,7 @@ export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport 
   .yes { font-weight:600; }
   .no { color:var(--ink-soft); }
   .note { color:var(--ink-soft); font-size:0.78rem; margin-top:10px; }
+${ADMIN_THEME_CSS}
 </style>
 </head>
 <body>
@@ -230,7 +233,7 @@ export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport 
   <div class="head">
     <h1>Analytics</h1>
     <nav class="seg">${toggle}</nav>
-    <nav class="tabs"><a href="/?${qs}">Rooms</a><a class="on" href="/analytics?${qs}">Analytics</a></nav>
+    ${adminTabs("analytics", qs)}
   </div>
   <p class="sub">New users and everyone using Nearune, last ${d} days. Anonymous: a random ID per phone or browser, no names or messages. Counting began Nov 8, 2026.</p>
 

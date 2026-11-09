@@ -41,3 +41,12 @@ export function adminTabs(on: "home" | "rooms" | "analytics", qs: string): strin
   const a = (k: string, href: string, label: string) => `<a${k === on ? ' class="on"' : ""} href="${href}?${qs}">${label}</a>`;
   return `<nav class="tabs">${a("home", "/", "Home")}${a("rooms", "/rooms", "Rooms")}${a("analytics", "/analytics", "Analytics")}</nav>`;
 }
+
+// Pull to refresh (the home-screen app has no reload button). On Home it
+// takes a fresh snapshot (same as "Refresh now"); elsewhere it reloads.
+export const ADMIN_PTR = "<div id=\"ptr\" aria-hidden=\"true\" style=\"position:fixed;left:50%;top:0;transform:translate(-50%,-60px);z-index:30;background:var(--surface);color:var(--accent);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font:600 .8rem var(--mono,monospace);box-shadow:0 4px 14px rgba(0,0,0,.15);transition:transform .15s\">&#8635; Pull to refresh</div>" +
+  "<script>(function(){var el=document.getElementById('ptr'),y0=null,dy=0,busy=false,T=80;" +
+  "function set(t,txt){el.style.transform='translate(-50%,'+t+'px)';if(txt)el.textContent=txt;}" +
+  "addEventListener('touchstart',function(e){if(busy||window.scrollY>0||e.touches.length!==1){y0=null;return}y0=e.touches[0].clientY;dy=0;el.style.transition='none'},{passive:true});" +
+  "addEventListener('touchmove',function(e){if(y0===null)return;dy=e.touches[0].clientY-y0;if(dy<=0){set(-60);return}var t=Math.min(dy*0.5,70)-50;set(t,dy>T?'\\u21bb Release to refresh':'\\u21bb Pull to refresh')},{passive:true});" +
+  "addEventListener('touchend',function(){if(y0===null)return;y0=null;el.style.transition='transform .15s';if(dy>T&&window.scrollY<=0){busy=true;set(16,'Refreshing\\u2026');var f=document.querySelector('form.rf');if(f){var b=f.querySelector('button');if(b){b.disabled=true;b.textContent='Refreshing\\u2026 up to a minute'}f.submit()}else location.reload()}else set(-60)});})();</script>";

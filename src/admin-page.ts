@@ -1,4 +1,4 @@
-import { ADMIN_HEAD, ADMIN_THEME_CSS, adminTabs } from "./admin-theme";
+import { ADMIN_HEAD, ADMIN_THEME_CSS, ADMIN_PTR, adminTabs } from "./admin-theme";
 // Nearune — HTML for the standalone admin app's room-list page. Lives here
 // (not in page.ts) so both the main app and the separate admin-app service
 // can import it without either pulling in the other's unrelated code.
@@ -261,6 +261,7 @@ ${ADMIN_THEME_CSS}
     }
   })();
 </script>
+${ADMIN_PTR}
 </body>
 </html>`;
 }

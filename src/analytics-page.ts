@@ -3,7 +3,7 @@
 // notifications, feature use, traffic sources and the room funnel.
 // Server-rendered; the only script is the chart tooltip and local-time fix.
 
-import { ADMIN_HEAD, ADMIN_THEME_CSS, adminTabs } from "./admin-theme";
+import { ADMIN_HEAD, ADMIN_THEME_CSS, ADMIN_PTR, adminTabs } from "./admin-theme";
 import type { FunnelReport } from "./funnel";
 import { adminEsc as esc, funnelHtml, type AdminRoomSummary } from "./admin-page";
 
@@ -319,6 +319,7 @@ ${ADMIN_THEME_CSS}
     }
   })();
 </script>
+${ADMIN_PTR}
 </body>
 </html>`;
 }

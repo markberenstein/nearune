@@ -69,7 +69,7 @@ workflows:
   nearune-android:
     name: Nearune Android (Google Play)
     max_build_duration: 60
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     environment:
       # Codemagic Teams > Code signing identities > Android keystores: create
       # (or upload) a keystore and give it exactly this reference name.

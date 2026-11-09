@@ -43,7 +43,7 @@ import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, type FriendProfile } from "./friend";
-import { recordFunnel, recordLanding, recordTime, isValidFunnelDevice, isFunnelStep } from "./funnel";
+import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep } from "./funnel";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
@@ -870,6 +870,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           }
         }
       }
+      recordRoomUse(roomId, "answer");
       return json(forClient(state));
     }
 
@@ -1512,6 +1513,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         delete s.puzzleLastGuessText;
         delete s.puzzleLastGuessCorrect;
       });
+      recordRoomUse(roomId, "puzzle_uploaded");
       return json(forClient(state));
     }
 
@@ -1539,6 +1541,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (!s.nhie.votes) s.nhie.votes = {};
         s.nhie.votes[who] = choice;
       });
+      recordRoomUse(roomId, "nhie_vote");
       return json(forClient(state));
     }
 
@@ -1676,6 +1679,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       // Old clone is no longer referenced by anything — clean it up at the
       // provider rather than letting clones accumulate there forever.
       if (oldVoiceId && oldVoiceId !== result.voiceId) deleteVoice(oldVoiceId).catch(() => {});
+      recordRoomUse(roomId, "voice_recorded");
       return json(forClient(state));
     }
 
@@ -1826,6 +1830,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
       const audio = await synthesizeSpeech(text, voiceId);
       if (!audio) return json({ error: "synth_failed" }, { status: 502 });
+      recordRoomUse(roomId, "voice_played");
       return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
     }
 

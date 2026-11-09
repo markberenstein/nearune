@@ -48,7 +48,11 @@ type Device = {
 };
 // Landing pages (/get, /military): daily counts per page + source. No IDs.
 type LandingDay = Record<string, { v: number; t: number }>; // "page|source" -> views, App Store taps
-type Data = { devices: Record<string, Device>; landing?: Record<string, LandingDay> };
+// Feature use per room, counted on the server for everyone (existing users
+// and the Original room included): roomId ("" = Original) -> day -> kind -> count.
+export const ROOM_USE_KINDS = ["answer", "voice_played", "voice_recorded", "puzzle_uploaded", "nhie_vote"] as const;
+export type RoomUseKind = (typeof ROOM_USE_KINDS)[number];
+type Data = { devices: Record<string, Device>; landing?: Record<string, LandingDay>; rooms?: Record<string, Record<string, Partial<Record<RoomUseKind, number>>>> };
 
 const FILE = "funnel.json";
 const MAX_DEVICES = 20000;
@@ -150,11 +154,26 @@ export async function recordLanding(page: string, source: string, kind: "view" |
   dirty = true;
 }
 
+export async function recordRoomUse(roomId: string, kind: RoomUseKind): Promise<void> {
+  try {
+    const d = await load();
+    const day = new Date().toISOString().slice(0, 10);
+    if (!d.rooms) d.rooms = {};
+    const R = (d.rooms[roomId] = d.rooms[roomId] || {});
+    const D = (R[day] = R[day] || {});
+    D[kind] = (D[kind] || 0) + 1;
+    const days = Object.keys(R).sort();
+    while (days.length > 120) delete R[days.shift()!];
+    dirty = true;
+  } catch {}
+}
+
 // ---- Report (used by the admin page) ------------------------------------
 
 export type FunnelReport = {
   days: number;
   landing: { page: string; source: string; views: number; taps: number }[];
+  roomUse: Record<string, Partial<Record<RoomUseKind, number>> & { lastDay?: string }>; // per room, within the window
   daily: { day: string; newUsers: number; returning: number; app: number; web: number; minutes: number }[];
   avgMinutesPerDay: number; // average minutes on screen per person per active day (window)
   totalMinutes: number;
@@ -260,6 +279,20 @@ export async function funnelReport(days: number, fresh = false): Promise<FunnelR
         activeWeek: wk.length,
         activeWeekApp: wk.filter(([, v]) => v.plat === "app").length,
       };
+    })(),
+    roomUse: (() => {
+      const sinceDay = new Date(since).toISOString().slice(0, 10);
+      const out: FunnelReport["roomUse"] = {};
+      for (const [rid, byDay] of Object.entries(d.rooms || {})) {
+        const o: FunnelReport["roomUse"][string] = {};
+        for (const [day, k] of Object.entries(byDay)) {
+          if (day < sinceDay) continue;
+          for (const [kind, n] of Object.entries(k)) (o as any)[kind] = ((o as any)[kind] || 0) + (n || 0);
+          if (!o.lastDay || day > o.lastDay) o.lastDay = day;
+        }
+        out[rid] = o;
+      }
+      return out;
     })(),
     landing: (() => {
       const sinceDay = new Date(since).toISOString().slice(0, 10);

@@ -67,35 +67,41 @@ function stepsTable(rep: FunnelReport): string {
     .join("");
 }
 
-function featuresHtml(rooms: AdminRoomSummary[]): string {
+function featuresHtml(rooms: AdminRoomSummary[], rep: FunnelReport | null): string {
   const live = rooms.filter((r) => !r.closed && r.people.length > 0);
   const f = (r: AdminRoomSummary) => r.features || { voice: 0, puzzlePhotos: 0, puzzleSolved: 0, nhieRounds: 0, photos: 0 };
+  const use = (r: AdminRoomSummary) => (rep && rep.roomUse && rep.roomUse[r.roomId]) || {};
+  const per = rep ? rep.days + "d" : "";
   const n = live.length;
-  const voiceRooms = live.filter((r) => f(r).voice > 0).length;
-  const puzzleRooms = live.filter((r) => f(r).puzzlePhotos > 0).length;
-  const nhieRooms = live.filter((r) => f(r).nhieRounds > 0).length;
-  const photoRooms = live.filter((r) => f(r).photos > 0).length;
+  const active = (r: AdminRoomSummary, k: string) => ((use(r) as any)[k] || 0) > 0;
+  const voiceRooms = live.filter((r) => active(r, "voice_played") || active(r, "voice_recorded")).length;
+  const puzzleRooms = live.filter((r) => active(r, "puzzle_uploaded")).length;
+  const nhieRooms = live.filter((r) => active(r, "nhie_vote")).length;
+  const ansRooms = live.filter((r) => active(r, "answer")).length;
   const tiles = [
-    tile("Voice", `${voiceRooms}<small> of ${n}</small>`, `rooms where someone recorded their voice`),
-    tile("Puzzle", `${puzzleRooms}<small> of ${n}</small>`, `rooms with a puzzle photo uploaded`),
-    tile("Never Have I Ever", `${nhieRooms}<small> of ${n}</small>`, `rooms that played a round together`),
-    tile("Photos", `${photoRooms}<small> of ${n}</small>`, `rooms where someone shared a photo`),
+    tile("Answering", `${ansRooms}<small> of ${n}</small>`, `rooms that answered a question in the last ${per}`),
+    tile("Voice", `${voiceRooms}<small> of ${n}</small>`, `rooms that played or recorded a voice in the last ${per}`),
+    tile("Puzzle", `${puzzleRooms}<small> of ${n}</small>`, `rooms that uploaded a puzzle photo in the last ${per}`),
+    tile("Never Have I Ever", `${nhieRooms}<small> of ${n}</small>`, `rooms that played in the last ${per}`),
   ].join("");
+  const num = (v: number | undefined) => (v ? `<span class="yes">${v}</span>` : `<span class="no">—</span>`);
   const rows = live
     .sort((a, b) => (a.roomId ? 1 : 0) - (b.roomId ? 1 : 0) || (b.daysAnswered || 0) - (a.daysAnswered || 0))
     .map((r) => {
       const x = f(r);
+      const u: any = use(r);
       const name = !r.roomId ? "Original room" : r.roomName ? esc(r.roomName) : esc(r.roomId);
-      const dot = (v: number, txt: string) => (v > 0 ? `<span class="yes">${txt}</span>` : `<span class="no">—</span>`);
-      return `<tr><td>${name}${r.friend ? ' <span class="muted">friend</span>' : ""}</td><td>${r.people.length}</td><td>${r.daysAnswered}</td>
-        <td>${dot(x.voice, x.voice + " of " + r.people.length)}</td>
-        <td>${dot(x.puzzlePhotos, x.puzzlePhotos + " photo" + (x.puzzlePhotos === 1 ? "" : "s") + (x.puzzleSolved ? ", " + x.puzzleSolved + " solved" : ""))}</td>
-        <td>${dot(x.nhieRounds, x.nhieRounds + " round" + (x.nhieRounds === 1 ? "" : "s"))}</td>
-        <td>${dot(x.photos, x.photos + " shared")}</td></tr>`;
+      return `<tr><td>${name}${r.friend ? ' <span class="muted">friend</span>' : ""}</td>
+        <td>${num(u.answer)}</td>
+        <td>${num(u.voice_played)}</td>
+        <td>${x.voice ? `<span class="yes">${x.voice} of ${r.people.length}</span>` : '<span class="no">—</span>'}</td>
+        <td>${num(u.puzzle_uploaded)}<span class="muted"> · ${x.puzzlePhotos} all time${x.puzzleSolved ? ", " + x.puzzleSolved + " solved" : ""}</span></td>
+        <td>${num(u.nhie_vote)}<span class="muted"> · ${x.nhieRounds} rounds all time</span></td>
+        <td>${u.lastDay ? esc(u.lastDay.slice(5)) : '<span class="no">—</span>'}</td></tr>`;
     })
     .join("");
   return `<div class="tiles">${tiles}</div>
-  <div class="tblwrap"><table><thead><tr><th>Room</th><th>People</th><th>Days answered</th><th>Voice recorded</th><th>Puzzle</th><th>Never Have I Ever</th><th>Photos</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">No rooms yet.</td></tr>'}</tbody></table></div>`;
+  <div class="tblwrap"><table><thead><tr><th>Room</th><th>Answers</th><th>Voice plays</th><th>Voices set up</th><th>Puzzle uploads</th><th>NHIE votes</th><th>Last used</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">No rooms yet.</td></tr>'}</tbody></table></div>`;
 }
 
 export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport | null, secret: string): string {
@@ -262,8 +268,8 @@ export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport 
 
   <div class="card">
     <h2>Features in use</h2>
-    <p class="hint">From each room's data (all time): voice, puzzle, Never Have I Ever, photos.${rep ? ` New users in this period: ${c("voice_recorded")} recorded their voice, ${c("voice_played")} heard a voice answer, ${c("puzzle_uploaded")} uploaded a puzzle photo, ${c("nhie_played")} played Never Have I Ever.` : ""}</p>
-    ${featuresHtml(rooms)}
+    <p class="hint">Every room and every person, the Original room included. Counts are for the last ${rep ? rep.days : 7} days, counted since Nov 9; "all time" comes from each room's saved data.</p>
+    ${featuresHtml(rooms, rep)}
   </div>
 
   <div class="card">

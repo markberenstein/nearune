@@ -42,7 +42,7 @@ import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
-import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, type FriendProfile } from "./friend";
+import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, friendRequeue, type FriendProfile } from "./friend";
 import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep } from "./funnel";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
@@ -901,6 +901,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const cur = await loadState(roomId);
       if (cur.origin !== "friend") return json({ error: "not_friend_room" }, { status: 400 });
+      const wasClosed = !!cur.closed;
       const report = body.report === true;
       const about: PersonKey = who === "mark" ? "nikita" : "mark";
       const note = typeof body.note === "string" ? body.note.slice(0, 300) : undefined;
@@ -913,6 +914,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (s.reports.length > 50) s.reports = s.reports.slice(-50);
       });
       await friendBlock(cur.friendDevices && cur.friendDevices.mark, cur.friendDevices && cur.friendDevices.nikita);
+      // A plain leave (not a report) before the other person answered anything:
+      // they did nothing wrong, so they go back to the front of the line.
+      if (!report && !wasClosed) {
+        const stayerAnswered = Object.values((cur as any).answers || {}).some((day: any) => day && day[about]);
+        const sp: any = cur.people && (cur.people as any)[about];
+        if (!stayerAnswered) {
+          await friendRequeue(cur.friendDevices && (cur.friendDevices as any)[about],
+            sp && sp.name && sp.location ? { name: sp.name, location: sp.location, language: sp.language || "English", ...(sp.tz ? { tz: sp.tz } : {}) } : undefined);
+          console.log("[friend-leave] room=" + roomId + " other person requeued at front");
+        }
+      }
       console.log("[friend-leave] room=" + roomId + " by=" + who + " report=" + report + (note ? " note=" + JSON.stringify(note) : ""));
       return json(forClient(state));
     }

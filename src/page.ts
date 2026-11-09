@@ -3675,6 +3675,24 @@ const RAW = String.raw`<!doctype html>
         h("div", { style: "margin-top: 10px;" }, [h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })])
       ]);
     }
+    // Make a friend room ended by the other person (often before this person
+    // even opened it): say so plainly and offer a new match right here.
+    if (state.origin === "friend" && state.closedBy && state.closedBy !== "admin" && state.closedBy !== viewerKey) {
+      var again2 = h("button", { class: "puzzle-upload-btn", type: "button", style: "margin-top: 14px;", text: t("Find me a new friend") });
+      again2.addEventListener("click", function () {
+        try {
+          var list2 = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
+          if (Array.isArray(list2)) localStorage.setItem("nearuneRooms", JSON.stringify(list2.filter(function (r) { return r.id !== ROOM; })));
+          localStorage.removeItem("nearuneFriend");
+        } catch (e) {}
+        location.href = "/home?friend=1";
+      });
+      return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
+        h("p", { class: "puzzle-guess-note", text: t("Your match left this room before you two got to talk. Sorry about that! Tap below and we'll find you someone new.") }),
+        again2,
+        h("div", { style: "margin-top: 10px;" }, [h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })])
+      ]);
+    }
     var msg = state.closedBy === "admin" ? t("This room was closed by Nearune.") : (state.closedBy && state.closedBy === viewerKey) ? t("You left this room.") : t("This room has ended.");
     return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
       h("p", { class: "puzzle-guess-note", text: msg }),
@@ -3709,6 +3727,12 @@ const RAW = String.raw`<!doctype html>
     var q = report
       ? t("Report this person and leave? This ends the room for both of you, and you won't be matched again.")
       : t("Leave this room? This ends it for both of you, and you won't be matched again.");
+    // Matched only minutes ago: the other person was just notified and may
+    // not have opened Nearune yet, so say that before they give up.
+    try {
+      var ageMin = state && state.createdAt ? (Date.now() - new Date(state.createdAt).getTime()) / 60000 : 999;
+      if (!report && ageMin < 120) q = t("Your match was notified when you were paired and may not have opened Nearune yet. Most people join within a few hours. Leave anyway? This ends the room for both of you.");
+    } catch (e) {}
     if (!window.confirm(q)) return;
     fetch(RP + "/api/leave-friend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, report: report }) })
       .then(function (r) { if (!r.ok) throw new Error("bad"); return r.json(); })

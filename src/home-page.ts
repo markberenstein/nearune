@@ -271,7 +271,60 @@ export function buildHomePage(): string {
     FRIEND_LANGS.forEach(function (n) { var o = el("option", { value: n, text: n }); lg.appendChild(o); });
     lg.value = prof.language && FRIEND_LANGS.indexOf(prof.language) >= 0 ? prof.language : "English";
     var err = el("div", { class: "sheet-err" });
-    sh.appendChild(nm); sh.appendChild(ct); sh.appendChild(lg); sh.appendChild(err);
+    // City suggestions, same as room sign-up: a pick list when the name is
+    // ambiguous or misspelled, "Use my current location", and the language
+    // pre-picked from the city (until they choose one themselves).
+    var langTouched = !!prof.language;
+    lg.addEventListener("change", function () { langTouched = true; });
+    var locNote = el("div", { class: "sheet-err" });
+    var choices = el("div", { class: "loc-choices" });
+    choices.style.cssText = "display:none;margin:-4px 0 10px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface);text-align:left";
+    var geoTimer = null;
+    function showChoices(list) {
+      choices.innerHTML = "";
+      if (!list || !list.length) { choices.style.display = "none"; return; }
+      list.forEach(function (pl) {
+        var b = el("button", { type: "button", text: pl.label });
+        b.style.cssText = "display:block;width:100%;text-align:left;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:transparent;font:inherit;font-size:1rem;color:var(--ink);cursor:pointer";
+        b.addEventListener("click", function () { ct.value = pl.label; showChoices([]); locNote.textContent = ""; lookUp(pl.label, true); });
+        choices.appendChild(b);
+      });
+      choices.style.display = "block";
+    }
+    function lookUp(text, picked) {
+      if (geoTimer) clearTimeout(geoTimer);
+      var q = (text || "").trim();
+      if (!q) { showChoices([]); locNote.textContent = ""; return; }
+      geoTimer = setTimeout(function () {
+        fetch("/api/geo?location=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (info) {
+          if (ct.value.trim() !== q) return;
+          var pls = (info && info.places) || [];
+          var exact = pls.some(function (pl) { return pl.label.toLowerCase() === q.toLowerCase(); });
+          var sugg = !!(info && info.suggested) && pls.length > 0 && !exact;
+          var amb = !picked && ((pls.length >= 2 && !exact) || sugg);
+          locNote.textContent = picked ? "" : sugg ? "We couldn't find that spelling. Did you mean one of these?" : (info && info.city === false && !pls.length) ? "Please enter a city, not just a state or country (e.g. San Diego, CA)." : amb ? "Several places have that name. Pick yours:" : "";
+          showChoices(amb ? pls : []);
+          if (!langTouched && info && info.language && FRIEND_LANGS.indexOf(info.language) >= 0) lg.value = info.language;
+        }).catch(function () {});
+      }, picked ? 0 : 500);
+    }
+    ct.addEventListener("input", function () { lookUp(ct.value, false); });
+    var here = el("button", { type: "button", text: "📍 Use my current location" });
+    here.style.cssText = "display:block;margin:-4px auto 8px;padding:4px 10px;border:0;background:transparent;font:inherit;font-size:0.85rem;color:var(--ink-soft);text-decoration:underline;cursor:pointer";
+    if (!navigator.geolocation) here.style.display = "none";
+    here.addEventListener("click", function () {
+      locNote.textContent = "Finding your location…";
+      var done = false;
+      var guard = setTimeout(function () { if (!done) { done = true; locNote.textContent = "Couldn't get your location. Please type your city."; } }, 15000);
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        if (done) return; done = true; clearTimeout(guard);
+        fetch("/api/reverse-geo?lat=" + pos.coords.latitude + "&lon=" + pos.coords.longitude).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.label) { ct.value = d.label; locNote.textContent = ""; showChoices([]); lookUp(d.label, true); }
+          else locNote.textContent = "Couldn't work out your city. Please type it.";
+        }).catch(function () { locNote.textContent = "Couldn't work out your city. Please type it."; });
+      }, function () { if (done) return; done = true; clearTimeout(guard); locNote.textContent = "Couldn't get your location. Please type your city."; }, { timeout: 10000, maximumAge: 600000 });
+    });
+    sh.appendChild(nm); sh.appendChild(ct); sh.appendChild(choices); sh.appendChild(locNote); sh.appendChild(here); sh.appendChild(lg); sh.appendChild(err);
     var yes = el("button", { class: "btn", type: "button", text: "I'm 18 or older, find me a friend" });
     var no = el("button", { class: "btn ghost", type: "button", text: "Not now" });
     yes.addEventListener("click", function () {

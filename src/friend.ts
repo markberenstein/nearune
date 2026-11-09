@@ -191,3 +191,17 @@ export function friendBlock(a: string | undefined, b: string | undefined): Promi
     await save();
   });
 }
+
+// The other person left a brand-new match before this person got to it: put
+// this person back at the front of the line (same profile). They only become
+// matchable again once they check in (tap Make a friend), so nobody gets
+// paired with someone who isn't around.
+export function friendRequeue(device: string | undefined, profile?: FriendProfile): Promise<void> {
+  return locked(async () => {
+    if (!device || device === "admin") return;
+    const d = await load();
+    if (d.queue.some((w) => w.device === device)) return;
+    d.queue.unshift({ ticket: rand12() + rand12(), device, at: Date.now(), seen: 0, ...(profile ? { profile } : {}) });
+    await save();
+  });
+}

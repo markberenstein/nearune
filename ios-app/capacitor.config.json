@@ -23,7 +23,15 @@
       "showSpinner": false
     },
     "PushNotifications": {
-      "presentationOptions": ["badge", "sound", "alert"]
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
+  },
+  "android": {
+    "backgroundColor": "#FAF6EE",
+    "allowMixedContent": false
   }
 }

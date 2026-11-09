@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nearune</string>
+    <string name="title_activity_main">Nearune</string>
+    <string name="package_name">com.nearune.app</string>
+    <string name="custom_url_scheme">com.nearune.app</string>
+</resources>

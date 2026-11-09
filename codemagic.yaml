@@ -65,3 +65,43 @@ workflows:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
+
+  nearune-android:
+    name: Nearune Android (Google Play)
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      # Codemagic Teams > Code signing identities > Android keystores: create
+      # (or upload) a keystore and give it exactly this reference name.
+      android_signing:
+        - nearune_android_keystore
+      vars:
+        PACKAGE_NAME: "com.nearune.app"
+      node: 22
+      java: 21
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          cd ios-app
+          npm install
+      - name: Check for the Firebase config file (needed for push notifications)
+        script: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > ios-app/android/app/google-services.json
+          fi
+          if [ ! -s ios-app/android/app/google-services.json ]; then
+            echo "WARNING: google-services.json is missing - the app will build but push notifications will not work."
+          fi
+      - name: Capacitor sync (copies config + plugins into the native project)
+        script: |
+          cd ios-app
+          npx cap sync android
+      - name: Build signed Android App Bundle (.aab)
+        script: |
+          cd ios-app/android
+          chmod +x gradlew
+          ./gradlew bundleRelease -PversionCode=$(($BUILD_NUMBER + 1))
+    artifacts:
+      - ios-app/android/app/build/outputs/bundle/release/*.aab
+    # Publishing to Google Play is added once the app exists in Play Console
+    # and a service-account key is connected (see ios-app/ANDROID.md).

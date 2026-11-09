@@ -43,6 +43,7 @@ import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, type FriendProfile } from "./friend";
+import { recordFunnel, isValidFunnelDevice, isFunnelStep } from "./funnel";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
@@ -293,6 +294,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     }
     // In-app tip completed (Apple handles the payment; this is only a log line
     // so tips show up in the server logs). No personal data.
+    // Anonymous new-user funnel step (random device ID + step name only).
+    if (req.method === "POST" && url.pathname === "/api/journey") {
+      if (!rateLimit("funnel:" + clientIp(req, server), 400, HOUR)) return json({ ok: true });
+      const fb2 = await readJson(req);
+      if (fb2 && isValidFunnelDevice(fb2.device) && isFunnelStep(fb2.step)) {
+        await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
+      }
+      return json({ ok: true });
+    }
     if (req.method === "POST" && url.pathname === "/api/tip-log") {
       if (!rateLimit("tip-log:" + clientIp(req, server), 20, HOUR)) return json({ ok: true });
       const tb = await readJson(req);

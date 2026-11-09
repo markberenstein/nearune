@@ -9,6 +9,7 @@
 // resolve at build time the same way a workspace package would.
 import { listRoomIds, loadState, dropCachedState, deleteRoom, removeFromEmailIndex } from "../../src/storage";
 import { buildAdminPage, type AdminRoomSummary } from "../../src/admin-page";
+import { funnelReport } from "../../src/funnel";
 import type { PersonKey } from "../../src/types";
 import { ICON_180_B64, ICON_512_B64 } from "./icon";
 
@@ -93,7 +94,10 @@ Bun.serve({
         }
       }
       summaries.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
+      const fdays = [7, 30, 90].includes(Number(url.searchParams.get("fdays"))) ? Number(url.searchParams.get("fdays")) : 7;
+      let funnel = null;
+      try { funnel = await funnelReport(fdays, true); } catch (err) { console.error("[admin] funnel report failed", err); }
+      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || "", url.searchParams.get("msg") || "", funnel), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }

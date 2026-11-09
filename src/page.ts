@@ -1355,6 +1355,43 @@ const RAW = String.raw`<!doctype html>
     return Object.keys(state.answers).filter(isComplete).sort().reverse().slice(0, 30);
   }
 
+  // Anonymous new-user funnel: random device ID (shared with the rooms page)
+  // + step name. No names, rooms or answers are sent.
+  var nrSent = {};
+  var nrExisting = null;
+  function nrDevice() {
+    try {
+      var d = localStorage.getItem("nearuneDevice");
+      if (d && /^[A-Za-z0-9]{16,64}$/.test(d)) return d;
+      var c = "abcdefghijklmnopqrstuvwxyz0123456789", o = "";
+      for (var i = 0; i < 24; i++) o += c.charAt(Math.floor(Math.random() * c.length));
+      localStorage.setItem("nearuneDevice", o);
+      return o;
+    } catch (e) { return ""; }
+  }
+  function nrTrack(step) {
+    if (nrSent[step]) return; nrSent[step] = 1;
+    var dev = nrDevice(); if (!dev) return;
+    if (nrExisting === null) nrExisting = !!(state && viewerKey && state.people && state.people[viewerKey]);
+    var plat = "web";
+    try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
+    try {
+      fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ device: dev, step: step, platform: plat, existing: nrExisting }) }).catch(function () {});
+    } catch (e) {}
+  }
+  function nrCheckState() {
+    try {
+      if (!state || typeof state !== "object") return;
+      nrTrack("open");
+      if (!viewerKey || !state.people || !state.people[viewerKey]) return;
+      var other = viewerKey === "mark" ? "nikita" : "mark";
+      if (state.people[other]) nrTrack("partner_joined");
+      var ans = state.answers || {};
+      for (var dk in ans) { var a = ans[dk]; if (a && a.mark && a.nikita) { nrTrack("both_answered"); break; } }
+    } catch (e) {}
+  }
+
   async function api(path, body) {
     var res = await fetch(RP + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) {
@@ -1372,6 +1409,7 @@ const RAW = String.raw`<!doctype html>
     var next = await res.json();
     state = next;
     online = true;
+    if (path === "/api/answer") nrTrack("answered");
     return next;
   }
 
@@ -3098,6 +3136,7 @@ const RAW = String.raw`<!doctype html>
           if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : res.data && res.data.error === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
+          nrTrack("signed_up");
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
           if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
           try {
@@ -3178,6 +3217,7 @@ const RAW = String.raw`<!doctype html>
             : t("Couldn't register — try again.");
           renderApp(); return;
         }
+        nrTrack("signed_up");
         lastConfirmUrl = res.data._confirmUrl || "";
         if (email) {
           lastConfirmEmail = email;
@@ -3381,6 +3421,7 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
       var copyText = url === lastInviteUrl ? inviteMessage(url) : url;
+      nrTrack("invite_sent");
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
@@ -3394,6 +3435,7 @@ const RAW = String.raw`<!doctype html>
     var labelText = label || t("Share invite link");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
+      nrTrack("invite_sent");
       if (navigator.share) {
         var shareObj = url === lastInviteUrl ? { url: url } : { url: url };
         navigator.share(shareObj).catch(function () {});
@@ -3774,6 +3816,7 @@ const RAW = String.raw`<!doctype html>
   }
 
   function renderApp() {
+    nrCheckState();
     var app = document.getElementById("app");
     if (!app) return;
     app.innerHTML = "";
@@ -5811,7 +5854,16 @@ document.getElementById("go").addEventListener("click", function () {
   fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: (document.getElementById("roomName").value || "").trim() }) })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
-      if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
+      if (res.ok && res.data && res.data.roomId) {
+        try {
+          var nd = localStorage.getItem("nearuneDevice");
+          if (nd && /^[A-Za-z0-9]{16,64}$/.test(nd)) {
+            var np = (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? "app" : "web";
+            fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: nd, step: "room_created", platform: np }) }).catch(function () {});
+          }
+        } catch (e) {}
+        location.href = "/r/" + res.data.roomId; return;
+      }
       var msg = res.data && res.data.error === "registrations_paused"
         ? (res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.")
         : (res.data && res.data.error === "inappropriate_name"

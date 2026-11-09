@@ -161,6 +161,7 @@ export function buildHomePage(): string {
 
   function emptyBox(first) {
     var box = el("a", { class: "box empty" + (first ? " first" : ""), href: "/new", "aria-label": first ? "Invite your first Nearune partner" : "Start a room" });
+    box.addEventListener("click", function () { nrTrack("tap_invite"); });
     box.appendChild(el("div", { class: "plus", text: "+" }));
     if (first) box.appendChild(el("div", { class: "big", text: "Invite your first Nearune partner" }));
     return box;
@@ -205,6 +206,7 @@ export function buildHomePage(): string {
   // tile (people missed "Meet your match"). Done once per match, so backing
   // out to the rooms page doesn't bounce them in again.
   function openMatch(roomId, token, who, ready) {
+    nrTrack("friend_matched");
     setFriend({ status: "matched", roomId: roomId, token: token, who: who, ready: ready, opened: true });
     if (ready && (who === "mark" || who === "nikita")) {
       // Already signed up on the server: remember which side is ours and go
@@ -217,6 +219,19 @@ export function buildHomePage(): string {
     location.href = "/j/" + roomId + "/" + token;
   }
 
+  // Anonymous new-user funnel: random device ID + step name, nothing personal.
+  var nrSent = {};
+  var nrExisting = null;
+  function nrTrack(step) {
+    if (nrSent[step]) return; nrSent[step] = 1;
+    if (nrExisting === null) nrExisting = rooms.length > 0;
+    var plat = "web";
+    try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
+    try {
+      fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ device: deviceId(), step: step, platform: plat, existing: nrExisting }) }).catch(function () {});
+    } catch (e) {}
+  }
   function browserTz() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } }
   function startFriend(profile) {
     friendMsg = "";
@@ -243,6 +258,7 @@ export function buildHomePage(): string {
 
   var FRIEND_LANGS = ["Arabic", "Bengali", "Czech", "Dutch", "English", "Farsi (Persian)", "French", "German", "Gibberish", "Greek", "Gujarati", "Hebrew", "Hindi", "Indonesian", "Italian", "Japanese", "Klingon", "Korean", "Mandarin Chinese", "Marathi", "Norwegian", "Polish", "Portuguese", "Punjabi", "Romanian", "Russian", "Spanish", "Swahili", "Swedish", "Tagalog (Filipino)", "Tamil", "Telugu", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese"];
   function ageSheet() {
+    nrTrack("tap_friend");
     var prof = jget("nearuneProfile", null) || {};
     var bg = el("div", { class: "sheet-bg" });
     var sh = el("div", { class: "sheet" });
@@ -263,6 +279,7 @@ export function buildHomePage(): string {
       if (!p.name || !p.location || !p.language) { err.textContent = "Please add your first name, city and language."; return; }
       jset("nearuneProfile", p);
       document.body.removeChild(bg);
+      nrTrack("friend_submit");
       startFriend(p);
     });
     no.addEventListener("click", function () { document.body.removeChild(bg); });
@@ -333,6 +350,8 @@ export function buildHomePage(): string {
   }
 
   render();
+  nrTrack("open");
+  try { var wl = document.getElementById("welcome"); if (wl && !wl.hidden) nrTrack("welcome_seen"); } catch (e) {}
   // In-app tip jar (iPhone app only). Tips go through Apple in-app purchase
   // as Apple requires; they unlock nothing. Hidden unless the app has the
   // purchase plugin AND Apple returns the tip products, so older app builds

@@ -29,6 +29,31 @@
 	     OS's own networking) — no custom or non-exempt encryption — so
 	     "false" here is accurate and is the standard answer for apps in
 	     this situation. -->
+	<!-- Meta (Facebook) SDK: reports app installs and opens to Meta so
+	     install-optimized ad campaigns can measure results. No login, no
+	     IDFA (advertiser ID collection off, no tracking prompt); Apple's
+	     SKAdNetwork attributes installs to ads privately. -->
+	<key>FacebookAppID</key>
+	<string>1809588766751726</string>
+	<key>FacebookClientToken</key>
+	<string>c229f5f48d6673c55380a09df1ccac23</string>
+	<key>FacebookDisplayName</key>
+	<string>Nearune</string>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<true/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<false/>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>

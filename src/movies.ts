@@ -52,6 +52,47 @@ function largestImageUrl(imageField: any): string {
   return (last && typeof last.label === "string" && last.label) || "";
 }
 
+// In-theatres list from TMDB (needs TMDB_API_KEY: either the v3 API key or the
+// v4 "API Read Access Token"). Ranked by TMDB popularity for films with a
+// theatrical release in that country in the last ~60 days. This is NOT box
+// office (TMDB has no per-country grosses). Returns null when no key is set,
+// the call fails, or nothing is found, so the iTunes chart below is the fallback.
+async function tmdbInTheatres(country: string, limit: number): Promise<MovieChart> {
+  const key = (process.env.TMDB_API_KEY || "").trim();
+  if (!key) return null;
+  try {
+    const day = 24 * 60 * 60 * 1000;
+    const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+    const q = new URLSearchParams({
+      region: country,
+      with_release_type: "2|3",
+      "release_date.gte": iso(Date.now() - 60 * day),
+      "release_date.lte": iso(Date.now()),
+      sort_by: "popularity.desc",
+      include_adult: "false",
+      page: "1",
+    });
+    const headers: Record<string, string> = {};
+    if (key.startsWith("eyJ")) headers.Authorization = "Bearer " + key;
+    else q.set("api_key", key);
+    const res = await fetch("https://api.themoviedb.org/3/discover/movie?" + q.toString(), { headers, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) { console.log("[movies] tmdb " + country + " -> HTTP " + res.status); return null; }
+    const data: any = await res.json();
+    const rows: any[] = (data && Array.isArray(data.results) && data.results) || [];
+    const out = rows.filter((r) => r && r.title).slice(0, limit).map((r, i) => ({
+      rank: i + 1,
+      title: String(r.title),
+      url: "https://www.themoviedb.org/movie/" + r.id,
+      artworkUrl: r.poster_path ? "https://image.tmdb.org/t/p/w342" + r.poster_path : "",
+      previewUrl: youtubeTrailerSearchUrl(String(r.title)),
+    }));
+    return out.length ? out : null;
+  } catch (err: any) {
+    console.log("[movies] tmdb " + country + " -> threw: " + (err && err.message ? err.message : String(err)));
+    return null;
+  }
+}
+
 // Top `limit` movies (default 5) currently popular in whichever country a
 // free-text location resolves to.
 export async function topMovies(location: string, limit = 5): Promise<MovieChart> {
@@ -63,8 +104,9 @@ export async function topMovies(location: string, limit = 5): Promise<MovieChart
     const ttl = cached.value ? CHART_TTL : FAILURE_TTL;
     if (Date.now() - cached.at < ttl) return cached.value;
   }
-  let value: MovieChart = null;
+  let value: MovieChart = await tmdbInTheatres(country, limit);
   try {
+    if (!value) {
     const url = "https://itunes.apple.com/" + country + "/rss/topmovies/limit=" + limit + "/json";
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (res.ok) {
@@ -84,6 +126,7 @@ export async function topMovies(location: string, limit = 5): Promise<MovieChart
       }
     } else {
       console.log("[movies] fetch " + country + " -> HTTP " + res.status);
+    }
     }
   } catch (err: any) {
     console.log("[movies] fetch " + country + " -> threw: " + (err && err.message ? err.message : String(err)));

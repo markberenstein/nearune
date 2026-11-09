@@ -1,4 +1,3 @@
-import type { FunnelReport } from "./funnel";
 // Nearune — HTML for the standalone admin app's room-list page. Lives here
 // (not in page.ts) so both the main app and the separate admin-app service
 // can import it without either pulling in the other's unrelated code.
@@ -28,9 +27,11 @@ export type AdminRoomSummary = {
   adminJoin?: string;
   reported?: boolean;
   closed?: boolean;
+  // Feature use in this room (counts only, no content).
+  features?: { voice: number; puzzlePhotos: number; puzzleSolved: number; nhieRounds: number; photos: number };
 };
 
-function adminEsc(s: string): string {
+export function adminEsc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
@@ -60,7 +61,7 @@ const NOTICES: Record<string, string> = {
 
 // Sign-up funnel over normal (invite) rooms: not the original room, not Make a
 // friend matches. "Last 7 days" counts rooms created in the past week.
-function funnelHtml(rooms: AdminRoomSummary[]): string {
+export function funnelHtml(rooms: AdminRoomSummary[]): string {
   const base = rooms.filter((r) => r.roomId && !r.friend && !r.closed);
   const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
   const stages = (list: AdminRoomSummary[]) => {
@@ -89,47 +90,7 @@ function funnelHtml(rooms: AdminRoomSummary[]): string {
   <p class="sub" style="margin-top:10px">${waiting.length} room${waiting.length === 1 ? " is" : "s are"} waiting for a partner; ${oldWaiting.length} for over 24 hours, and ${reachable} of those can still get a notification. Excludes the original room and Make a friend matches.</p>`;
 }
 
-// New-user funnel from the anonymous device steps (see src/funnel.ts).
-function newUsersHtml(rep: FunnelReport | null, secretQS: string): string {
-  if (!rep) return "";
-  const d = rep.days;
-  const toggle = [7, 30, 90]
-    .map((n) => (n === d ? `<strong>${n} days</strong>` : `<a href="/?${secretQS}&fdays=${n}">${n} days</a>`))
-    .join(" \u00b7 ");
-  const base = rep.newUsers;
-  const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) + "%" : "\u2014");
-  const bars = rep.steps
-    .map((st) => {
-      const w = base ? Math.max(st.count ? 2 : 0, Math.round((st.count / base) * 100)) : 0;
-      return `<tr><td>${adminEsc(st.label)}</td><td>${st.count}</td><td>${pct(st.count, base)}</td>
-        <td style="width:40%"><div class="nbar"><div style="width:${w}%"></div></div></td></tr>`;
-    })
-    .join("");
-  const r = rep.retention;
-  const recent = rep.recent.length
-    ? rep.recent
-        .map((u) => `<tr><td><span class="local-time" data-ts="${new Date(u.first).toISOString()}">${adminEsc(new Date(u.first).toLocaleString("en-US"))} UTC</span></td>
-          <td>${u.plat === "app" ? "iPhone app" : "web"}</td><td>${adminEsc(u.last)}</td>
-          <td class="muted" style="font-size:0.75rem">${adminEsc(u.reached.join(" \u2192 "))}</td><td>${u.daysOpen}</td></tr>`)
-        .join("")
-    : `<tr><td colspan="5" class="muted">No new users yet in this period.</td></tr>`;
-  return `<h2>New users</h2>
-  <p class="sub">${toggle}</p>
-  <p class="sub"><strong>${base}</strong> new (${rep.appUsers} iPhone app, ${rep.webUsers} web) &middot; ${rep.existingActive} existing user${rep.existingActive === 1 ? "" : "s"} active.
-    Came back next day: <strong>${r.nextDay}</strong> of ${r.nextDayOf} (${pct(r.nextDay, r.nextDayOf)}) &middot; after a week: <strong>${r.week}</strong> of ${r.weekOf} (${pct(r.week, r.weekOf)}).</p>
-  <div class="tblwrap"><table class="funnel nfun">
-    <thead><tr><th>Step</th><th>People</th><th>% of new</th><th></th></tr></thead>
-    <tbody>${bars}</tbody>
-  </table></div>
-  <h2 style="margin-top:22px">Recent new users</h2>
-  <div class="tblwrap"><table>
-    <thead><tr><th>First seen</th><th>Where</th><th>Got as far as</th><th>Steps</th><th>Days opened</th></tr></thead>
-    <tbody>${recent}</tbody>
-  </table></div>
-  <p class="sub" style="margin-top:8px">Anonymous: one random ID per phone or browser, no names or messages. Started counting when this section was added; people who already used Nearune then are counted as existing.</p>`;
-}
-
-export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice = "", funnel: FunnelReport | null = null): string {
+export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice = ""): string {
   const noticeHtml = notice && NOTICES[notice] ? `<p class="notice">${adminEsc(NOTICES[notice])}</p>` : "";
   const secretQS = "secret=" + encodeURIComponent(secret);
   const rows = rooms
@@ -256,9 +217,13 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   .remind-btn { background:var(--accent); border:1px solid var(--accent); color:#fff; border-radius:8px; padding:4px 10px; font-size:0.78rem; font-family:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
   .notice { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:0.85rem; margin:0 0 16px; }
   .flag { color:#B3361F; font-weight:700; font-size:0.72rem; }
+  .tabs { display:flex; gap:4px; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:3px; margin-left:auto; margin-right:10px; }
+  .tabs a { padding:6px 14px; border-radius:999px; text-decoration:none; color:var(--ink-soft); font-weight:600; font-size:0.85rem; }
+  .tabs a.on { background:var(--accent); color:#fff; }
   .nbar { background:var(--line); border-radius:6px; height:10px; overflow:hidden; }
   .nbar > div { background:var(--accent); height:100%; border-radius:6px; }
   table.nfun td:nth-child(4) { text-align:left; }
+  tr.ngroup td { font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); padding-top:14px; text-align:left !important; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
 </style>
 </head>
@@ -266,13 +231,13 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
 <div class="wrap">
   <div class="head">
     <h1>Rooms</h1>
+    <nav class="tabs"><a class="on" href="/?${secretQS}">Rooms</a><a href="/analytics?${secretQS}">Analytics</a></nav>
     <button type="button" class="refresh-btn" id="refresh-btn">&#8635; Refresh</button>
   </div>
   <p class="sub">${rooms.length} room${rooms.length === 1 ? "" : "s"} total. No answer content or photos shown here.</p>
   <p class="updated" id="updated"></p>
   ${noticeHtml}
-  ${newUsersHtml(funnel, secretQS)}
-  ${funnelHtml(rooms)}
+
   <h2>All rooms</h2>
   <div class="tblwrap"><table>
     <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Where</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>

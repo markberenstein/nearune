@@ -43,7 +43,7 @@ import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, type FriendProfile } from "./friend";
-import { recordFunnel, isValidFunnelDevice, isFunnelStep } from "./funnel";
+import { recordFunnel, recordLanding, recordTime, isValidFunnelDevice, isFunnelStep } from "./funnel";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
@@ -298,6 +298,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     if (req.method === "POST" && url.pathname === "/api/journey") {
       if (!rateLimit("funnel:" + clientIp(req, server), 400, HOUR)) return json({ ok: true });
       const fb2 = await readJson(req);
+      if (fb2 && (fb2.step === "lp_view" || fb2.step === "lp_tap")) {
+        const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : "";
+        const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
+        if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : "tap");
+        return json({ ok: true });
+      }
+      if (fb2 && fb2.step === "time" && isValidFunnelDevice(fb2.device)) {
+        const secs = Math.max(0, Math.min(600, Math.round(Number(fb2.seconds) || 0)));
+        if (secs > 0) await recordTime(fb2.device, secs, fb2.platform === "app" ? "app" : "web");
+        return json({ ok: true });
+      }
       if (fb2 && isValidFunnelDevice(fb2.device) && isFunnelStep(fb2.step)) {
         await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
       }

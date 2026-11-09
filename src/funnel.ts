@@ -11,19 +11,30 @@
 
 import { readSideFile, writeSideFile } from "./storage";
 
-export const FUNNEL_STEPS: { key: string; label: string }[] = [
-  { key: "open", label: "Opened Nearune" },
-  { key: "welcome_seen", label: "Saw the welcome screen" },
-  { key: "tap_invite", label: "Tapped Invite / Start a room" },
-  { key: "room_created", label: "Created a room" },
-  { key: "tap_friend", label: "Tapped Make a friend" },
-  { key: "friend_submit", label: "Filled in Make a friend" },
-  { key: "friend_matched", label: "Matched with a friend" },
-  { key: "signed_up", label: "Signed up in a room" },
-  { key: "invite_sent", label: "Shared an invite" },
-  { key: "partner_joined", label: "Partner / match joined" },
-  { key: "answered", label: "Answered a question" },
-  { key: "both_answered", label: "Both answered (saw each other's)" },
+export const FUNNEL_STEPS: { key: string; label: string; group: string }[] = [
+  { key: "open", label: "Opened Nearune", group: "Getting started" },
+  { key: "welcome_seen", label: "Saw the welcome screen", group: "Getting started" },
+  { key: "tap_invite", label: "Tapped Invite / Start a room", group: "Getting started" },
+  { key: "room_created", label: "Created a room", group: "Getting started" },
+  { key: "tap_friend", label: "Tapped Make a friend", group: "Getting started" },
+  { key: "friend_submit", label: "Filled in Make a friend", group: "Getting started" },
+  { key: "friend_matched", label: "Matched with a friend", group: "Getting started" },
+  { key: "signed_up", label: "Signed up in a room", group: "Getting started" },
+  { key: "invite_sent", label: "Shared an invite (inviter)", group: "Invites" },
+  { key: "invite_opened", label: "Opened an invite (invited partner)", group: "Invites" },
+  { key: "invite_to_store", label: "Went to the App Store from an invite", group: "Invites" },
+  { key: "invite_joined", label: "Joined from an invite", group: "Invites" },
+  { key: "partner_joined", label: "Partner / match joined", group: "Invites" },
+  { key: "notif_asked", label: "Asked to turn on notifications", group: "Notifications" },
+  { key: "notif_allowed", label: "Turned notifications on", group: "Notifications" },
+  { key: "notif_declined", label: "Said Not now", group: "Notifications" },
+  { key: "notif_blocked", label: "Blocked in phone settings", group: "Notifications" },
+  { key: "answered", label: "Answered a question", group: "Using Nearune" },
+  { key: "both_answered", label: "Both answered (saw each other's)", group: "Using Nearune" },
+  { key: "voice_recorded", label: "Recorded their voice", group: "Features" },
+  { key: "voice_played", label: "Heard an answer in partner's voice", group: "Features" },
+  { key: "puzzle_uploaded", label: "Uploaded a puzzle photo", group: "Features" },
+  { key: "nhie_played", label: "Played Never Have I Ever", group: "Features" },
 ];
 const STEP_KEYS = new Set(FUNNEL_STEPS.map((s) => s.key));
 
@@ -33,8 +44,11 @@ type Device = {
   existing?: boolean; // already a Nearune user when tracking started
   steps: Record<string, number>; // step -> first time, ms
   days: string[]; // YYYY-MM-DD (UTC) days the app was opened, newest last
+  secs?: Record<string, number>; // YYYY-MM-DD -> seconds on screen that day
 };
-type Data = { devices: Record<string, Device> };
+// Landing pages (/get, /military): daily counts per page + source. No IDs.
+type LandingDay = Record<string, { v: number; t: number }>; // "page|source" -> views, App Store taps
+type Data = { devices: Record<string, Device>; landing?: Record<string, LandingDay> };
 
 const FILE = "funnel.json";
 const MAX_DEVICES = 20000;
@@ -107,17 +121,53 @@ export async function recordFunnel(device: string, step: string, plat: "app" | "
   dirty = true;
 }
 
+export async function recordTime(device: string, seconds: number, plat: "app" | "web"): Promise<void> {
+  const d = await load();
+  const now = Date.now();
+  let dev = d.devices[device];
+  if (!dev) { dev = d.devices[device] = { first: now, plat, steps: {}, days: [] }; prune(d); }
+  if (plat === "app") dev.plat = "app";
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (!dev.secs) dev.secs = {};
+  dev.secs[day] = Math.min(86400, (dev.secs[day] || 0) + seconds);
+  if (dev.days[dev.days.length - 1] !== day) { dev.days.push(day); if (dev.days.length > MAX_DAYS_PER_DEVICE) dev.days.splice(0, dev.days.length - MAX_DAYS_PER_DEVICE); }
+  const keys = Object.keys(dev.secs).sort();
+  while (keys.length > MAX_DAYS_PER_DEVICE) delete dev.secs[keys.shift()!];
+  dirty = true;
+}
+
+export async function recordLanding(page: string, source: string, kind: "view" | "tap"): Promise<void> {
+  const d = await load();
+  const day = new Date().toISOString().slice(0, 10);
+  if (!d.landing) d.landing = {};
+  const L = (d.landing[day] = d.landing[day] || {});
+  const key = page + "|" + source;
+  const row = (L[key] = L[key] || { v: 0, t: 0 });
+  if (kind === "view") row.v++; else row.t++;
+  // Keep about six months of days.
+  const days = Object.keys(d.landing).sort();
+  while (days.length > 190) delete d.landing[days.shift()!];
+  dirty = true;
+}
+
 // ---- Report (used by the admin page) ------------------------------------
 
 export type FunnelReport = {
   days: number;
+  landing: { page: string; source: string; views: number; taps: number }[];
+  daily: { day: string; newUsers: number; returning: number; app: number; web: number; minutes: number }[];
+  avgMinutesPerDay: number; // average minutes on screen per person per active day (window)
+  totalMinutes: number;
+  activeToday: number;
+  activeWeek: number;
+  activeWeekApp: number;
   newUsers: number;
   appUsers: number;
   webUsers: number;
   existingActive: number;
-  steps: { key: string; label: string; count: number }[];
+  steps: { key: string; label: string; group: string; count: number }[];
   retention: { nextDay: number; nextDayOf: number; week: number; weekOf: number };
-  recent: { id: string; first: number; plat: string; reached: string[]; last: string; daysOpen: number }[];
+  recent: { id: string; first: number; plat: string; reached: string[]; last: string; daysOpen: number; minutes: number }[];
 };
 
 function dayNum(iso: string): number {
@@ -167,7 +217,8 @@ export async function funnelReport(days: number, fresh = false): Promise<FunnelR
     .map(([id, v]) => {
       const reached = FUNNEL_STEPS.filter((s) => v.steps[s.key]).map((s) => s.key);
       const lastKey = Object.entries(v.steps).sort((a, b) => b[1] - a[1])[0]?.[0] || "open";
-      return { id: id.slice(0, 6), first: v.first, plat: v.plat, reached: reached.map(labelOf), last: labelOf(lastKey), daysOpen: v.days.length };
+      const minutes = Math.round(Object.values(v.secs || {}).reduce((a, b) => a + b, 0) / 60);
+      return { id: id.slice(0, 6), first: v.first, plat: v.plat, reached: reached.map(labelOf), last: labelOf(lastKey), daysOpen: v.days.length, minutes };
     });
 
   return {
@@ -176,7 +227,54 @@ export async function funnelReport(days: number, fresh = false): Promise<FunnelR
     appUsers: fresh_.filter(([, v]) => v.plat === "app").length,
     webUsers: fresh_.filter(([, v]) => v.plat !== "app").length,
     existingActive: all.filter(([, v]) => v.existing && v.days.some((x) => dayNum(x) * 86400000 >= since)).length,
-    steps: FUNNEL_STEPS.map((s) => ({ key: s.key, label: s.label, count: counts[s.key] || 0 })),
+    steps: FUNNEL_STEPS.map((s) => ({ key: s.key, label: s.label, group: s.group, count: counts[s.key] || 0 })),
+    ...(() => {
+      // People who opened Nearune each day (new = first day ever, the rest
+      // returning, existing users included), last min(days, 30) days.
+      const span = Math.min(days, 30);
+      const today = Math.floor(now / 86400000);
+      const daily: FunnelReport["daily"] = [];
+      for (let i = span - 1; i >= 0; i--) {
+        const dn = today - i;
+        const iso = new Date(dn * 86400000).toISOString().slice(0, 10);
+        let nu = 0, ret = 0, app = 0, web = 0, secs = 0;
+        for (const [, v] of all) {
+          if (!v.days.includes(iso)) continue;
+          secs += (v.secs && v.secs[iso]) || 0;
+          if (!v.existing && Math.floor(v.first / 86400000) === dn) nu++; else ret++;
+          if (v.plat === "app") app++; else web++;
+        }
+        daily.push({ day: iso, newUsers: nu, returning: ret, app, web, minutes: Math.round(secs / 60) });
+      }
+      const todayIso = new Date(today * 86400000).toISOString().slice(0, 10);
+      const weekStart = new Date((today - 6) * 86400000).toISOString().slice(0, 10);
+      const wk = all.filter(([, v]) => v.days.some((x) => x >= weekStart));
+      const sinceIso = new Date(since).toISOString().slice(0, 10);
+      let tSecs = 0, personDays = 0;
+      for (const [, v] of all) for (const [dk, sv] of Object.entries(v.secs || {})) { if (dk >= sinceIso && sv > 0) { tSecs += sv; personDays++; } }
+      return {
+        avgMinutesPerDay: personDays ? Math.round((tSecs / personDays / 60) * 10) / 10 : 0,
+        totalMinutes: Math.round(tSecs / 60),
+        daily,
+        activeToday: all.filter(([, v]) => v.days.includes(todayIso)).length,
+        activeWeek: wk.length,
+        activeWeekApp: wk.filter(([, v]) => v.plat === "app").length,
+      };
+    })(),
+    landing: (() => {
+      const sinceDay = new Date(since).toISOString().slice(0, 10);
+      const agg: Record<string, { v: number; t: number }> = {};
+      for (const [day, rows] of Object.entries(d.landing || {})) {
+        if (day < sinceDay) continue;
+        for (const [k, r] of Object.entries(rows)) {
+          const a = (agg[k] = agg[k] || { v: 0, t: 0 });
+          a.v += r.v; a.t += r.t;
+        }
+      }
+      return Object.entries(agg)
+        .map(([k, r]) => ({ page: k.split("|")[0] || "", source: k.split("|").slice(1).join("|") || "direct", views: r.v, taps: r.t }))
+        .sort((a, b) => b.views - a.views);
+    })(),
     retention: { nextDay, nextDayOf, week, weekOf },
     recent,
   };

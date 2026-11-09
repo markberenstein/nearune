@@ -10,6 +10,7 @@
 import { listRoomIds, loadState, dropCachedState, deleteRoom, removeFromEmailIndex } from "../../src/storage";
 import { buildAdminPage, type AdminRoomSummary } from "../../src/admin-page";
 import { funnelReport } from "../../src/funnel";
+import { buildAnalyticsPage } from "../../src/analytics-page";
 import type { PersonKey } from "../../src/types";
 import { ICON_180_B64, ICON_512_B64 } from "./icon";
 
@@ -55,7 +56,7 @@ Bun.serve({
       }), { headers: { "content-type": "application/manifest+json", "cache-control": "no-store" } });
     }
 
-    if (req.method === "GET" && url.pathname === "/") {
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/analytics")) {
       if (!checkSecret(url)) return new Response("Not found", { status: 404 });
       const ids = await listRoomIds();
       const summaries: AdminRoomSummary[] = [];
@@ -69,6 +70,17 @@ Bun.serve({
           const answerKeys = Object.keys(state.answers).sort();
           const lastActive = answerKeys.length > 0 ? answerKeys[answerKeys.length - 1] : null;
           const pushCount = (["mark", "nikita"] as PersonKey[]).filter((k) => !!state.pushSubs?.[k]).length;
+          const sAny: any = state;
+          const nhieHist = (sAny.nhie && Array.isArray(sAny.nhie.history)) ? sAny.nhie.history : [];
+          const nhieRounds = nhieHist.filter((r: any) => r && r.votes && r.votes.mark && r.votes.nikita).length
+            + (sAny.nhie && sAny.nhie.votes && sAny.nhie.votes.mark && sAny.nhie.votes.nikita ? 1 : 0);
+          const features = {
+            voice: (["mark", "nikita"] as PersonKey[]).filter((k) => !!(state.people?.[k] as any)?.voiceId).length,
+            puzzlePhotos: Math.max(Number(sAny.puzzleQueueTotal) || 0, (sAny.puzzleCurrentId ? 1 : 0) + (Number(sAny.puzzleSolvedCount) || 0)),
+            puzzleSolved: Number(sAny.puzzleSolvedCount) || 0,
+            nhieRounds,
+            photos: (["mark", "nikita"] as PersonKey[]).filter((k) => !!(state.people?.[k] as any)?.photoAt).length,
+          };
           summaries.push({
             roomId: id,
             roomName: state.roomName || undefined,
@@ -79,6 +91,7 @@ Bun.serve({
             daysAnswered: answerKeys.length,
             bothDays: answerKeys.filter((d) => { const a: any = state.answers[d]; return !!(a && a.mark && a.mark.text && a.nikita && a.nikita.text); }).length,
             pushCount,
+            features,
             friend: state.origin === "friend",
             reported: !!state.reported,
             closed: !!state.closed,
@@ -94,10 +107,15 @@ Bun.serve({
         }
       }
       summaries.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-      const fdays = [7, 30, 90].includes(Number(url.searchParams.get("fdays"))) ? Number(url.searchParams.get("fdays")) : 7;
-      let funnel = null;
-      try { funnel = await funnelReport(fdays, true); } catch (err) { console.error("[admin] funnel report failed", err); }
-      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || "", url.searchParams.get("msg") || "", funnel), {
+      if (url.pathname === "/analytics") {
+        const fdays = [7, 30, 90].includes(Number(url.searchParams.get("fdays"))) ? Number(url.searchParams.get("fdays")) : 7;
+        let funnel = null;
+        try { funnel = await funnelReport(fdays, true); } catch (err) { console.error("[admin] funnel report failed", err); }
+        return new Response(buildAnalyticsPage(summaries, funnel, url.searchParams.get("secret") || ""), {
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        });
+      }
+      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }

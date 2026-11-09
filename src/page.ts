@@ -1297,6 +1297,7 @@ const RAW = String.raw`<!doctype html>
   // how they'll hear the moment that happens, since nothing else will unless
   // they happen to have the app open.
   function pushPromptDialog(awaitingPartner) {
+    nrTrack("notif_asked");
     var body = awaitingPartner
       ? t("Turn these on and we'll let you know the moment your partner accepts your invite — plus a daily nudge whenever today's question is ready.")
       : t("Nearune can let you know when today's question is ready, so neither of you misses a day.");
@@ -1310,7 +1311,7 @@ const RAW = String.raw`<!doctype html>
     enableBtn.disabled = pushState === "busy";
     enableBtn.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
     var notNowBtn = h("button", { class: "picker-btn", text: t("Not now") });
-    notNowBtn.addEventListener("click", function () { dismissPushPrompt(); renderApp(); });
+    notNowBtn.addEventListener("click", function () { nrTrack("notif_declined"); dismissPushPrompt(); renderApp(); });
     choices.appendChild(enableBtn);
     choices.appendChild(notNowBtn);
     card.appendChild(choices);
@@ -1380,6 +1381,30 @@ const RAW = String.raw`<!doctype html>
         body: JSON.stringify({ device: dev, step: step, platform: plat, existing: nrExisting }) }).catch(function () {});
     } catch (e) {}
   }
+  // Time spent: seconds Nearune is on screen (visible), sent about once a
+  // minute and when the app is hidden. Same random device ID, no content.
+  (function () {
+    var acc = 0, last = Date.now();
+    function tick() {
+      var now = Date.now();
+      if (!document.hidden) acc += Math.min(now - last, 20000) / 1000;
+      last = now;
+    }
+    function flush() {
+      tick();
+      var secs = Math.round(acc);
+      if (secs < 3) return;
+      acc = 0;
+      var dev = nrDevice(); if (!dev) return;
+      var plat = "web";
+      try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
+      try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: dev, step: "time", seconds: secs, platform: plat }) }).catch(function () {}); } catch (e) {}
+    }
+    setInterval(tick, 10000);
+    setInterval(flush, 60000);
+    document.addEventListener("visibilitychange", function () { if (document.hidden) flush(); else last = Date.now(); });
+    window.addEventListener("pagehide", flush);
+  })();
   function nrCheckState() {
     try {
       if (!state || typeof state !== "object") return;
@@ -1410,6 +1435,7 @@ const RAW = String.raw`<!doctype html>
     state = next;
     online = true;
     if (path === "/api/answer") nrTrack("answered");
+    if (path === "/api/nhie-vote") nrTrack("nhie_played");
     return next;
   }
 
@@ -1843,6 +1869,7 @@ const RAW = String.raw`<!doctype html>
       })
         .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
         .then(function (blob) {
+          nrTrack("voice_played");
           var url = URL.createObjectURL(blob);
           // If a newer tap started a different clone playback while this
           // fetch was still in flight, activeCloneAudio has already moved
@@ -2246,6 +2273,7 @@ const RAW = String.raw`<!doctype html>
       }).then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
           online = true;
+          if (result.ok && !(result.body && result.body.error)) nrTrack("puzzle_uploaded");
           if (!result.ok || result.body.error) {
             // The upload itself worked — the server just refused to swap in
             // a new puzzle while the current one is still unsolved. Surface
@@ -3095,6 +3123,7 @@ const RAW = String.raw`<!doctype html>
   }
 
   function acceptInviteForm() {
+    nrTrack("invite_opened");
     var card = h("div", { class: "card" }, [
       h("a", { class: "reg-back", href: "/home", style: "display:inline-block;margin:-6px 0 6px -4px;", text: "\u2039 " + t("Rooms") }),
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
@@ -3137,6 +3166,7 @@ const RAW = String.raw`<!doctype html>
           state = res.data;
           viewerKey = res.data.who;
           nrTrack("signed_up");
+          nrTrack("invite_joined");
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
           if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
           try {
@@ -4392,6 +4422,7 @@ const RAW = String.raw`<!doctype html>
         .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
           voiceRecordState.uploading = false;
+          if (result.ok && !(result.body && result.body.error)) nrTrack("voice_recorded");
           if (!result.ok || result.body.error) {
             voiceRecordState.error = result.body && result.body.error === "too_short"
               ? t("That was too short — try recording at least 15-20 seconds.")
@@ -5105,6 +5136,7 @@ const RAW = String.raw`<!doctype html>
         }
         var perm = await PN.requestPermissions();
         if (perm.receive !== "granted") {
+          nrTrack("notif_blocked");
           pushState = "off";
           pushError = nativePlatform() === "android"
             ? t("Notifications are blocked for this app — enable them in Android Settings → Apps → Nearune → Notifications, then try again.")
@@ -5134,6 +5166,7 @@ const RAW = String.raw`<!doctype html>
           PN.register();
         });
         pushState = "on";
+        nrTrack("notif_allowed");
         try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
         syncAppBadge();
       } catch (e) {
@@ -5164,6 +5197,7 @@ const RAW = String.raw`<!doctype html>
         body: JSON.stringify({ who: viewerKey, subscription: sub.toJSON() })
       });
       pushState = "on";
+      nrTrack("notif_allowed");
       try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
       syncAppBadge();
     } catch (e) {
@@ -5172,6 +5206,7 @@ const RAW = String.raw`<!doctype html>
       // denial iOS won't re-prompt for — Settings > Notifications is the
       // only way back in that case). Anything else is a real bug.
       if (e && e.name === "NotAllowedError") {
+        nrTrack("notif_blocked");
         pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
       } else {
         pushError = t("Couldn't enable reminders") + ": " + ((e && e.message) || String(e));

@@ -62,6 +62,26 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
 <script>
 try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) location.replace(${JSON.stringify(opts.dest).replace(/</g, "\\u003c")}); } catch (e) {}
 </script>
+<script>
+// Anonymous funnel: the invited partner opened the invite, and whether they
+// went to the App Store. Random device ID only.
+(function () {
+  try {
+    var d = localStorage.getItem("nearuneDevice");
+    if (!d || !/^[A-Za-z0-9]{16,64}$/.test(d)) {
+      var c = "abcdefghijklmnopqrstuvwxyz0123456789"; d = "";
+      for (var i = 0; i < 24; i++) d += c.charAt(Math.floor(Math.random() * c.length));
+      localStorage.setItem("nearuneDevice", d);
+    }
+    var send = function (step) {
+      try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: d, step: step, platform: "web" }) }).catch(function () {}); } catch (e) {}
+    };
+    send("open"); send("invite_opened");
+    var b = document.querySelector("a.badge");
+    if (b) b.addEventListener("click", function () { send("invite_to_store"); });
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
 `;

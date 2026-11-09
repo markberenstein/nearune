@@ -116,6 +116,32 @@ footer{margin:40px 0 0;font-size:13px;color:var(--muted);text-align:center}
 
   <footer>&copy; 2026 Nearune &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/support">Support</a><span id="nrSupport" style="display:none"> &middot; <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></footer>
 </main>
+<script>
+// Landing page stats: which page, where the visitor came from (ad tag or
+// referring site), and whether they tapped the App Store button. Counts only.
+(function () {
+  try {
+    var page = "${variant === "military" ? "military" : "get"}";
+    var q = new URLSearchParams(location.search);
+    var src = q.get("utm_campaign") || q.get("utm_source") || "";
+    if (!src) {
+      var r = ""; try { r = document.referrer ? new URL(document.referrer).hostname : ""; } catch (e) {}
+      if (r && r.indexOf("nearune.ai") === -1) {
+        src = /instagram|facebook|fb\.|meta/i.test(r) ? "meta (untagged)" : /google\./i.test(r) ? "google" : r.replace(/^www\./, "");
+      } else src = "direct";
+    }
+    src = src.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct";
+    var send = function (step) {
+      try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ step: step, page: page, source: src }) }).catch(function () {}); } catch (e) {}
+    };
+    var k = "nrLp:" + page;
+    var seen = false; try { seen = sessionStorage.getItem(k) === "1"; sessionStorage.setItem(k, "1"); } catch (e) {}
+    if (!seen) send("lp_view");
+    var badges = document.querySelectorAll("a.badge");
+    for (var i = 0; i < badges.length; i++) badges[i].addEventListener("click", function () { send("lp_tap"); });
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
 `;

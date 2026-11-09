@@ -351,6 +351,31 @@ export function buildHomePage(): string {
 
   render();
   nrTrack("open");
+  // Time spent: seconds Nearune is on screen (visible), sent about once a
+  // minute and when the app is hidden. Same random device ID, no content.
+  (function () {
+    var acc = 0, last = Date.now();
+    function tick() {
+      var now = Date.now();
+      if (!document.hidden) acc += Math.min(now - last, 20000) / 1000;
+      last = now;
+    }
+    function flush() {
+      tick();
+      var secs = Math.round(acc);
+      if (secs < 3) return;
+      acc = 0;
+      var dev = deviceId(); if (!dev) return;
+      var plat = "web";
+      try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
+      try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: dev, step: "time", seconds: secs, platform: plat }) }).catch(function () {}); } catch (e) {}
+    }
+    setInterval(tick, 10000);
+    setInterval(flush, 60000);
+    document.addEventListener("visibilitychange", function () { if (document.hidden) flush(); else last = Date.now(); });
+    window.addEventListener("pagehide", flush);
+  })();
+
   try { var wl = document.getElementById("welcome"); if (wl && !wl.hidden) nrTrack("welcome_seen"); } catch (e) {}
   // In-app tip jar (iPhone app only). Tips go through Apple in-app purchase
   // as Apple requires; they unlock nothing. Hidden unless the app has the

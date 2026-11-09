@@ -95,7 +95,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   const secretQS = "secret=" + encodeURIComponent(secret);
   const rows = rooms
     .map((r) => {
-      const label = r.roomId ? adminEsc(r.roomId) : "(main room)";
+      const label = r.roomId ? adminEsc(r.roomId) : "Original room";
       const created = r.createdAt ? "<span class=\"local-time\" data-ts=\"" + adminEsc(r.createdAt) + "\">" + adminEsc(new Date(r.createdAt).toLocaleString("en-US")) + " UTC</span>" : "<span class=\"muted\">unknown</span>";
       const people =
         r.people.length === 0

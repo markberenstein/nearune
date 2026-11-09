@@ -82,10 +82,10 @@ function featuresHtml(rooms: AdminRoomSummary[]): string {
     tile("Photos", `${photoRooms}<small> of ${n}</small>`, `rooms where someone shared a photo`),
   ].join("");
   const rows = live
-    .sort((a, b) => (b.daysAnswered || 0) - (a.daysAnswered || 0))
+    .sort((a, b) => (a.roomId ? 1 : 0) - (b.roomId ? 1 : 0) || (b.daysAnswered || 0) - (a.daysAnswered || 0))
     .map((r) => {
       const x = f(r);
-      const name = r.roomName ? esc(r.roomName) : r.roomId ? esc(r.roomId) : "(main room)";
+      const name = !r.roomId ? "Original room" : r.roomName ? esc(r.roomName) : esc(r.roomId);
       const dot = (v: number, txt: string) => (v > 0 ? `<span class="yes">${txt}</span>` : `<span class="no">—</span>`);
       return `<tr><td>${name}${r.friend ? ' <span class="muted">friend</span>' : ""}</td><td>${r.people.length}</td><td>${r.daysAnswered}</td>
         <td>${dot(x.voice, x.voice + " of " + r.people.length)}</td>

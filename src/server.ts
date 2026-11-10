@@ -1393,13 +1393,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         console.log("[invite] room=" + (roomId || "main") + " via=instagram");
         return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
       }
-      const inviterName = cur.people[who]!.name;
+      const inviterName = String(cur.people[who]!.name || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as any)[c]);
       const r = await sendEmail(
         email,
         inviterName + " invited you to Nearune",
-        "<p>" + inviterName + " invited you to Nearune.</p>" +
-          "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
-          "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
+        "<p style=\"font-size:16px\">" + inviterName + " invited you to Nearune: one question a day, just for the two of you. It's free.</p>" +
+          "<p style=\"margin:20px 0\"><a href=\"" + inviteUrl + "\" style=\"background:#A9532C;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700;display:inline-block\">Accept " + inviterName + "'s invite</a></p>" +
           (roomId ? "<p style=\"font-size:15px\">Your room code: <b>" + roomId + "</b><br><span style=\"font-size:14px\">If the link doesn't open the app, open Nearune, tap <b>Open an existing room</b> and enter this code.</span></p>" : "") +
           (Bun.env.APP_STORE_URL
             ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +

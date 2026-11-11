@@ -113,6 +113,19 @@ export function buildHomePage(): string {
   } catch (e) {}
   jset(LS_ROOMS, rooms);
 
+  // Brand-new install that came from an invite link opened in Safari: the
+  // server held the invite for this network for 2 hours. Ask once.
+  (function () {
+    try {
+      var native = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      if (!native || rooms.length || localStorage.getItem("nearuneDeferredChecked")) return;
+      localStorage.setItem("nearuneDeferredChecked", "1");
+      fetch("/api/deferred-invite").then(function (r) { return r.json(); }).then(function (d) {
+        if (d && typeof d.dest === "string" && d.dest.indexOf("/r/") === 0) location.href = d.dest;
+      }).catch(function () {});
+    } catch (e) {}
+  })();
+
   function saveRooms() { jset(LS_ROOMS, rooms); }
   function removeRoom(id) {
     rooms = rooms.filter(function (r) { return r.id !== id; });

@@ -56,12 +56,14 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
   <p class="sub">${who} invited you</p>
   <p class="get">Download the app</p>
   <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
+  <p class="sub" style="margin:14px 0 0;font-size:.9rem">After it installs, open Nearune and it takes you straight to ${who === "Someone" ? "your invite" : who + "'s invite"}.</p>
   <div><a class="web" href="${dest}">No iPhone? Continue in your browser</a></div>
   ${opts.roomId ? '<div class="code">Room code<b>' + esc(opts.roomId) + "</b></div>" : ""}
 </main>
 <script>
 try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) location.replace(${JSON.stringify(opts.dest).replace(/</g, "\\u003c")}); } catch (e) {}
 </script>
+<script>var DEST = ${JSON.stringify(opts.dest).replace(/</g, "\\u003c")};</script>
 <script>
 // Anonymous funnel: the invited partner opened the invite, and whether they
 // went to the App Store. Random device ID only.
@@ -78,7 +80,12 @@ try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capaci
     };
     send("open"); send("invite_opened");
     var b = document.querySelector("a.badge");
-    if (b) b.addEventListener("click", function () { send("invite_to_store"); });
+    if (b) b.addEventListener("click", function () {
+      send("invite_to_store");
+      // Hold this invite so the app opens straight to it after install.
+      try { fetch("/api/deferred-invite", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ dest: DEST }) }).catch(function () {}); } catch (e) {}
+      try { if (navigator.clipboard) navigator.clipboard.writeText(location.href).catch(function () {}); } catch (e) {}
+    });
   } catch (e) {}
 })();
 </script>

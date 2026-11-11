@@ -427,6 +427,7 @@ const RAW = String.raw`<!doctype html>
   .nhie-note { text-align: center; color: var(--ink-soft); font-size: 0.8rem; margin: 0; }
   .tab-badge { background: var(--accent-2); color: #fff; position: absolute; top: 3px; right: 6px; font-size: 0.6rem; font-weight: 700; border-radius: 999px; padding: 1px 5px; line-height: 1.3; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
+  .tab-badge.alert, .tab-btn.active .tab-badge.alert { background: #D93B30; color: #fff; min-width: 9px; text-align: center; }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
   .journal-toggle { background: none; border: none; color: var(--accent-ink); font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; padding: 6px 2px; text-align: left; display: flex; align-items: center; gap: 6px; }
@@ -2833,7 +2834,7 @@ const RAW = String.raw`<!doctype html>
     var unlocked = puzzleUnlockedCount();
     function mk(id, icon, label, badge) {
       var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
-      if (badge) kids.push(h("span", { class: "tab-badge", text: badge }));
+      if (badge) kids.push(h("span", { class: "tab-badge" + (id === "never" ? " alert" : ""), text: badge }));
       var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
       btn.addEventListener("click", function () { setActiveTab(id); });
       return btn;
@@ -2841,7 +2842,12 @@ const RAW = String.raw`<!doctype html>
     var tabs = [mk("today", "☀️", "Today"), mk("local", "📍", "Local Feel")];
     // The photo puzzle is off in "Make a friend" rooms (strangers).
     if (!(state && state.origin === "friend")) tabs.push(mk("puzzle", "🧩", "Puzzle", unlocked + "/" + PUZZLE_TOTAL));
-    tabs.push(mk("never", "🥃", "Never Have I Ever"));
+    // Red "1" on the tab when your partner has answered this round and you
+    // haven't yet. No push notification; just the dot in the app.
+    var nh = state && state.nhie;
+    var nhOther = viewerKey ? otherKeyOf(viewerKey) : null;
+    var nhYourTurn = !!(nh && viewerKey && nhOther && nh.voted && nh.voted[nhOther] && !nh.voted[viewerKey] && !nhieMyChoice[nh.round]);
+    tabs.push(mk("never", "🥃", "Never Have I Ever", nhYourTurn ? "1" : ""));
     return h("div", { class: "tab-bar" }, tabs);
   }
 

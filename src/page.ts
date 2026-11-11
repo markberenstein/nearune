@@ -3404,6 +3404,7 @@ const RAW = String.raw`<!doctype html>
         }
         state = res.data;
         showInviteForm = false;
+        if (res.data._emailSent !== false) { showEmailInvite = false; inviteEmailDraft = ""; }
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
         renderApp();
       })
@@ -3451,7 +3452,7 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
       var copyText = url === lastInviteUrl ? inviteMessage(url) : url;
-      nrTrack("invite_sent");
+      nrTrack("invite_sent"); markInviteShared();
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
@@ -3465,7 +3466,7 @@ const RAW = String.raw`<!doctype html>
     var labelText = label || t("Share invite link");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
-      nrTrack("invite_sent");
+      nrTrack("invite_sent"); markInviteShared();
       if (navigator.share) {
         var shareObj = url === lastInviteUrl ? { url: url } : { url: url };
         navigator.share(shareObj).catch(function () {});
@@ -3480,6 +3481,32 @@ const RAW = String.raw`<!doctype html>
 
   var showEmailInvite = false;
   var inviteAutoTried = false;
+  // Remembers (per room, on this device) that the invite went out, so the
+  // invite card can follow up with the notification ask right away.
+  function inviteSharedKey() { return "nearuneInviteShared:" + (ROOM || "main"); }
+  function inviteWasShared() { try { return !!localStorage.getItem(inviteSharedKey()); } catch (e) { return false; } }
+  function markInviteShared() {
+    var first = !inviteWasShared();
+    try { localStorage.setItem(inviteSharedKey(), String(Date.now())); } catch (e) {}
+    if (first) setTimeout(renderApp, 1200);
+  }
+  // Push is the only way Nearune can reach someone who's waiting (email is
+  // optional), so the invite card asks for it in context: "know the moment
+  // they join". Shown whenever reminders are off, and it stays until they're on.
+  function invitePushAsk() {
+    if (!pushSupported() || pushState === "on") return null;
+    var shared = inviteWasShared();
+    var box = h("div", { style: "margin-top:16px;padding:14px 14px 12px;border-radius:16px;background:rgba(232,154,92,0.14);text-align:center;" }, [
+      h("p", { style: "margin:0 0 8px;font-weight:600;", text: shared ? t("Want to know the moment they join?") : t("Get a heads-up when they join") }),
+      h("p", { class: "puzzle-guess-note", style: "margin:0 0 10px;", text: t("Turn on notifications and we'll tell you when your partner joins, and remind you if they haven't yet.") })
+    ]);
+    if (pushError) box.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);margin:0 0 10px;", text: pushError }));
+    var b = h("button", { class: "puzzle-upload-btn", type: "button", text: pushState === "busy" ? t("Working…") : t("Turn on notifications") });
+    b.disabled = pushState === "busy";
+    b.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
+    box.appendChild(b);
+    return box;
+  }
   // Right after setting up a room: just the room code and the invite link, with
   // buttons to share or copy them. The link is fetched automatically (the
   // server keeps the same link every time, so asking again is harmless).
@@ -3499,36 +3526,63 @@ const RAW = String.raw`<!doctype html>
       ageMs = Date.now() - created;
     } catch (e) {}
     var stillWaiting = ageMs > 24 * 3600 * 1000;
+    // Kept calm on purpose: one main button, two small ones, one optional
+    // reminder line. Email is offered because many people only have their
+    // partner's email, not a quick way to text them a link.
     var card = h("div", { class: "card" }, [
       h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
       h("p", { class: "reg-sub", text: stillWaiting
-        ? t("Your Nearune partner hasn't joined yet. A quick text from you is the best nudge. Tap Text it and just hit send.")
-        : t("Nearune starts the moment they join. It takes ten seconds: text them the link, or give them the room code.") })
+        ? t("They haven't joined yet. Send it again by text or email.")
+        : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })
     ]);
     if (!lastInviteUrl && !regBusy && !inviteAutoTried) {
       inviteAutoTried = true;
       setTimeout(submitInviteLink, 0);
     }
-    if (ROOM) {
-      var codeBox = h("div", { class: "inv-code", title: t("Tap to copy") }, [
-        h("div", { class: "inv-code-label", text: t("Room code") }),
-        h("div", { class: "inv-code-value", text: displayCode() })
-      ]);
-      codeBox.addEventListener("click", function () {
-        try { navigator.clipboard.writeText(displayCode()); codeBox.querySelector(".inv-code-label").textContent = t("Copied!"); setTimeout(function () { codeBox.querySelector(".inv-code-label").textContent = t("Room code"); }, 1500); } catch (e) {}
-      });
-      card.appendChild(codeBox);
-    }
     if (lastInviteUrl) {
-      card.appendChild(h("p", { class: "inv-link", text: lastInviteUrl }));
-      card.appendChild(h("div", { class: "inv-actions" }, [
-        shareLinkButton(lastInviteUrl, t("Share invite"), "puzzle-upload-btn reg-cta"),
+      var main = shareLinkButton(lastInviteUrl, t("Text or share the invite"), "puzzle-upload-btn reg-cta");
+      main.style.marginTop = "12px";
+      card.appendChild(main);
+      var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email it") });
+      emailBtn.addEventListener("click", function () { showEmailInvite = !showEmailInvite; regError = ""; renderApp(); });
+      card.appendChild(h("div", { style: "display:flex;gap:8px;justify-content:center;margin-top:10px;" }, [
+        emailBtn,
         copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
       ]));
-      // One tap opens Messages with the link already in the message.
-      card.appendChild(h("div", { style: "text-align:center;margin-top:12px;" }, [
-        h("a", { class: "switch-link", href: "sms:&body=" + encodeURIComponent(lastInviteUrl), text: "\u2709\uFE0F " + t("Text it") })
-      ]));
+      if (showEmailInvite) {
+        var em = h("input", { type: "email", placeholder: t("Their email"), value: inviteEmailDraft });
+        em.setAttribute("inputmode", "email"); em.setAttribute("autocapitalize", "off"); em.setAttribute("autocorrect", "off");
+        em.style.cssText = "width:100%;box-sizing:border-box;margin-top:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:11px 16px;color:var(--ink);font:inherit;font-size:16px;outline:none;";
+        em.addEventListener("input", function () { inviteEmailDraft = em.value; });
+        var send = h("button", { class: "puzzle-upload-btn", type: "button", text: regBusy ? t("Sending…") : t("Send invite email") });
+        send.disabled = regBusy;
+        send.style.marginTop = "8px";
+        send.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); submitInvite(); });
+        card.appendChild(em); card.appendChild(send);
+      } else if (lastInviteEmail && !regError) {
+        card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:8px;", text: "\u2713 " + t("Invite emailed to") + " " + lastInviteEmail }));
+      }
+      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);text-align:center;", text: t(regError) }));
+      if (ROOM) {
+        var codeLine = h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:12px 0 0;cursor:pointer;", text: t("Room code") + ": " + displayCode() });
+        codeLine.addEventListener("click", function () { try { navigator.clipboard.writeText(displayCode()); codeLine.textContent = t("Copied!"); setTimeout(function () { codeLine.textContent = t("Room code") + ": " + displayCode(); }, 1500); } catch (e) {} });
+        card.appendChild(codeLine);
+      }
+      // One quiet line each: reminders (until they're on), and after a day,
+      // something to do while waiting.
+      if (pushSupported() && pushState !== "on") {
+        var bell = h("button", { class: "switch-link", type: "button", text: pushState === "busy" ? t("Working…") : "\uD83D\uDD14 " + t("Tell me when they join") });
+        bell.style.cssText = "display:block;margin:12px auto 0;font-size:0.9rem;";
+        bell.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
+        card.appendChild(bell);
+        if (pushError) card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;", text: pushError }));
+      }
+      if (stillWaiting) {
+        var mfl = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("Make a friend while you wait") });
+        mfl.style.cssText = "display:block;margin:6px auto 0;font-size:0.9rem;";
+        mfl.addEventListener("click", function () { location.href = "/home?friend=1"; });
+        card.appendChild(mfl);
+      }
     } else if (regError) {
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
       var retry = h("button", { class: "puzzle-upload-btn reg-cta", text: t("Try again") });
@@ -3837,10 +3891,12 @@ const RAW = String.raw`<!doctype html>
       var invCard = inviteFlow(otherKey);
       app.appendChild(invCard);
     }
+    // Today's question sits right under the invite, so there's an obvious
+    // next step after sending it.
+    if (confirmed) app.appendChild(soloQuestionCard(otherKey));
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {
-      app.appendChild(soloQuestionCard(otherKey));
       if (state.origin !== "friend") app.appendChild(waitingGameCard());
       var streak = soloStreakCard();
       if (streak) app.appendChild(streak);
@@ -6138,6 +6194,7 @@ export function buildTermsPage() {
     <p>Questions about these terms: <a href="mailto:support@nearune.ai">support@nearune.ai</a>.</p>`
   );
 }
+
 
 export function buildChildSafetyPage() {
   return legalPageShell(

@@ -3533,7 +3533,7 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
       h("p", { class: "reg-sub", text: stillWaiting
         ? t("They haven't joined yet. Send it again by text or email.")
-        : t("Nearune starts the moment they join. Send them your invite.") })
+        : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })
     ]);
     if (!lastInviteUrl && !regBusy && !inviteAutoTried) {
       inviteAutoTried = true;
@@ -3891,10 +3891,12 @@ const RAW = String.raw`<!doctype html>
       var invCard = inviteFlow(otherKey);
       app.appendChild(invCard);
     }
+    // Today's question sits right under the invite, so there's an obvious
+    // next step after sending it.
+    if (confirmed) app.appendChild(soloQuestionCard(otherKey));
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {
-      app.appendChild(soloQuestionCard(otherKey));
       if (state.origin !== "friend") app.appendChild(waitingGameCard());
       var streak = soloStreakCard();
       if (streak) app.appendChild(streak);

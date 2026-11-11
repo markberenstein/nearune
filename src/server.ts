@@ -48,9 +48,9 @@ import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
 // Deferred invites: network address -> invite destination, held in memory
-// for 2 hours (see /api/deferred-invite). Cleared on restart; never written.
+// for 48 hours (see /api/deferred-invite). Cleared on restart; never written.
 const deferredInvites = new Map<string, { dest: string; at: number }>();
-setInterval(() => { const cut = Date.now() - 2 * 60 * 60 * 1000; for (const [k, v] of deferredInvites) if (v.at < cut) deferredInvites.delete(k); }, 10 * 60 * 1000);
+setInterval(() => { const cut = Date.now() - 48 * 60 * 60 * 1000; for (const [k, v] of deferredInvites) if (v.at < cut) deferredInvites.delete(k); }, 10 * 60 * 1000);
 
 // Vulgar / NSFW screen for text people write. Returns a Response to send back
 // when the text is rejected (friend rooms), otherwise null. Every hit is
@@ -193,7 +193,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     // Deferred invite: someone opens an invite link in Safari, taps the App
     // Store badge, installs Nearune, then opens the app — which starts on the
     // home screen with no idea which room they were invited to. When the badge
-    // is tapped we hold the invite for 2 hours against the visitor's network
+    // is tapped we hold the invite for 48 hours against the visitor's network
     // address (memory only, never saved), and a brand-new install on the same
     // network asks once for it and goes straight to the invite.
     if (req.method === "POST" && url.pathname === "/api/deferred-invite") {
@@ -207,7 +207,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     if (req.method === "GET" && url.pathname === "/api/deferred-invite") {
       const ip = clientIp(req, server);
       const hit = deferredInvites.get(ip);
-      if (hit && Date.now() - hit.at < 2 * HOUR) { deferredInvites.delete(ip); return json({ dest: hit.dest }); }
+      if (hit && Date.now() - hit.at < 48 * HOUR) { deferredInvites.delete(ip); return json({ dest: hit.dest }); }
       return json({ dest: null });
     }
 

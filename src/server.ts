@@ -184,8 +184,8 @@ const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
 // Public pages listed for search engines.
 const CANONICAL_ORIGIN = "https://nearune.ai";
 const ANALYTICS_PATHS = ["/get", "/military"];
-const GOOGLE_TAG = '<script async src="https://www.googletagmanager.com/gtm.js?id=GTM-TTK59SGK"></script>' +
-  "<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());</script>";
+const GOOGLE_TAG = '<script async src="https://www.googletagmanager.com/gtag/js?id=G-C8J788WTJR"></script>' +
+  "<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-C8J788WTJR');</script>";
 const SITEMAP_PATHS = ["/get","/military", "/support", "/privacy", "/terms", "/child-safety"];
 
 async function handleRequest(req: Request, server: any): Promise<Response> {

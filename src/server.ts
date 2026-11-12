@@ -154,13 +154,46 @@ Bun.serve({
   idleTimeout: 60,
   async fetch(req, server) {
     const res = await handleRequest(req, server);
-    logSignupFailure(req, new URL(req.url).pathname, res);
+    const path = new URL(req.url).pathname;
+    logSignupFailure(req, path, res);
+    // Private pages (rooms, invites, the app's own screens) must never be
+    // listed by search engines, even if a link to one is shared publicly.
+    if (NOINDEX_PATH.test(path)) {
+      try { res.headers.set("X-Robots-Tag", "noindex, nofollow"); } catch (e) {}
+    }
     return res;
   },
 });
 
+const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
+// Public pages listed for search engines.
+const SITEMAP_PATHS = ["/get", "/military", "/support", "/privacy", "/terms", "/child-safety"];
+
 async function handleRequest(req: Request, server: any): Promise<Response> {
     const url = new URL(req.url);
+    if (req.method === "GET" && url.pathname === "/robots.txt") {
+      const origin0 = ((req.headers.get("x-forwarded-proto") || "").split(",")[0].trim() || url.protocol.replace(":", "")) + "://" + url.host;
+      const body = [
+        "User-agent: *",
+        // Rooms, invites and app screens are kept out of search with a
+        // noindex header instead of a Disallow line: a crawler has to load a
+        // page to see its noindex, and link-preview bots (WhatsApp, iMessage)
+        // must still be able to read invite pages.
+        "Disallow: /api/",
+        "Disallow: /admin",
+        "Allow: /",
+        "",
+        "Sitemap: " + origin0 + "/sitemap.xml",
+        "",
+      ].join("\n");
+      return new Response(body, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    if (req.method === "GET" && url.pathname === "/sitemap.xml") {
+      const origin0 = ((req.headers.get("x-forwarded-proto") || "").split(",")[0].trim() || url.protocol.replace(":", "")) + "://" + url.host;
+      const body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+        SITEMAP_PATHS.map((p) => "  <url><loc>" + origin0 + p + "</loc></url>").join("\n") + "\n</urlset>\n";
+      return new Response(body, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
     // Behind Railway's proxy req.url is plain http; links we hand out (invite,
     // confirm, etc.) must use the public https origin instead.
     const fwdProto = (req.headers.get("x-forwarded-proto") || "").split(",")[0].trim();

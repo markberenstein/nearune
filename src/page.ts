@@ -2834,7 +2834,7 @@ const RAW = String.raw`<!doctype html>
     var unlocked = puzzleUnlockedCount();
     function mk(id, icon, label, badge) {
       var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
-      if (badge) kids.push(h("span", { class: "tab-badge" + (id === "never" || (id === "puzzle" && badge === "+") ? " alert" : ""), text: badge }));
+      if (badge) kids.push(h("span", { class: "tab-badge" + (id === "never" || (id === "puzzle" && badge === "1") ? " alert" : ""), text: badge }));
       var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
       btn.addEventListener("click", function () { setActiveTab(id); });
       return btn;
@@ -2844,7 +2844,7 @@ const RAW = String.raw`<!doctype html>
     // No picture in play (none loaded yet, or the last one is finished with
     // nothing queued): a red "+" so someone adds photos.
     var noPhoto = !!state && (!state.puzzleCurrentId || ((state.puzzleSolved || unlocked >= PUZZLE_TOTAL) && puzzleQueueRemaining() === 0));
-    if (!(state && state.origin === "friend")) tabs.push(mk("puzzle", "🧩", "Puzzle", noPhoto ? "+" : unlocked + "/" + PUZZLE_TOTAL));
+    if (!(state && state.origin === "friend")) tabs.push(mk("puzzle", "🧩", "Puzzle", noPhoto ? "1" : unlocked + "/" + PUZZLE_TOTAL));
     // Red "1" on the tab when your partner has answered this round and you
     // haven't yet. No push notification; just the dot in the app.
     var nh = state && state.nhie;

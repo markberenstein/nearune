@@ -161,13 +161,20 @@ Bun.serve({
     if (NOINDEX_PATH.test(path)) {
       try { res.headers.set("X-Robots-Tag", "noindex, nofollow"); } catch (e) {}
     }
+    // Public pages: tell search engines which address is the main one, so
+    // /get/, /get?utm=... and the Railway domain all count as nearune.ai/get.
+    const publicPath = path.length > 1 ? path.replace(/\/+$/, "") : path;
+    if (res.status === 200 && SITEMAP_PATHS.includes(publicPath)) {
+      try { res.headers.set("Link", '<' + CANONICAL_ORIGIN + publicPath + '>; rel="canonical"'); } catch (e) {}
+    }
     return res;
   },
 });
 
 const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
 // Public pages listed for search engines.
-const SITEMAP_PATHS = ["/get", "/military", "/support", "/privacy", "/terms", "/child-safety"];
+const CANONICAL_ORIGIN = "https://nearune.ai";
+const SITEMAP_PATHS = ["/get","/military", "/support", "/privacy", "/terms", "/child-safety"];
 
 async function handleRequest(req: Request, server: any): Promise<Response> {
     const url = new URL(req.url);

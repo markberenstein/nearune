@@ -167,6 +167,15 @@ Bun.serve({
     if (res.status === 200 && SITEMAP_PATHS.includes(publicPath)) {
       try { res.headers.set("Link", '<' + CANONICAL_ORIGIN + publicPath + '>; rel="canonical"'); } catch (e) {}
     }
+    // Google Analytics only on the download pages ads point to — never inside
+    // rooms or the app (which loads nearune.ai), so answers are never seen.
+    if (res.status === 200 && ANALYTICS_PATHS.includes(publicPath)) {
+      try {
+        const html = await res.text();
+        const headers = new Headers(res.headers);
+        return new Response(html.replace(/<head>/i, "<head>" + GOOGLE_TAG), { status: 200, headers });
+      } catch (e) {}
+    }
     return res;
   },
 });
@@ -174,6 +183,9 @@ Bun.serve({
 const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
 // Public pages listed for search engines.
 const CANONICAL_ORIGIN = "https://nearune.ai";
+const ANALYTICS_PATHS = ["/get", "/military"];
+const GOOGLE_TAG = '<script async src="https://www.googletagmanager.com/gtm.js?id=GTM-TTK59SGK"></script>' +
+  "<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());</script>";
 const SITEMAP_PATHS = ["/get","/military", "/support", "/privacy", "/terms", "/child-safety"];
 
 async function handleRequest(req: Request, server: any): Promise<Response> {

@@ -6110,7 +6110,7 @@ export function buildPrivacyPage() {
   return legalPageShell(
     "Privacy Policy",
     `<h1>Privacy Policy</h1>
-    <p class="updated">Last updated October 2026</p>
+    <p class="updated">Last updated November 2026</p>
     <p>Nearune is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
 
     <h2>How access works</h2>
@@ -6146,13 +6146,14 @@ export function buildPrivacyPage() {
       <li><strong>Safety screening and place recognition (Anthropic, maker of Claude):</strong> photos and comments you share, and puzzle pictures with their questions and answers, are sent to Anthropic's API to be checked automatically for inappropriate content before they are saved. A puzzle picture with no location may also be sent to suggest where it was taken. Anthropic processes this to return a result; we don't use it for advertising.</li>
       <li><strong>Hosting (Railway):</strong> the service runs on Railway's cloud infrastructure, where room data is stored.</li>
       <li><strong>Notifications (Apple Push Notification service):</strong> a device token is used to deliver reminders if you turn them on.</li>
+      <li><strong>Website analytics (Google Analytics):</strong> only on our download pages (nearune.ai/get and nearune.ai/military), Google Analytics records the visit, device and browser type, approximate location, and the link that brought you there, so we can see which ads and searches help people find Nearune. It isn't used inside rooms or the app, and never sees your answers, photos or voice.</li>
     </ul>
 
     <h2>Reporting and blocking</h2>
     <p>Each person in a room can report their partner's photo, answer or comment, and can block their partner to hide that content from their own screen. Reports are logged for the app's owner to review.</p>
 
     <h2>What we don't do</h2>
-    <p>We don't run ads, use ad trackers or analytics pixels, or sell or share your data with third parties for marketing. We don't read your answers except as needed to operate or debug the service.</p>
+    <p>We don't show ads in Nearune, put ad trackers or analytics inside rooms or the app, or sell or share your data with third parties for marketing. We don't read your answers except as needed to operate or debug the service.</p>
 
     <h2>Deleting your data</h2>
     <p>Either person in a room can permanently delete that room's data at any time from within the app ("Delete my data"). This removes the room's answers, photos, and puzzle state, and removes both people's entries from the recovery index. Deletion is immediate and can't be undone.</p>

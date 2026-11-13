@@ -376,7 +376,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!rateLimit("funnel:" + clientIp(req, server), 400, HOUR)) return json({ ok: true });
       const fb2 = await readJson(req);
       if (fb2 && (fb2.step === "lp_view" || fb2.step === "lp_tap")) {
-        const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : "";
+        const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : fb2.page === "get (new)" ? "get (new)" : "";
         const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
         if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : "tap");
         return json({ ok: true });

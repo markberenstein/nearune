@@ -8,7 +8,7 @@ export type AdminRoomSummary = {
   // Display name the first partner typed (shown as the room title), if any.
   roomName?: string;
   createdAt: string | null;
-  people: { who?: string; name: string; confirmed: boolean; location?: string }[];
+  people: { who?: string; name: string; confirmed: boolean; location?: string; tz?: string }[];
   // Device, app-or-web and language the room was created from (no IP kept).
   via?: string | null;
   lastActive: string | null;
@@ -106,7 +106,19 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
           : r.people.map((p) => adminEsc(p.name) + (p.confirmed ? "" : " <span class=\"muted\">(pending)</span>") + ((r.remindable || []).some((x) => x.name === p.name) ? " <span class=\"muted\">(email unconfirmed)</span>" : "")).join(", ");
       // Where: each registered person's own location, plus how the room was
       // created (device and language) — the only origin hints that are kept.
-      const locs = r.people.filter((p) => p.location).map((p) => adminEsc(p.name) + ": " + adminEsc(p.location || ""));
+      // Each person's place plus their time zone and current local time.
+      const zone = (tz?: string) => {
+        if (!tz) return "<span class=\"muted\">time zone unknown</span>";
+        try {
+          const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", timeZoneName: "short" }).formatToParts(new Date());
+          const time = parts.filter((x) => x.type !== "timeZoneName").map((x) => x.value).join("").trim();
+          const abbr = (parts.find((x) => x.type === "timeZoneName") || { value: "" }).value;
+          const city = tz.split("/").pop()!.replace(/_/g, " ");
+          const label = /^GMT/.test(abbr) ? city + " time (" + abbr + ")" : abbr;
+          return "<span class=\"muted\" title=\"" + adminEsc(tz) + "\">" + adminEsc(label) + " \u00b7 " + adminEsc(time) + " now</span>";
+        } catch { return "<span class=\"muted\">" + adminEsc(tz) + "</span>"; }
+      };
+      const locs = r.people.filter((p) => p.location || p.tz).map((p) => adminEsc(p.name) + ": " + (p.location ? adminEsc(p.location) : "<span class=\"muted\">no location</span>") + "<br>" + zone(p.tz));
       const where =
         (locs.length ? locs.join("<br>") : "<span class=\"muted\">no location yet</span>") +
         (r.via ? "<br><span class=\"muted\">via " + adminEsc(r.via) + "</span>" : "");

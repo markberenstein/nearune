@@ -13,6 +13,32 @@ import { funnelReport } from "../../src/funnel";
 import { buildAnalyticsPage } from "../../src/analytics-page";
 import { buildAdminHome } from "../../src/admin-home";
 import type { PersonKey } from "../../src/types";
+import { geocodeAny } from "../../src/geo";
+import { US_ABBR } from "../../src/usstates";
+
+// US people: show "City, ST" even when they typed just the city. Geocode
+// lookups are cached for the life of the process so the Rooms page stays fast.
+const US_STATE_ABBR: Record<string, string> = Object.fromEntries(Object.entries(US_ABBR).map(([ab, name]) => [name, ab]));
+const placeCache = new Map<string, Promise<string>>();
+function adminPlaceLabel(location: string): Promise<string> {
+  const loc = (location || "").trim();
+  if (!loc) return Promise.resolve("");
+  let p = placeCache.get(loc);
+  if (!p) {
+    p = (async () => {
+      try {
+        const r = await geocodeAny(loc);
+        if (!r || String(r.country_code || "").toUpperCase() !== "US") return loc;
+        const ab = US_STATE_ABBR[String(r.admin1 || "").toLowerCase()];
+        if (!ab) return loc;
+        const city = loc.split(",")[0].trim() || String(r.name || "");
+        return city + ", " + ab;
+      } catch { return loc; }
+    })();
+    placeCache.set(loc, p);
+  }
+  return p;
+}
 import { ICON_180_B64, ICON_512_B64 } from "./icon";
 
 const PORT = Number(Bun.env.PORT) || 3000;
@@ -90,9 +116,9 @@ Bun.serve({
         try {
           dropCachedState(id);
           const state = await loadState(id);
-          const people = (["mark", "nikita"] as PersonKey[])
+          const people = await Promise.all((["mark", "nikita"] as PersonKey[])
             .filter((k) => !!state.people?.[k])
-            .map((k) => ({ who: k as string, name: state.people![k]!.name, confirmed: state.people![k]!.confirmed, location: state.people![k]!.location || "" }));
+            .map(async (k) => ({ who: k as string, name: state.people![k]!.name, confirmed: state.people![k]!.confirmed, location: await adminPlaceLabel(state.people![k]!.location || ""), tz: state.people![k]!.tz || "" })));
           const answerKeys = Object.keys(state.answers).sort();
           const lastActive = answerKeys.length > 0 ? answerKeys[answerKeys.length - 1] : null;
           const pushCount = (["mark", "nikita"] as PersonKey[]).filter((k) => !!state.pushSubs?.[k]).length;

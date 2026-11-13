@@ -961,6 +961,64 @@ const RAW = String.raw`<!doctype html>
     "What's something you're grateful we became friends over?"
   ];
 
+  // Make-a-friend matches: two people who just met. Starts light and gets
+  // a little deeper day by day, counted from the room's first day (see
+  // questionForKey()), so every new match begins with question one.
+  var QUESTIONS_NEW_FRIEND = [
+    "What's something about your day today that you'd tell a new friend?",
+    "What do people usually get wrong about where you're from?",
+    "What's your go-to comfort food?",
+    "What does a perfect weekend look like for you?",
+    "What's a song you've had on repeat lately?",
+    "What's one thing you're really good at that most people don't know?",
+    "Morning person or night owl, and why?",
+    "What's the best trip you've ever taken?",
+    "What's a food from your country everyone should try at least once?",
+    "What do you do for work or study, and what's the best part of it?",
+    "What's a hobby you'd pick up if you had more time?",
+    "What's the last thing that made you laugh out loud?",
+    "What's a movie or show you could watch again and again?",
+    "What's a small thing that instantly makes your day better?",
+    "What's the most interesting place you've ever lived or stayed?",
+    "Coffee, tea, or neither? How do you take it?",
+    "What's something you're looking forward to this month?",
+    "What's a skill you've taught yourself?",
+    "What's a holiday or tradition you love where you live?",
+    "What's your favorite way to spend a rainy day?",
+    "What were you like as a kid?",
+    "What's a book, podcast or video that changed how you think about something?",
+    "If you could live anywhere in the world for a year, where would it be?",
+    "What's a word or phrase from your language you wish existed in every language?",
+    "What's the best advice anyone ever gave you?",
+    "What's something you've changed your mind about in the last few years?",
+    "What's a goal you're working toward right now?",
+    "Who's someone you look up to, and why?",
+    "What's a place in your city you'd show a visitor first?",
+    "What's the best meal you've ever had?",
+    "What's something that always makes you feel at home?",
+    "What's a fear you've gotten over, or are still working on?",
+    "What's your favorite season where you live, and what's it like?",
+    "What's a talent you wish you had?",
+    "What's something you're proud of from this past year?",
+    "What do you usually do to relax after a long day?",
+    "What's a habit you're trying to build or break?",
+    "What's the most spontaneous thing you've ever done?",
+    "What's a question you wish people asked you more often?",
+    "What's one thing on your bucket list?",
+    "What's a childhood game or snack you still miss?",
+    "What's something you're curious about in my part of the world?",
+    "What's the kindest thing a stranger has ever done for you?",
+    "What did you want to be when you grew up?",
+    "What's a small luxury you'd never give up?",
+    "What's a mistake that taught you something important?",
+    "What kind of friend are you: planner, listener, or the one who makes everyone laugh?",
+    "What's a moment from this week you'd want to remember?",
+    "What's something about you that surprises people when they get to know you?",
+    "What's your idea of a perfect day from start to finish?",
+    "What's a dream you've had for a long time but haven't told many people?",
+    "What's something you've learned from talking with me so far?"
+  ];
+
   // Picks the right pool for this room's relationship (see RelationshipType
   // in types.ts). Unset — every room created before this existed, plus the
   // legacy main room — defaults to significant_other so nothing already
@@ -971,8 +1029,10 @@ const RAW = String.raw`<!doctype html>
   // FRIEND_MATCH_POOL_START on, so their earlier days keep the question
   // that was actually asked.
   var FRIEND_MATCH_POOL_START = "2026-11-13";
+  var NEW_FRIEND_POOL_START = "2026-11-14";
   function questionPoolFor(key) {
     var rel = state && state.relationship;
+    if (state && state.origin === "friend" && (!key || key >= NEW_FRIEND_POOL_START)) return QUESTIONS_NEW_FRIEND;
     if (rel === "family") return QUESTIONS_FAMILY;
     if (rel === "friend") return QUESTIONS_FRIEND;
     if (!rel && state && state.origin === "friend" && (!key || key >= FRIEND_MATCH_POOL_START)) return QUESTIONS_FRIEND;
@@ -1038,6 +1098,12 @@ const RAW = String.raw`<!doctype html>
     } else if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V2_START) {
       pool = QUESTIONS_SIGNIFICANT_OTHER_V2;
       days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V2_START)) / DAY_MS);
+    }
+    if (pool === QUESTIONS_NEW_FRIEND) {
+      // Day 1 is the room's first day (or the day this set started, for
+      // matches made before it), so each new match opens with question one.
+      var firstMs = Math.max(state && state.createdAt ? Date.parse(state.createdAt) || 0 : 0, keyToUtcMs(NEW_FRIEND_POOL_START));
+      days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS) - Math.floor((firstMs - EPOCH_MS) / DAY_MS);
     }
     var idx = ((days % pool.length) + pool.length) % pool.length;
     return pool[idx];

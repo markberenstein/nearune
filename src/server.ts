@@ -584,6 +584,20 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json({ ok: true, changed, tz });
     }
 
+    // Admin tool: skip a room's current Never Have I Ever prompt and start a
+    // fresh round from the room's own set (friend matches get the next
+    // getting-to-know-you prompt). Same secret as the reminder.
+    if (req.method === "POST" && url.pathname === "/api/admin/nhie-refresh") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const nb = await readJson(req);
+      const rid = typeof nb?.roomId === "string" ? nb.roomId : "";
+      if (!rid || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
+      const st = await saveState(rid, (s) => { s.nhie = newRound(s.nhie, roomRelationship(s)); });
+      console.log("[admin] nhie refreshed room=" + rid + " round=" + (st.nhie && st.nhie.round));
+      return json({ ok: true, round: st.nhie && st.nhie.round, text: st.nhie && st.nhie.text });
+    }
+
     // Admin tool: end a room (without erasing it). Same secret as the reminder.
     if (req.method === "POST" && url.pathname === "/api/admin/close") {
       const secret = Bun.env.CRON_SECRET;

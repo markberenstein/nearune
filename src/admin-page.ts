@@ -45,6 +45,8 @@ const NOTICES: Record<string, string> = {
   sent: "Reminder email sent.",
   closed: "Room closed. Both people will see that it has ended.",
   renamed: "Room updated.",
+  nhie_refreshed: "Never Have I Ever refreshed. Both people get a new prompt within a few seconds.",
+  nhie_failed: "Could not refresh Never Have I Ever. Check the logs.",
   location_set: "Location updated.",
   city_required: "That location needs to be a city (for example, Palo Alto, CA). Nothing was changed.",
   location_failed: "Could not update the location. Check the logs.",
@@ -133,6 +135,12 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
             <button type="submit" class="del-btn">Close</button>
           </form>`
         : "";
+      const nhieBtn = r.roomId && !r.closed
+        ? `<form method="POST" action="/nhie-refresh?${secretQS}" style="margin-bottom:6px" onsubmit="return confirm('Give room ${adminEsc(r.roomId)} a new Never Have I Ever prompt? Answers to the current one are cleared.');">
+            <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
+            <button type="submit" class="remind-btn">New NHIE</button>
+          </form>`
+        : "";
       const renameBtn = r.roomId && !r.closed
         ? `<form method="POST" action="/rename-room?${secretQS}" style="margin-bottom:6px" data-cur="${adminEsc(r.roomName || "")}" onsubmit="var n = prompt('New display name for this room (leave blank to remove the name):', this.dataset.cur); if (n === null) return false; this.elements.name.value = n; var c = prompt('New room code too? Letters and numbers only. The old code keeps working. Leave blank to keep the current code:', n.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16)); if (c === null) return false; this.elements.code.value = c; return true;">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
@@ -149,7 +157,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
             <button type="submit" class="remind-btn">Set ${adminEsc(p.name)}\u2019s city</button>
           </form>`).join("")
         : "";
-      const action = remind + renameBtn + locBtns + closeBtn + (r.roomId
+      const action = remind + renameBtn + nhieBtn + locBtns + closeBtn + (r.roomId
         ? `<form method="POST" action="/delete-room?${secretQS}" onsubmit="return confirm('Delete room ${adminEsc(r.roomId)}? This permanently erases its answers, comments, and photos. This cannot be undone.');">
             <input type="hidden" name="roomId" value="${adminEsc(r.roomId)}">
             <button type="submit" class="del-btn">Delete</button>

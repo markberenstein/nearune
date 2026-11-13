@@ -192,6 +192,31 @@ Bun.serve({
       return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + cmsg, 303);
     }
 
+    // Skips a room's current Never Have I Ever prompt. Goes through the main
+    // app so its in-memory copy of the room is updated, not overwritten.
+    if (req.method === "POST" && url.pathname === "/nhie-refresh") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let rid = "";
+      try { rid = String((await req.formData()).get("roomId") || ""); } catch {}
+      let nmsg = "nhie_failed";
+      const nApp = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const nCron = Bun.env.CRON_SECRET || "";
+      if (!nApp || !nCron) nmsg = "not_configured";
+      else if (rid) {
+        try {
+          const r = await fetch(nApp + "/api/admin/nhie-refresh", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-cron-secret": nCron },
+            body: JSON.stringify({ roomId: rid }),
+          });
+          nmsg = r.ok ? "nhie_refreshed" : "nhie_failed";
+        } catch (err) {
+          console.error("[admin] nhie refresh failed", err);
+        }
+      }
+      return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + nmsg, 303);
+    }
+
     // Changes a room's display name (the title at the top of the room). The
     // room code and invite links never change. Goes through the main app so
     // its in-memory copy of the room is updated rather than overwritten.

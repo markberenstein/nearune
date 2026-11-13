@@ -64,6 +64,9 @@ export type WeatherNow = {
   // view. Empty if the hourly call didn't come back cleanly (current
   // conditions still work either way).
   recentHours: HourlyPoint[];
+  // Who supplied the current reading. "apple" means WeatherKit, which Apple
+  // requires to be credited on screen (see page.ts's weatherWidgetBlock()).
+  source: "apple" | "open-meteo";
 };
 
 // Monoline, filled icons in the spirit of Apple's own SF Symbols weather
@@ -249,6 +252,7 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
             humidity,
             theme,
             recentHours: recentHours.slice(-6),
+            source: weatherKit ? "apple" : "open-meteo",
           };
         }
       }

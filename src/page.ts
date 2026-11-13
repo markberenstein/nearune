@@ -130,6 +130,8 @@ const RAW = String.raw`<!doctype html>
   .trend-bar-hum { font-size: 0.8rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
   /* Sits beside the weather tile, so left-aligned rather than the old
      full-width centered line under the clocks. */
+  .weather-attribution { display: block; text-align: right; margin: 4px 6px 0 0; font-size: 0.72rem; color: inherit; opacity: 0.7; text-decoration: none; }
+  .weather-attribution:hover { text-decoration: underline; }
   .sky-line {
     text-align: left; font-style: italic; color: var(--ink-soft);
     font-size: 0.8rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
@@ -4006,6 +4008,26 @@ const RAW = String.raw`<!doctype html>
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
+  // Draws one section of the room page. If that section throws (bad or
+  // unexpected room data), it's skipped so the rest of the page still shows,
+  // and the error goes to the server log once per page load.
+  var clientErrorsSent = {};
+  function reportClientError(part, e) {
+    try {
+      var msg = (e && e.message) || String(e);
+      var key = part + ":" + msg;
+      if (clientErrorsSent[key]) return;
+      clientErrorsSent[key] = true;
+      fetch(RP + "/api/client-error", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: part, msg: msg, stack: (e && e.stack) || "", who: viewerKey || "" }) }).catch(function () {});
+    } catch (x) {}
+  }
+  function safePart(part, fn) {
+    try { return fn(); } catch (e) { reportClientError(part, e); return null; }
+  }
+  function addPart(app, part, fn) {
+    var el = safePart(part, fn);
+    if (el) app.appendChild(el);
+  }
   function renderApp() {
     nrCheckState();
     var app = document.getElementById("app");
@@ -4076,21 +4098,18 @@ const RAW = String.raw`<!doctype html>
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
 
-    app.appendChild(header());
-    var friendNote = friendBanner();
-    if (friendNote) app.appendChild(friendNote);
+    addPart(app, "header", header);
+    addPart(app, "friendBanner", friendBanner);
     // Traveling button sits right under the clock/timezone block at the
     // very top of the page. The "enable notifications" link used to sit
     // right under it too — moved to the bottom of the page, under the
     // voice-recording box, per feedback (see its new call site below).
-    var travelRow = travelBlock();
-    if (travelRow) app.appendChild(travelRow);
-    app.appendChild(statusRow());
+    addPart(app, "travel", travelBlock);
+    addPart(app, "status", statusRow);
     // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
     // "next question" countdown used to be), right under the status row.
-    var weatherBlock = weatherWidgetBlock();
-    if (weatherBlock) app.appendChild(weatherBlock);
-    app.appendChild(tabBar());
+    addPart(app, "weather", weatherWidgetBlock);
+    addPart(app, "tabs", tabBar);
     // The fun local-news line, the music/movies chart lines, and the shared
     // photo card live on their own "Local Feel" tab now (per feedback — the
     // Today tab was getting cluttered), with nothing else alongside them.
@@ -4098,26 +4117,21 @@ const RAW = String.raw`<!doctype html>
     // itself, respectively.
     if (activeTab === "puzzle" && state && state.origin === "friend") activeTab = "today";
     if (activeTab === "local") {
-      var newsBlock = newsLineBlock();
-      if (newsBlock) app.appendChild(newsBlock);
-      var musicBlock = musicLineBlock();
-      if (musicBlock) app.appendChild(musicBlock);
-      var moviesBlock = moviesLineBlock();
-      if (moviesBlock) app.appendChild(moviesBlock);
-      var photoBlock = photoCardBlock();
-      if (photoBlock) app.appendChild(photoBlock);
+      addPart(app, "news", newsLineBlock);
+      addPart(app, "music", musicLineBlock);
+      addPart(app, "movies", moviesLineBlock);
+      addPart(app, "photo", photoCardBlock);
     } else if (activeTab === "never") {
-      app.appendChild(nhieSection());
+      addPart(app, "nhie", nhieSection);
     } else {
-      app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
+      addPart(app, "countdown", function () { return h("p", { class: "cdt", id: "cd-note", text: countdownText() }); });
       if (activeTab === "puzzle") {
-        var flash = puzzleFlashBanner();
-        if (flash) app.appendChild(flash);
-        app.appendChild(puzzleSection());
+        addPart(app, "puzzleFlash", puzzleFlashBanner);
+        addPart(app, "puzzle", puzzleSection);
       } else {
-        app.appendChild(questionCard());
-        app.appendChild(streakCard());
-        app.appendChild(journalSection());
+        addPart(app, "question", questionCard);
+        addPart(app, "streak", streakCard);
+        addPart(app, "journal", journalSection);
       }
       // Moved below the Today/Puzzle content (and "Look back at past days" on
       // the Today tab specifically) per feedback — used to sit right under
@@ -4125,17 +4139,15 @@ const RAW = String.raw`<!doctype html>
       // only — on the Puzzle and Local Feel tabs it read as unrelated
       // clutter (it's an account-level voice setting, not tied to either).
       if (activeTab === "today") {
-        var voiceBlock = voiceRecorderBlock();
-        if (voiceBlock) app.appendChild(voiceBlock);
+        addPart(app, "voice", voiceRecorderBlock);
       }
     }
     // The "enable notifications" link — now sits here, under the
     // voice-recording box, instead of up under the traveling button (see
     // that call site above). Only renders while notifications are actually
     // off (pushToggleRow() returns null once they're on).
-    var pushRow = pushToggleRow();
-    if (pushRow) app.appendChild(pushRow);
-    app.appendChild(switchRow());
+    addPart(app, "pushRow", pushToggleRow);
+    addPart(app, "switchRow", switchRow);
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
@@ -4441,6 +4453,19 @@ const RAW = String.raw`<!doctype html>
       h("strong", { text: solo ? t("The sky over your head right now.") : tTemplate("The sky over {name}'s head right now.", { name: (shownTraveling ? "✈️ " : "") + shownName }) }),
     ]);
     wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
+    // Apple requires WeatherKit data to carry the Apple Weather mark and a
+    // link to its data-source page. The Apple logo character only draws on
+    // Apple devices, so everyone else sees the words "Apple Weather".
+    if (w.source === "apple") {
+      var appleUa = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
+      wrap.appendChild(h("a", {
+        class: "weather-attribution",
+        href: "https://weatherkit.apple.com/legal-attribution.html",
+        target: "_blank",
+        rel: "noopener noreferrer",
+        text: appleUa ? "\uF8FF Weather" : "Apple Weather",
+      }));
+    }
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),

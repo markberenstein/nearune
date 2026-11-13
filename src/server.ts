@@ -1245,6 +1245,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json(forClient(state));
     }
 
+    // A section of the room page failed to draw on someone's device. The page
+    // skips that section and keeps going; this just writes the error to the
+    // log so it can be fixed. No personal data, capped length.
+    if (req.method === "POST" && restPath === "/api/client-error") {
+      if (!rateLimit("clienterr:" + clientIp(req, server), 30, HOUR)) return json({ ok: false }, { status: 429 });
+      const ce = await readJson(req);
+      const clip = (v: any, n: number) => String(v == null ? "" : v).replace(/[\r\n]+/g, " | ").slice(0, n);
+      console.log("[client-error] room=" + (roomId || "main") + " who=" + clip(ce?.who, 10) + " part=" + clip(ce?.part, 30) + " msg=" + clip(ce?.msg, 200) + " at=" + clip(ce?.stack, 400) + " ua=" + clip(req.headers.get("user-agent"), 120));
+      return json({ ok: true });
+    }
+
     // Anonymous sign-up funnel: records the first time a room reaches each
     // step of the registration screens, so the admin view can show where
     // people give up. Whitelisted step names only; no personal data.

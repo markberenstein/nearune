@@ -254,10 +254,11 @@ export async function resolveCountryCode(location: string): Promise<string | nul
 }
 
 // Coordinates + city label for a free-text location (admin stats map only).
-export async function resolveCoords(location: string): Promise<{ lat: number; lon: number; city: string; country: string } | null> {
+export async function resolveCoords(location: string): Promise<{ lat: number; lon: number; city: string; country: string; region: string; tz: string } | null> {
   const first = await geocode(location);
   if (!first || typeof first.latitude !== "number" || typeof first.longitude !== "number") return null;
-  return { lat: first.latitude, lon: first.longitude, city: String(first.name || ""), country: String(first.country_code || "").toUpperCase() };
+  const country = String(first.country_code || "").toUpperCase();
+  return { lat: first.latitude, lon: first.longitude, city: String(first.name || ""), country, region: regionAbbr(country.toLowerCase(), first.admin1 || "") || "", tz: typeof first.timezone === "string" ? first.timezone : "" };
 }
 
 // Countries Nearune is not offered in: those with no U.S. diplomatic

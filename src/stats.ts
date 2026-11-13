@@ -40,7 +40,7 @@ async function railwayUsage() {
   } catch (err: any) { return { error: String(err?.message || err).slice(0, 160) }; }
 }
 
-const coordCache = new Map<string, { lat: number; lon: number; city: string; country: string } | null>();
+const coordCache = new Map<string, { lat: number; lon: number; city: string; country: string; region?: string; tz?: string } | null>();
 
 // How far a room got through setup, in plain words (for the admin list).
 function furthestStep(st: any, ppl: any[], answeredDays: number): string {
@@ -65,7 +65,7 @@ export async function computeStats() {
   const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; furthest: string; funnel: Record<string, string>; people: { name: string; location: string; confirmed: boolean }[] }[] = [];
   const locByCountry = new Map<string, string>();
   const newsLocs = new Set<string>();
-  const byCity = new Map<string, { city: string; country: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
+  const byCity = new Map<string, { city: string; country: string; region?: string; tz?: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
   for (const id of ids) {
     let st: any;
     try { st = await loadState(id); } catch { continue; }
@@ -101,7 +101,7 @@ export async function computeStats() {
       const key = c.lat.toFixed(1) + "," + c.lon.toFixed(1);
       const e = byCity.get(key);
       const who = { name: String(p.name || "(no name)").slice(0, 40), partner: o ? String(o.name || "(no name)").slice(0, 40) : "(waiting for partner)", partnerLoc: o ? String(o.location || "").slice(0, 60) : "" };
-      if (e) { e.n++; e.people.push(who); } else byCity.set(key, { city: c.city, country: c.country, lat: +c.lat.toFixed(2), lon: +c.lon.toFixed(2), n: 1, people: [who] });
+      if (e) { e.n++; e.people.push(who); } else byCity.set(key, { city: c.city, country: c.country, region: c.region || "", tz: c.tz || "", lat: +c.lat.toFixed(2), lon: +c.lon.toFixed(2), n: 1, people: [who] });
     }
   }
   const u = await elevenLabsUsage();

@@ -83,6 +83,7 @@ async function handToAdmin(d: Data): Promise<void> {
   const at = new Date().toISOString();
   await saveState(roomId, (s) => {
     s.origin = "friend";
+    s.relationship = "friend";
     s.friendDevices = { nikita: w.device, mark: "admin" };
     s.pendingInvite = { mark: { token: tokAdmin, at, link: true } } as any;
     if (w.profile) { if (!s.people) s.people = {} as any; (s.people as any).nikita = { ...w.profile, confirmed: true }; }
@@ -128,6 +129,7 @@ export function friendJoin(device: string, profile?: FriendProfile): Promise<Joi
     // form instead. Neither is the host, so there's no race over who's first.
     await saveState(roomId, (s) => {
       s.origin = "friend";
+      s.relationship = "friend";
       s.friendDevices = { nikita: waiter.device, mark: device };
       const inv: any = {};
       const ppl: any = s.people || {};

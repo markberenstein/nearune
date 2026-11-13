@@ -966,10 +966,16 @@ const RAW = String.raw`<!doctype html>
   // legacy main room — defaults to significant_other so nothing already
   // running changes which questions it gets. its_complicated gets the same
   // pool as significant_other (falls through to the default below).
-  function questionPoolFor() {
+  // Make-a-friend matches are always friends. Matches made before the
+  // server started saving that on the room switch to the friend pool from
+  // FRIEND_MATCH_POOL_START on, so their earlier days keep the question
+  // that was actually asked.
+  var FRIEND_MATCH_POOL_START = "2026-11-13";
+  function questionPoolFor(key) {
     var rel = state && state.relationship;
     if (rel === "family") return QUESTIONS_FAMILY;
     if (rel === "friend") return QUESTIONS_FRIEND;
+    if (!rel && state && state.origin === "friend" && (!key || key >= FRIEND_MATCH_POOL_START)) return QUESTIONS_FRIEND;
     return QUESTIONS_SIGNIFICANT_OTHER_V1;
   }
 
@@ -1024,7 +1030,7 @@ const RAW = String.raw`<!doctype html>
     return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
   function questionForKey(key) {
-    var pool = questionPoolFor();
+    var pool = questionPoolFor(key);
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
     if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V3_START) {
       pool = QUESTIONS_SIGNIFICANT_OTHER_V3;

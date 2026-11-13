@@ -180,6 +180,14 @@ Bun.serve({
   },
 });
 
+// Never Have I Ever pool for a room. Make-a-friend matches just met, so
+// they get the new-friends pool (no shared past, nothing romantic) even
+// if the room was made before the match code saved relationship on it.
+function roomRelationship(s: any): any {
+  if (s.origin === "friend") return "friend_match";
+  return s.relationship;
+}
+
 const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
 // Public pages listed for search engines.
 const CANONICAL_ORIGIN = "https://nearune.ai";
@@ -1642,7 +1650,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who, choice, round } = body || {};
       if (!isPerson(who) || (choice !== "never" && choice !== "have")) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (!s.nhie) s.nhie = newRound(undefined, s.relationship);
+        if (!s.nhie) s.nhie = newRound(undefined, roomRelationship(s));
         if (s.nhie.round !== round) return;
         if (!s.nhie.votes) s.nhie.votes = {};
         s.nhie.votes[who] = choice;
@@ -1660,9 +1668,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who, round } = body || {};
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (!s.nhie) { s.nhie = newRound(undefined, s.relationship); return; }
+        if (!s.nhie) { s.nhie = newRound(undefined, roomRelationship(s)); return; }
         const v = s.nhie.votes || {};
-        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, s.relationship);
+        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, roomRelationship(s));
       });
       return json(forClient(state));
     }

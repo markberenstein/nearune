@@ -93,6 +93,78 @@ const FRIEND: string[] = COUPLE.filter((p) => !/kiss|crush|miss(ed)? you|imagin|
   "Never have I ever been sure you'd text first and then I did.",
 ]);
 
+// Make-a-friend matches: two people who just met, often in different
+// countries. Everything is about "I", never "you" or "us", so nothing
+// assumes a shared past or a romance.
+const NEW_FRIEND: string[] = [
+  "Never have I ever sent a text to the wrong person.",
+  "Never have I ever pretended to be asleep to avoid a conversation.",
+  "Never have I ever been embarrassed by my own ringtone.",
+  "Never have I ever been so tired I texted gibberish.",
+  "Never have I ever been the last one to leave a party.",
+  "Never have I ever broken something and hid the evidence.",
+  "Never have I ever crashed a party I wasn't invited to.",
+  "Never have I ever cried at a movie and blamed allergies.",
+  "Never have I ever danced alone in the kitchen.",
+  "Never have I ever driven somewhere just to hear a song.",
+  "Never have I ever eaten something off the floor.",
+  "Never have I ever fallen asleep in a movie theater.",
+  "Never have I ever forgotten a friend's birthday.",
+  "Never have I ever googled a symptom and convinced myself the worst.",
+  "Never have I ever gotten lost while using GPS.",
+  "Never have I ever had a nickname I secretly hated.",
+  "Never have I ever hidden a snack so I wouldn't have to share it.",
+  "Never have I ever ignored an alarm clock three times in a row.",
+  "Never have I ever kept a diary.",
+  "Never have I ever laughed so hard I cried at the wrong moment.",
+  "Never have I ever lied about having read a book.",
+  "Never have I ever missed a flight or a train.",
+  "Never have I ever muted a group chat and never looked back.",
+  "Never have I ever ordered food just so I wouldn't have to cook.",
+  "Never have I ever practiced a toast or a speech to no one.",
+  "Never have I ever pretended to like a gift.",
+  "Never have I ever pretended to understand a joke.",
+  "Never have I ever said I was five minutes away when I hadn't left yet.",
+  "Never have I ever sent a message and instantly wished I could unsend it.",
+  "Never have I ever sung in the shower at full volume.",
+  "Never have I ever taken a selfie and deleted twenty before posting one.",
+  "Never have I ever talked to myself out loud when I thought no one could hear.",
+  "Never have I ever told a friend I was busy when I just wanted to stay home.",
+  "Never have I ever told a white lie to get out of plans.",
+  "Never have I ever worn the same outfit three days in a row.",
+  "Never have I ever made a friend online before.",
+  "Never have I ever lived in another country.",
+  "Never have I ever tried to learn a language with an app and quit.",
+  "Never have I ever eaten a food I couldn't pronounce.",
+  "Never have I ever traveled somewhere alone.",
+  "Never have I ever gotten on the wrong bus or train.",
+  "Never have I ever pretended to know a song at karaoke.",
+  "Never have I ever cooked a dish from another country.",
+  "Never have I ever stayed up all night on purpose.",
+  "Never have I ever binge-watched a whole season in one day.",
+  "Never have I ever talked to a stranger on a plane for the whole flight.",
+  "Never have I ever been recognized by someone I didn't remember.",
+  "Never have I ever waved back at someone who wasn't waving at me.",
+  "Never have I ever walked into a glass door.",
+  "Never have I ever forgotten someone's name right after hearing it.",
+  "Never have I ever started a hobby and given it up within a week.",
+  "Never have I ever had a pet with a human name.",
+  "Never have I ever left a voicemail I immediately regretted.",
+  "Never have I ever cut my own hair.",
+  "Never have I ever worn something inside out all day.",
+  "Never have I ever fallen asleep on public transport and missed my stop.",
+  "Never have I ever been on TV or in a newspaper.",
+  "Never have I ever climbed a mountain.",
+  "Never have I ever gone swimming in the ocean at night.",
+  "Never have I ever asked a stranger to take my photo and hated it.",
+  "Never have I ever finished a whole pizza by myself.",
+  "Never have I ever laughed at my own joke before the punchline.",
+  "Never have I ever reread the same book more than three times.",
+  "Never have I ever had a song stuck in my head for a whole week.",
+  "Never have I ever taken a nap longer than three hours.",
+  "Never have I ever tried a food I swore I'd never eat, and liked it.",
+];
+
 const FAMILY: string[] = [
   "Never have I ever called you by the wrong name.",
   "Never have I ever blamed a sibling or relative for something I did.",
@@ -120,7 +192,8 @@ const FAMILY: string[] = [
   "Never have I ever hidden a gift so well I forgot where it was.",
 ];
 
-export function nhiePool(rel?: RelationshipType): string[] {
+export function nhiePool(rel?: RelationshipType | "friend_match"): string[] {
+  if (rel === "friend_match") return NEW_FRIEND;
   if (rel === "family") return FAMILY;
   if (rel === "friend") return FRIEND;
   return COUPLE;
@@ -129,14 +202,14 @@ export function nhiePool(rel?: RelationshipType): string[] {
 export type NhieRound = NonNullable<State["nhie"]>;
 
 // Draws a phrase that hasn't been used recently in this room.
-export function drawPhrase(rel: RelationshipType | undefined, recent: string[]): string {
+export function drawPhrase(rel: RelationshipType | "friend_match" | undefined, recent: string[]): string {
   const pool = nhiePool(rel);
   const fresh = pool.filter((p) => !recent.includes(p));
   const from = fresh.length ? fresh : pool;
   return from[Math.floor(Math.random() * from.length)];
 }
 
-export function newRound(prev: State["nhie"], rel: RelationshipType | undefined): NhieRound {
+export function newRound(prev: State["nhie"], rel: RelationshipType | "friend_match" | undefined): NhieRound {
   const recent = [...(prev?.recent || []), ...(prev?.text ? [prev.text] : [])].slice(-30);
   const finished = !!(prev && prev.text && prev.votes && prev.votes.mark && prev.votes.nikita);
   const history = [...(prev?.history || []), ...(finished ? [{ round: prev!.round, text: prev!.text, votes: prev!.votes }] : [])].slice(-100);

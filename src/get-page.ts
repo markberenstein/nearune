@@ -102,8 +102,9 @@ html,body{background:var(--bg);color:var(--ink)}
 body{margin:0;font-family:'Manrope',system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:var(--accent-ink)}
 .wrap{max-width:520px;margin:0 auto;padding:20px max(20px,env(safe-area-inset-left)) 120px max(20px,env(safe-area-inset-right))}
-.top{display:flex;align-items:center;justify-content:space-between}
-.logo{font-size:22px;font-weight:800;color:var(--accent);letter-spacing:-.3px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.logo{font-size:22px;font-weight:800;color:var(--accent);letter-spacing:-.3px;line-height:30px}
+.top-r{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
 .pill{font-size:12px;font-weight:700;background:var(--accent);color:var(--on-accent);padding:5px 11px;border-radius:999px}
 h1{margin:22px 0 8px;font-size:38px;line-height:1.05;font-weight:800;letter-spacing:-1.3px;text-wrap:balance}
 h1 span{color:var(--accent)}
@@ -111,7 +112,7 @@ h1 span{color:var(--accent)}
 .cta-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .badge{display:inline-block;line-height:0;border-radius:10px}
 .badge img{height:54px;width:auto}
-.free{font-size:14px;font-weight:700;color:var(--ink);line-height:1.3}
+.free{font-size:13px;font-weight:700;color:var(--ink);line-height:1.3;text-align:left;padding-left:4px}
 .free span{display:block;font-weight:500;color:var(--soft)}
 /* Phone picture of a room */
 .phone{margin:26px auto 0;max-width:330px;background:#1F1A17;border-radius:44px;padding:10px;box-shadow:0 24px 60px rgba(43,33,25,.22)}
@@ -171,14 +172,16 @@ footer{margin:28px 0 0;font-size:13px;color:var(--soft);text-align:center}
 <main class="wrap">
   <div class="top">
     <div class="logo">Nearune</div>
-    <div class="pill">Free on iPhone</div>
+    <div class="top-r">
+      <div class="pill">No cost app</div>
+      <div class="free">Free for both of you<span>Send one link. They join free.</span></div>
+    </div>
   </div>
 
   <h1>${c.h1}</h1>
   <p class="lede">One question a day for two people, in any language.</p>
   <div class="cta-row">
     ${badge("badge-top")}
-    <div class="free">Free for both of you<span>Send one link. They join free.</span></div>
   </div>
 
   <div class="phone" role="img" aria-label="A Nearune room: today's question, both answers, one translated from Spanish with a button to hear it in their voice">

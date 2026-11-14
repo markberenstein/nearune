@@ -3551,7 +3551,12 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       nrTrack("invite_sent"); markInviteShared();
       if (navigator.share) {
-        var shareObj = url === lastInviteUrl ? { url: url } : { url: url };
+        // Invite links go out with a title (the share sheet header) and one
+        // friendly line before the link, so the person sending knows what
+        // they're sending and the person receiving knows what it is.
+        var shareObj = url === lastInviteUrl
+          ? { title: "Join me on Nearune", text: "One question a day, just for the two of us. Here's my invite:", url: url }
+          : { url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
@@ -3613,7 +3618,7 @@ const RAW = String.raw`<!doctype html>
     // reminder line. Email is offered because many people only have their
     // partner's email, not a quick way to text them a link.
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
+      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Who's your one person?") }),
       h("p", { class: "reg-sub", text: stillWaiting
         ? t("They haven't joined yet. Send it again by text or email.")
         : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })
@@ -3623,7 +3628,7 @@ const RAW = String.raw`<!doctype html>
       setTimeout(submitInviteLink, 0);
     }
     if (lastInviteUrl) {
-      var main = shareLinkButton(lastInviteUrl, t("Text or share the invite"), "puzzle-upload-btn reg-cta");
+      var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
       main.style.marginTop = "12px";
       card.appendChild(main);
       var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email it") });

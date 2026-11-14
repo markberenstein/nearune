@@ -3618,7 +3618,7 @@ const RAW = String.raw`<!doctype html>
     // reminder line. Email is offered because many people only have their
     // partner's email, not a quick way to text them a link.
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Who's your one person?") }),
+      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
       h("p", { class: "reg-sub", text: stillWaiting
         ? t("They haven't joined yet. Send it again by text or email.")
         : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })

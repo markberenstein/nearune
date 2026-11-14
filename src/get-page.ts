@@ -37,7 +37,9 @@ const COPY = {
 };
 
 export function buildGetPage(variant: "general" | "military" = "general"): string {
-  if (variant === "general") return buildGetPageV2();
+  // Nov 14, 2026: back to the original layout (the new one tapped 4% vs 7%).
+  // buildGetPageV2 is kept for a future test.
+  if (variant === "general" && Bun.env.GET_PAGE_V2 === "1") return buildGetPageV2();
   return buildGetPageV1(variant);
 }
 

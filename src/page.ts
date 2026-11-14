@@ -3551,11 +3551,11 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       nrTrack("invite_sent"); markInviteShared();
       if (navigator.share) {
-        // Invite links go out with a title (the share sheet header) and one
-        // friendly line before the link, so the person sending knows what
-        // they're sending and the person receiving knows what it is.
+        // Link only: adding a title/text made the share sheet flash and close
+        // inside the iPhone app (Nov 14, 2026), so invites go out as the bare
+        // link, which Messages turns into a preview card.
         var shareObj = url === lastInviteUrl
-          ? { title: "Join me on Nearune", text: "One question a day, just for the two of us. Here's my invite:", url: url }
+          ? { url: url }
           : { url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {

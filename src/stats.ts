@@ -60,9 +60,12 @@ function furthestStep(st: any, ppl: any[], answeredDays: number): string {
 
 export async function computeStats() {
   const ids = await listRoomIds();
-  let rooms = 0, active = 0, people = 0, answered = 0;
+  let rooms = 0, active = 0, people = 0, answered = 0, bothWeek = 0;
+  // Rooms where both people answered on at least one of the last 7 days
+  // (the closest single number to "active users").
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const voiceIds: { room: number; who: string; id: string }[] = [];
-  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; furthest: string; funnel: Record<string, string>; people: { name: string; location: string; confirmed: boolean }[] }[] = [];
+  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; furthest: string; funnel: Record<string, string>; people: { name: string; location: string; confirmed: boolean }[]; bothWeek?: boolean }[] = [];
   const locByCountry = new Map<string, string>();
   const newsLocs = new Set<string>();
   const byCity = new Map<string, { city: string; country: string; region?: string; tz?: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
@@ -71,6 +74,9 @@ export async function computeStats() {
     try { st = await loadState(id); } catch { continue; }
     rooms++;
     try { if (Object.values(st?.answers || {}).some((day: any) => day && (day.mark || day.nikita))) answered++; } catch {}
+    let both7 = false;
+    try { both7 = Object.entries(st?.answers || {}).some(([d, day]: any) => d >= weekAgo && day && day.mark && day.nikita); } catch {}
+    if (both7) bothWeek++;
     const ppl = ["mark", "nikita"].map((k) => st?.people?.[k]).filter(Boolean);
     people += ppl.length;
     if (ppl.length === 2 && ppl.every((p: any) => p.confirmed)) active++;
@@ -82,6 +88,7 @@ export async function computeStats() {
         created: st?.createdAt || null,
         status: ppl.length === 2 && ppl.every((p: any) => p.confirmed) ? "active" : ppl.length < 2 ? "waiting for partner" : "partner not confirmed",
         answeredDays: days.length,
+        bothWeek: both7,
         lastAnswer: days.length ? days[days.length - 1] : null,
         furthest: furthestStep(st, ppl, days.length),
         funnel: (st?.funnel && typeof st.funnel === "object") ? st.funnel : {},
@@ -187,7 +194,7 @@ export async function computeStats() {
   }
   return {
     at: new Date().toISOString(),
-    rooms, activeRooms: active, answeredRooms: answered, people, roomList,
+    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,

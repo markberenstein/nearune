@@ -28,7 +28,9 @@ function notifyMatch(push: WaiterPush | undefined): void {
     .catch(() => {});
 }
 type Match = { roomId: string; token: string; at: number; who?: "mark" | "nikita"; ready?: boolean };
-type Data = { queue: Waiter[]; matches: Record<string, Match>; blocks: Record<string, string[]> };
+// met: devices already matched with each other, so someone with several
+// Make a friend rooms isn't paired with the same person twice.
+type Data = { queue: Waiter[]; matches: Record<string, Match>; blocks: Record<string, string[]>; met?: Record<string, string[]> };
 
 const KEY = "friend-queue.json";
 const HOUR = 60 * 60 * 1000;
@@ -51,9 +53,9 @@ async function load(): Promise<Data> {
   try {
     const raw = await readSideFile(KEY);
     const d = raw ? JSON.parse(raw) : {};
-    data = { queue: d.queue || [], matches: d.matches || {}, blocks: d.blocks || {} };
+    data = { queue: d.queue || [], matches: d.matches || {}, blocks: d.blocks || {}, met: d.met || {} };
   } catch {
-    data = { queue: [], matches: {}, blocks: {} };
+    data = { queue: [], matches: {}, blocks: {}, met: {} };
   }
   return data;
 }
@@ -109,7 +111,8 @@ export function friendJoin(device: string, profile?: FriendProfile): Promise<Joi
       return { status: "waiting", ticket: mine.ticket } as JoinResult;
     }
     const blocked = (a: string, b: string) => (d.blocks[a] || []).includes(b) || (d.blocks[b] || []).includes(a);
-    const idx = d.queue.findIndex((w) => w.device !== device && now - w.seen < ACTIVE_WINDOW && !blocked(w.device, device));
+    const met = (a: string, b: string) => ((d.met || {})[a] || []).includes(b);
+    const idx = d.queue.findIndex((w) => w.device !== device && now - w.seen < ACTIVE_WINDOW && !blocked(w.device, device) && !met(w.device, device));
     if (idx < 0) {
       const ticket = rand12() + rand12();
       d.queue.push({ ticket, device, at: now, seen: now, ...(profile ? { profile } : {}) });
@@ -120,6 +123,8 @@ export function friendJoin(device: string, profile?: FriendProfile): Promise<Joi
       return { status: "waiting", ticket } as JoinResult;
     }
     const waiter = d.queue.splice(idx, 1)[0];
+    d.met = d.met || {};
+    for (const [a, b] of [[waiter.device, device], [device, waiter.device]]) { const l = d.met[a] || (d.met[a] = []); if (!l.includes(b)) l.push(b); if (l.length > 200) l.splice(0, l.length - 200); }
     const roomId = await createRoom("", "friend-match");
     const tokWaiter = rand12();
     const tokJoiner = rand12();

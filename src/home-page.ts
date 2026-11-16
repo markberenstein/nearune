@@ -72,6 +72,10 @@ export function buildHomePage(): string {
 (function () {
   var LS_ROOMS = "nearuneRooms", LS_FRIEND = "nearuneFriend", LS_DEV = "nearuneDevice", LS_MY = "nearuneMyRoom";
   var MAX_ROOMS = 3;
+  // Up to 3 Make a friend rooms at once; each match gets its own tile and a
+  // fresh Make a friend tile appears until the limit is reached.
+  var MAX_FRIENDS = 3;
+  function friendRooms() { return rooms.filter(function (r) { return r.friend; }); }
 
   function jget(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? d : v; } catch (e) { return d; } }
   function jset(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -355,11 +359,8 @@ export function buildHomePage(): string {
   }
 
   function friendBox() {
-    var friendRoom = null;
-    rooms.forEach(function (r) { if (r.friend) friendRoom = r; });
-    if (friendRoom) return roomBox(friendRoom, true);
     var f = jget(LS_FRIEND, null);
-    if (f && f.status === "matched") {
+    if (f && f.status === "matched" && !rooms.some(function (r) { return r.id === f.roomId; })) {
       var m = el("a", { class: "box friend", href: "/j/" + f.roomId + "/" + f.token });
       m.appendChild(el("div", { class: "glyph", text: "🎉" }));
       m.appendChild(el("div", { class: "big", text: "Meet your match" }));
@@ -404,13 +405,16 @@ export function buildHomePage(): string {
     var slots = document.getElementById("slots");
     slots.innerHTML = "";
     var regular = rooms.filter(function (r) { return !r.friend; });
-    // A friend room that now exists makes the pending match record obsolete.
-    if (rooms.some(function (r) { return r.friend; })) setFriend(null);
+    // Once the matched room is on the list, the pending match record is done.
+    var pend = jget(LS_FRIEND, null);
+    if (pend && pend.status === "matched" && rooms.some(function (r) { return r.id === pend.roomId; })) setFriend(null);
     var wel = document.getElementById("welcome");
     if (wel) wel.hidden = rooms.length > 0 || !!jget(LS_FRIEND, null);
     regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
     for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox(regular.length === 0 && i === 0));
-    slots.appendChild(friendBox());
+    var fr = friendRooms();
+    fr.forEach(function (r) { slots.appendChild(roomBox(r, true)); });
+    if (fr.length < MAX_FRIENDS) slots.appendChild(friendBox());
     document.getElementById("msg").textContent = friendMsg;
     pollFriend();
   }
@@ -508,19 +512,19 @@ export function buildHomePage(): string {
   try {
     if (new URLSearchParams(location.search).get("friend") === "1") {
       history.replaceState(null, "", "/home");
-      if (!jget(LS_FRIEND, null)) ageSheet();
+      if (!jget(LS_FRIEND, null) && friendRooms().length < MAX_FRIENDS) ageSheet();
     }
   } catch (e) {}
   // A match found while the app was closed (or before this update): open it once.
   (function () {
     var f = jget(LS_FRIEND, null);
-    if (f && f.status === "matched" && !f.opened && !rooms.some(function (r) { return r.friend; })) openMatch(f.roomId, f.token, f.who, f.ready);
+    if (f && f.status === "matched" && !f.opened && !rooms.some(function (r) { return r.id === f.roomId; })) openMatch(f.roomId, f.token, f.who, f.ready);
   })();
   Promise.all(rooms.map(function (r) { return loadBrief(r.id); })).then(function () {
     // A Make a friend room closed because the match never joined: drop it so
     // the Make a friend tile is free again.
     var stale = rooms.filter(function (r) { var b = briefs[r.id]; return r.friend && b && b.s && b.s.closed && b.s.closedBy === "no_show"; });
-    if (stale.length) { stale.forEach(function (r) { removeRoom(r.id); }); setFriend(null); render(); }
+    if (stale.length) { var pf = jget(LS_FRIEND, null); stale.forEach(function (r) { removeRoom(r.id); if (pf && pf.roomId === r.id) setFriend(null); }); render(); }
     // Remember name, city and language from an existing room, so the next
     // sign-up form on this device can be filled in already.
     try {

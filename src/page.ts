@@ -3665,8 +3665,11 @@ const RAW = String.raw`<!doctype html>
         card.appendChild(bell);
         if (pushError) card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;", text: pushError }));
       }
-      if (stillWaiting) {
-        var mfl = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("Make a friend while you wait") });
+      // Offered from the start (not only after a day): many people install
+      // without a specific person in mind, and a match gets them a real
+      // second person right away instead of an empty room.
+      {
+        var mfl = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + (stillWaiting ? t("Make a friend while you wait") : t("No one in mind? Make a friend instead")) });
         mfl.style.cssText = "display:block;margin:6px auto 0;font-size:0.9rem;";
         mfl.addEventListener("click", function () { location.href = "/home?friend=1"; });
         card.appendChild(mfl);

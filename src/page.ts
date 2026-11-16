@@ -5490,6 +5490,8 @@ const RAW = String.raw`<!doctype html>
   // because tTemplate's translation pass runs on the whole template text.
   function travelStatusLabel(my, today) {
     if (!my.travelLocation) return t("✈️ Traveling? Set a location");
+    if (my.travelUntil && my.travelUntil < today) return t("✈️ Traveling? Set a location");
+    if (!my.travelFrom && !travelActive(my, today)) return t("✈️ Traveling? Set a location");
     if (travelActive(my, today)) {
       return my.travelUntil
         ? tTemplate("✈️ Showing as traveling to {place} until {date} — edit", { place: my.travelLocation, date: formatShortDate(my.travelUntil) })

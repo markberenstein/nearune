@@ -337,12 +337,17 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   const theme = todaysTheme();
   const dayKey = todayKeyPT() + "|" + q;
   const pinned = dailyPick.get(dayKey);
-  if (pinned) return pinned;
+  if (pinned && namesPlace(pinned, q, false)) return pinned;
+  if (pinned) {
+    // A pin saved before the place filter (or from a bad search) must still name the place.
+    console.log("[localnews] dropped pinned story for " + q + ": place not named");
+    dailyPick.delete(dayKey);
+  }
   // Cache key includes the date + theme so a cache entry can never survive
   // across the app's day boundary and serve yesterday's story.
   const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
   const cached = newsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < NEWS_TTL) return cached.value;
+  if (cached && Date.now() - cached.at < NEWS_TTL && (!cached.value || namesPlace(cached.value, q, false))) return cached.value;
   const seen = seenStories.get(q) || [];
   let value: LocalStory = null;
   const idx = THEMES.findIndex((t) => t.name === theme.name);
@@ -400,9 +405,10 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     await saveNewsState();
   }
   const throttled = Date.now() - gnThrottledAt < 2 * 60 * 1000;
-  if (!value && lastGood.get(q)) {
+  const good = lastGood.get(q);
+  if (!value && good && namesPlace(good, q, false)) {
     // Fresh search found nothing (or was throttled): keep showing the last good story.
-    value = lastGood.get(q)!;
+    value = good;
     console.log("[localnews] " + q + " -> reusing last good story" + (throttled ? " (Google throttled)" : ""));
   }
   // A miss is only cached briefly so a later open (or the daily check) retries:

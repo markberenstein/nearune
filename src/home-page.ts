@@ -181,6 +181,15 @@ export function buildHomePage(): string {
     if (phase === "dawn" || phase === "dusk") return "linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 60%, " + glow + " 100%)";
     return "radial-gradient(ellipse 120% 70% at 50% -10%, " + glow + "55, transparent 65%), linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
   }
+  // Same rule as the room's clock: a trip counts only between its start
+  // and end dates (an old trip's time zone must not stick).
+  function travelOn(p) {
+    if (!p || !p.travelLocation) return false;
+    var d = new Date(), today = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    if (p.travelUntil && p.travelUntil < today) return false;
+    if (p.travelFrom && p.travelFrom > today) return false;
+    return true;
+  }
   function localTime(tz) {
     try { return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: tz }); } catch (e) { return ""; }
   }
@@ -194,7 +203,7 @@ export function buildHomePage(): string {
         tile.style.background = roomSky(b.w);
         tile.appendChild(el("span", { class: "dot live" }));
         tile.appendChild(el("div", { class: "who", text: String(sp.name || "").split(" ")[0] + (sp.location ? " · " + String(sp.location).split(",")[0] : "") }));
-        tile.appendChild(el("div", { class: "time", text: localTime(sp.travelTz || sp.tz) }));
+        tile.appendChild(el("div", { class: "time", text: localTime(travelOn(sp) && sp.travelTz ? sp.travelTz : sp.tz) }));
         var wtemp = b.w.unit === "F" ? b.w.tempF + "°F" : b.w.tempC + "°C";
         tile.appendChild(el("div", { class: "wx", text: (b.w.theme.label || "") + " · " + wtemp }));
         if (b.s.roomName) tile.appendChild(el("div", { class: "small", text: b.s.roomName }));

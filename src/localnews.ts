@@ -322,11 +322,13 @@ export function storyFits(story: { headline: string; source: string; near?: stri
   return namesPlace(story, location, false) || (!!story.near && namesPlace(story, story.near, false));
 }
 
-// Up to 3 nearby towns with their own local news, biggest or closest first,
+// Up to 5 nearby towns with their own local news, biggest or closest first,
 // as "City, ST" (US) or "City, Country". Asked of Claude once per place and
 // saved, since nearby towns don't change.
 async function nearbyPlaces(place: string): Promise<string[]> {
-  const hit = nearbyCache.get(place);
+  // "v2:" = the 5-town list; older saved 3-town lists are asked again once.
+  const cacheKey = "v2:" + place;
+  const hit = nearbyCache.get(cacheKey);
   if (hit) return hit;
   const key = Bun.env.ANTHROPIC_API_KEY;
   if (!key) return [];
@@ -338,7 +340,7 @@ async function nearbyPlaces(place: string): Promise<string[]> {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 120,
         system:
-          "You list nearby towns for a local news search. Given a place, reply with a JSON array of up to 3 real towns or cities within about 40 miles (65 km) of it " +
+          "You list nearby towns for a local news search. Given a place, reply with a JSON array of 4 to 5 real towns or cities within about 40 miles (65 km) of it " +
           "that have their own local news coverage, closest or biggest first. Never repeat the place itself. Format each as \"City, ST\" for the US (two-letter state) " +
           "or \"City, Country\" elsewhere. Reply with only the JSON array.",
         messages: [{ role: "user", content: place }],
@@ -353,8 +355,8 @@ async function nearbyPlaces(place: string): Promise<string[]> {
     const self = place.split(",")[0].trim().toLowerCase();
     const list = (Array.isArray(arr) ? arr : [])
       .filter((x: any) => typeof x === "string" && x.includes(",") && x.length < 60 && x.split(",")[0].trim().toLowerCase() !== self)
-      .slice(0, 3);
-    nearbyCache.set(place, list);
+      .slice(0, 5);
+    nearbyCache.set(cacheKey, list);
     console.log("[localnews] nearby for " + place + ": " + (list.join("; ") || "none"));
     return list;
   } catch { return []; }

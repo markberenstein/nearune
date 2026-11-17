@@ -46,6 +46,8 @@ export function buildHomePage(): string {
   .box.sky .wx { font-size:0.78rem; font-weight:600; opacity:0.95; }
   .box.sky .small { color:rgba(255,255,255,0.88); }
   .box.sky .dot { position:absolute; top:16px; left:16px; }
+  /* Things waiting for you in that room, same red as the in-room tab badges. */
+  .box .todo { position:absolute; top:12px; left:12px; min-width:24px; height:24px; padding:0 7px; box-sizing:border-box; border-radius:12px; background:#E5372B; color:#FFFFFF; font-size:0.8rem; font-weight:800; display:flex; align-items:center; justify-content:center; text-shadow:none; box-shadow:0 2px 8px rgba(0,0,0,0.3); }
   .box.sky .x { color:#FFFFFF; }
   .box .big { font-weight:800; font-size:1.15rem; line-height:1.2; word-break:break-word; max-width:100%; }
   .box .small { font-size:0.78rem; color:var(--ink-soft); word-break:break-word; max-width:100%; }
@@ -202,6 +204,23 @@ export function buildHomePage(): string {
   function localTime(tz) {
     try { return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: tz }); } catch (e) { return ""; }
   }
+  // How many things are waiting for you in a room, matching the red
+  // badges inside it: today's question not answered yet, your turn at
+  // Never Have I Ever, and the puzzle waiting for a photo.
+  function todoCount(s, me) {
+    var other = me === "mark" ? "nikita" : "mark";
+    if (!s || !me || s.closed || !s.people || !s.people[me] || !s.people[other]) return 0;
+    var n = 0;
+    var day = s.todayKey;
+    if (day && !(s.answers && s.answers[day] && s.answers[day][me])) n++;
+    var nh = s.nhie;
+    if (nh && nh.voted && nh.voted[other] && !nh.voted[me]) n++;
+    if (s.origin !== "friend" && !s.puzzleCurrentId) n++;
+    return n;
+  }
+  function todoBadge(n) {
+    return el("span", { class: "todo", text: String(n), "aria-label": n + (n === 1 ? " thing" : " things") + " waiting for you" });
+  }
   function roomBox(entry, isFriend) {
     var id = entry.id, b = briefs[id];
     if (b && b.s && b.w && !b.s.closed) {
@@ -210,7 +229,8 @@ export function buildHomePage(): string {
       if (sp && sp.confirmed !== false) {
         var tile = el("a", { class: "box sky", href: roomHref(id) });
         tile.style.background = roomSky(b.w);
-        tile.appendChild(el("span", { class: "dot live" }));
+        var todo = todoCount(b.s, sme);
+        tile.appendChild(todo ? todoBadge(todo) : el("span", { class: "dot live" }));
         tile.appendChild(el("div", { class: "who", text: String(sp.name || "").split(" ")[0] + (sp.location ? " · " + String(sp.location).split(",")[0] : "") }));
         tile.appendChild(el("div", { class: "time", text: localTime(travelOn(sp) && sp.travelTz ? sp.travelTz : sp.tz) }));
         var wtemp = b.w.unit === "F" ? b.w.tempF + "°F" : b.w.tempC + "°C";
@@ -235,7 +255,8 @@ export function buildHomePage(): string {
       else name = "Waiting";
     } else name = "…";
     var box = el(dead || gone ? "div" : "a", { class: "box" + (isFriend ? " friend" : "") + (dead || gone ? " gone" : ""), href: roomHref(id) });
-    box.appendChild(el("span", { class: "dot" + (live ? " live" : "") }));
+    var todoN = live ? todoCount(b.s, viewerOf(id)) : 0;
+    box.appendChild(todoN ? todoBadge(todoN) : el("span", { class: "dot" + (live ? " live" : "") }));
     box.appendChild(el("div", { class: "big", text: name }));
     box.appendChild(el("div", { class: "small", text: sub }));
     var x = el("button", { class: "x", type: "button", text: "×", "aria-label": "Remove" });

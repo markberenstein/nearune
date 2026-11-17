@@ -397,7 +397,10 @@ export function forClient(state: State): State {
     const comments: Record<string, any> = state.nhie.comments || {};
     nhieOut = { round: state.nhie.round, text: state.nhie.text, voted: { mark: !!v.mark, nikita: !!v.nikita }, votes: both ? v : {}, history: state.nhie.history || [], comments };
   }
-  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteLink: piLink, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut } as any as State;
+  // todayKey: the room's current day (its 6:30am rollover), so the home
+  // screen can tell whether today's question is answered without redoing
+  // the rollover math.
+  const withFlags = { ...base, pendingConfirm: pc, pendingInvite: pi, pendingInviteHandle: piHandle, pendingInviteLink: piLink, pendingInviteAt: piAt, puzzleUnlocked, nhie: nhieOut, todayKey: todayKeyFor(state) } as any as State;
   if (withFlags.people) {
     const strippedPeople: any = {};
     for (const k of Object.keys(withFlags.people)) {

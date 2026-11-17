@@ -24,7 +24,7 @@ import { readSideFile, writeSideFile } from "./storage";
 
 // near: set when the place itself had no story and this one is from a
 // nearby town (e.g. Dayton, OH for Piqua, OH); the headline names that town.
-export type LocalStory = { headline: string; source: string; url: string; access?: "free" | "unverified"; near?: string } | null;
+export type LocalStory = { headline: string; source: string; url: string; access?: "free" | "unverified"; near?: string; nearV?: number } | null;
 
 const newsCache = new Map<string, { at: number; value: LocalStory }>();
 const NEWS_TTL = 2 * 60 * 60 * 1000; // 2 hours — news doesn't need to be fresh-by-the-minute
@@ -387,7 +387,10 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   const theme = todaysTheme();
   const dayKey = todayKeyPT() + "|" + q;
   const pinned = dailyPick.get(dayKey);
-  if (pinned && storyFits(pinned, q)) return pinned;
+  // nearV 2 = nearby pick under the strict humor bar; first-version nearby
+  // picks (event listings) are dropped and searched again.
+  const oldNearby = (st: NonNullable<LocalStory>) => !!st.near && st.nearV !== 2;
+  if (pinned && storyFits(pinned, q) && !oldNearby(pinned)) return pinned;
   if (pinned) {
     // A pin saved before the place filter (or from a bad search) must still name the place.
     console.log("[localnews] dropped pinned story for " + q + ": place not named");
@@ -397,7 +400,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   // across the app's day boundary and serve yesterday's story.
   const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
   const cached = newsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < NEWS_TTL && (!cached.value || storyFits(cached.value, q))) return cached.value;
+  if (cached && Date.now() - cached.at < NEWS_TTL && (!cached.value || (storyFits(cached.value, q) && !oldNearby(cached.value)))) return cached.value;
   const seen = seenStories.get(q) || [];
   let value: LocalStory = null;
   const idx = THEMES.findIndex((t) => t.name === theme.name);
@@ -445,23 +448,26 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     }
   }
   // Nothing named the place itself: try a few nearby towns (the story then
-  // says "from Dayton" in the app). Same safety rules, looser humor bar.
+  // says "from Dayton" in the app). Held to the strict humor bar: only
+  // genuinely quirky or viral stories, no event listings or promotions, and
+  // Claude may say NONE (then no story is shown that day).
   if (!value) {
     const near = await nearbyPlaces(q);
     for (let ni = 0; ni < near.length && !value; ni++) {
       const n = near[ni];
       const nCity = n.split(",")[0].trim();
       const nRegion = n.split(",").slice(1).join(" ").trim();
-      const nq = (nRegion ? '"' + nCity + '" ' + nRegion : '"' + nCity + '"') + " (viral OR quirky OR unusual OR funny OR bizarre OR heartwarming OR adorable OR festival OR tradition) " + EXCLUDE_TERMS + " when:30d";
+      const nq = (nRegion ? '"' + nCity + '" ' + nRegion : '"' + nCity + '"') + " (viral OR quirky OR bizarre OR hilarious OR weirdest OR \"caught on camera\" OR \"on the loose\" OR \"world record\") " + EXCLUDE_TERMS + " -festival -tickets -sale -opening -grand -event -events when:30d";
       let pool = (await fetchCandidates(nq))
         .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, n, true));
       for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
-        const pick = Bun.env.ANTHROPIC_API_KEY ? await pickQuirkiest(n, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), false) : 0;
+        if (!Bun.env.ANTHROPIC_API_KEY) break; // Without Claude there's no way to judge "quirky": skip nearby.
+        const pick = await pickQuirkiest(n, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), true);
         if (pick === null) break;
         const cand = pool[pick];
         const access = await checkArticleAccess(cand.url);
         if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }
-        value = { ...cand, access, near: n };
+        value = { ...cand, access, near: n, nearV: 2 };
         tierNo = tiers.length + 1 + ni;
       }
     }
@@ -478,7 +484,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   }
   const throttled = Date.now() - gnThrottledAt < 2 * 60 * 1000;
   const good = lastGood.get(q);
-  if (!value && good && storyFits(good, q)) {
+  if (!value && good && storyFits(good, q) && !oldNearby(good)) {
     // Fresh search found nothing (or was throttled): keep showing the last good story.
     value = good;
     console.log("[localnews] " + q + " -> reusing last good story" + (throttled ? " (Google throttled)" : ""));

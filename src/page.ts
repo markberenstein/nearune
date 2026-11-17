@@ -568,7 +568,6 @@ const RAW = String.raw`<!doctype html>
   .sky-hero-time { white-space: nowrap; font-size: clamp(3rem, 16.5vw, 5rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,0.28); }
   .sky-hero-weather { margin-top: 8px; background: none; border: none; color: #FFFFFF; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; text-shadow: 0 1px 8px rgba(0,0,0,0.30); }
   .sky-hero-weather svg { width: 20px; height: 20px; }
-  .sky-hero-weather .sky-hum svg { width: 15px; height: 15px; display: block; }
   .sky-hero-weather { flex-wrap: wrap; justify-content: center; }
   .sky-hero-you { font-size: 0.9rem; font-weight: 600; opacity: 0.95; }
   .sky-hero-you .clock-time { font-size: inherit; font-weight: inherit; }
@@ -4737,9 +4736,8 @@ const RAW = String.raw`<!doctype html>
     wx.appendChild(document.createTextNode((phaseWord ? phaseWord + " · " : "") + t(w.theme.label) + " · " + temp));
     // Humidity, as on the old weather tile (WeatherKit, or Open-Meteo as backup).
     if (typeof w.humidity === "number") {
-      wx.appendChild(document.createTextNode(" · "));
-      wx.appendChild(h("span", { class: "sky-hum", html: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5s-6 6.7-6 11a6 6 0 0 0 12 0c0-4.3-6-11-6-11z"/></svg>' }));
-      wx.appendChild(document.createTextNode(w.humidity + "%"));
+      // Spelled out: a drop icon alone reads as "chance of rain".
+      wx.appendChild(document.createTextNode(" · " + tTemplate("{n}% humidity", { n: w.humidity })));
     }
     wx.addEventListener("click", function () { weatherExpanded = !weatherExpanded; renderApp(); });
     var hero = h("div", { class: "sky-hero" }, [

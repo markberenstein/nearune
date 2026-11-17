@@ -2030,6 +2030,13 @@ const RAW = String.raw`<!doctype html>
   // longer notes): returns a separate translated line, styled exactly like
   // the rest of the app's dual-language display.
   function otherUiLang() {
+    // Before this viewer has signed up (setup / join screens), show the
+    // phone's language alongside English so they can read the setup.
+    var meP = viewerKey && state && state.people && state.people[viewerKey];
+    if (!(meP && meP.language) && (ROOM || !viewerKey)) {
+      var pc = phoneLanguageCode();
+      if (pc && pc !== "en") return pc;
+    }
     // Only one extra language can show alongside English on a given device,
     // so when the two people picked two different non-English languages,
     // this device shows whichever one the CURRENT viewer actually reads —
@@ -2979,7 +2986,7 @@ const RAW = String.raw`<!doctype html>
       if (CapApp.getLaunchUrl) CapApp.getLaunchUrl().then(function (r) { if (r && r.url) handleAppUrl(r.url, true); }, function () {});
     } catch (e) {}
   })();
-  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "", military: false };
+  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "", military: false, roomName: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Name, city and language from an earlier sign-up on this device (kept only
   // on the device) so starting another room doesn't mean typing them again.
@@ -2991,6 +2998,34 @@ const RAW = String.raw`<!doctype html>
     if (!d.name && savedProfile.name) d.name = savedProfile.name;
     if (!d.location && savedProfile.location) d.location = savedProfile.location;
     if (!d.language && savedProfile.language) { d.language = savedProfile.language; d.languageTouched = true; }
+  }
+  // The phone's own language, as a name from LANGUAGES ("Spanish"), or "" if
+  // Nearune doesn't list it. Pre-selects the language on the sign-up forms
+  // and shows the setup screen in that language before anyone has picked.
+  function phoneLanguageCode() {
+    try {
+      var list = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ""];
+      for (var i = 0; i < list.length; i++) {
+        var c = String(list[i] || "").toLowerCase().split("-")[0];
+        if (c === "nb" || c === "nn") c = "no";
+        if (c === "iw") c = "he";
+        if (c === "fil") c = "tl";
+        for (var j = 0; j < LANGUAGES.length; j++) if (LANGUAGES[j][1] === c) return c;
+      }
+    } catch (e) {}
+    return "";
+  }
+  function phoneLanguageName() {
+    var c = phoneLanguageCode();
+    for (var j = 0; j < LANGUAGES.length; j++) if (LANGUAGES[j][1] === c) return LANGUAGES[j][0];
+    return "";
+  }
+  // Fills the language from the phone when nothing (saved profile, earlier
+  // pick) has set it yet. Counts as chosen, so the city lookup won't swap it.
+  function applyPhoneLanguage(d) {
+    if (d.language || d.languageTouched) return;
+    var nm = phoneLanguageName();
+    if (nm) { d.language = nm; d.languageTouched = true; }
   }
   function rememberProfile() {
     var me = state && state.people && viewerKey && state.people[viewerKey];
@@ -3224,6 +3259,7 @@ const RAW = String.raw`<!doctype html>
     }
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(acceptDraft);
+    applyPhoneLanguage(acceptDraft);
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(acceptDraft));
@@ -3315,13 +3351,15 @@ const RAW = String.raw`<!doctype html>
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined, military: !!registerDraft.military })
+      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined, military: !!registerDraft.military, roomName: soloRegistration ? (registerDraft.roomName || "").trim() || undefined : undefined })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
         if (!res.ok) {
           funnelPing("reg_err_server");
-          regError = res.data && res.data.error === "region_unavailable"
+          regError = res.data && res.data.error === "inappropriate_name"
+            ? t("Please choose a different room name.")
+            : res.data && res.data.error === "region_unavailable"
             ? t("Nearune isn't available in that location.")
             : res.data && res.data.error === "city_required"
             ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).")
@@ -3400,6 +3438,7 @@ const RAW = String.raw`<!doctype html>
     ]);
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(registerDraft);
+    applyPhoneLanguage(registerDraft);
     funnelPing("reg_screen");
     form.appendChild(h("div", { class: "reg-label", text: t("Where are you?") }));
     lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; if (v) funnelPing("reg_city"); suggestLanguageFromLocation(registerDraft, v); });
@@ -3431,6 +3470,17 @@ const RAW = String.raw`<!doctype html>
         chips.appendChild(chip);
       });
       form.appendChild(chips);
+    }
+    // Optional room name — moved here from the old "Start a room" page now
+    // that the first tile creates the room in one tap. Only the first person,
+    // and only while the room has no name yet.
+    if (soloRegistration && !state.roomName) {
+      form.appendChild(h("div", { class: "reg-label", text: t("Room name (optional)") }));
+      var rn = textField(registerDraft.roomName, "Leave blank and we'll pick one", function (v) { registerDraft.roomName = v; });
+      rn.setAttribute("maxlength", "24");
+      rn.setAttribute("autocapitalize", "words");
+      rn.setAttribute("autocorrect", "off");
+      form.appendChild(rn);
     }
     // Email is optional: only for getting the room back on a new phone.
     if (regShowEmail || registerDraft.email) {

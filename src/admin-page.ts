@@ -175,7 +175,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
             <button type="submit" class="del-btn">Delete</button>
           </form>`
         : `<span class="muted">—</span>`);
-      return `<tr>
+      return `<tr${r.roomId && r.people.length === 0 && !r.friend ? ' class="unset-row"' : ""}>
         <td>${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
         <td><span class="pill pill-${status}">${status}</span>${flags}</td>
         <td>${created}</td>
@@ -260,6 +260,15 @@ ${ADMIN_THEME_CSS}
   ${noticeHtml}
 
   <h2>All rooms</h2>
+  ${(() => {
+    // Rooms where nobody finished setup (someone tapped "Invite your first
+    // Nearune partner" and left). Hidden by default so real rooms stand out.
+    const unset = rooms.filter((r) => r.roomId && r.people.length === 0 && !r.friend).length;
+    return unset
+      ? `<style>body:not(.show-unset) tr.unset-row { display: none; }</style>
+  <p class="sub">${unset} room${unset === 1 ? "" : "s"} where nobody finished setup ${unset === 1 ? "is" : "are"} hidden. <a href="#" onclick="document.body.classList.toggle('show-unset'); this.textContent = document.body.classList.contains('show-unset') ? 'Hide them' : 'Show them'; return false;">Show them</a></p>`
+      : "";
+  })()}
   <div class="tblwrap"><table>
     <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Where</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
     <tbody>${rows}</tbody>

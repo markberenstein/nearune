@@ -30,7 +30,7 @@ export function buildHomePage(): string {
   .box.empty { background:transparent; border:2px dashed var(--line); box-shadow:none; }
   .box.empty .plus { font-size:2.6rem; font-weight:300; color:var(--ink-soft); line-height:1; }
   .box.empty.first { background:var(--accent); border:none; box-shadow:var(--shadow); }
-  .box.empty.first .plus, .box.empty.first .big { color:var(--on-accent); }
+  .box.empty.first .plus, .box.empty.first .big, .box.empty.first .tr { color:var(--on-accent); }
   .box.friend { background:var(--friend); }
   .box .big { font-weight:800; font-size:1.15rem; line-height:1.2; word-break:break-word; max-width:100%; }
   .box .small { font-size:0.78rem; color:var(--ink-soft); word-break:break-word; max-width:100%; }
@@ -44,6 +44,8 @@ export function buildHomePage(): string {
   .welcome { text-align:center; margin:0 4px 18px; }
   .welcome .w1 { font-size:1.15rem; font-weight:700; color:var(--ink); margin:0 0 6px; }
   .welcome .w2 { font-size:0.92rem; line-height:1.45; color:var(--ink-soft); margin:0; }
+  .welcome .tr { display:block; margin-top:4px; font-weight:500; opacity:0.85; }
+  .box .tr { display:block; font-size:0.8rem; font-weight:600; opacity:0.85; margin-top:4px; }
   .msg { text-align:center; font-size:0.85rem; color:var(--danger); margin:14px 0 0; min-height:1em; }
   .foot { text-align:center; margin-top:26px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
@@ -176,11 +178,89 @@ export function buildHomePage(): string {
     return box;
   }
 
+  // The phone's language (2-letter code) when Nearune supports it and it
+  // isn't English. Used to show the welcome copy in that language too, the
+  // same "English + translation" way the rest of the app does.
+  var NR_LANGS = ["hi","es","fr","de","pt","it","zh","ja","ko","ar","fa","ru","bn","pa","gu","mr","ta","te","ur","nl","pl","tr","vi","th","id","tl","el","he","sv","no","uk","ro","cs","sw"];
+  function phoneLang() {
+    try {
+      var list = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ""];
+      for (var i = 0; i < list.length; i++) {
+        var c = String(list[i] || "").toLowerCase().split("-")[0];
+        if (c === "nb" || c === "nn") c = "no";
+        if (c === "iw") c = "he";
+        if (c === "fil") c = "tl";
+        if (c === "en") return null;
+        if (NR_LANGS.indexOf(c) >= 0) return c;
+      }
+    } catch (e) {}
+    return null;
+  }
+  var PHONE_LANG = phoneLang();
+  // Adds the translation of an English line under it (cached on the device).
+  function addTranslation(target, text) {
+    if (!PHONE_LANG || !target || !text) return;
+    var key = "nrTr:" + PHONE_LANG + ":" + text;
+    function put(tr) {
+      if (!tr || tr === text || target.querySelector(".tr")) return;
+      target.appendChild(el("span", { class: "tr", text: tr }));
+    }
+    var cached = null;
+    try { cached = localStorage.getItem(key); } catch (e) {}
+    if (cached) { put(cached); return; }
+    fetch("/api/translate?target=" + PHONE_LANG + "&text=" + encodeURIComponent(text))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var tr = d && d.translated;
+        if (!tr) return;
+        try { localStorage.setItem(key, tr); } catch (e) {}
+        put(tr);
+      }).catch(function () {});
+  }
+
+  // The first tile creates the room right away and goes straight to its
+  // setup screen (city, name, language, then the invite) — no in-between
+  // "Start a room / Join a room" page. The other + tiles still open that
+  // page, which is also where you join with a code.
+  var creating = false;
+  function createRoomNow(box) {
+    if (creating) return;
+    creating = true;
+    var label = box.querySelector(".big");
+    if (label) label.textContent = "Creating your room…";
+    var plat = "web";
+    try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
+    fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok && res.data && res.data.roomId) {
+          nrTrack("room_created");
+          location.href = "/r/" + res.data.roomId;
+          return;
+        }
+        creating = false;
+        if (res.data && res.data.error === "registrations_paused") {
+          if (label) label.textContent = "Invite your first Nearune partner";
+          friendMsg = res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.";
+          document.getElementById("msg").textContent = friendMsg;
+          return;
+        }
+        location.href = "/new";
+      })
+      .catch(function () { creating = false; location.href = "/new"; });
+  }
   function emptyBox(first) {
     var box = el("a", { class: "box empty" + (first ? " first" : ""), href: "/new", "aria-label": first ? "Invite your first Nearune partner" : "Start a room" });
-    box.addEventListener("click", function () { nrTrack("tap_invite"); });
+    box.addEventListener("click", function (ev) {
+      nrTrack("tap_invite");
+      if (first) { ev.preventDefault(); createRoomNow(box); }
+    });
     box.appendChild(el("div", { class: "plus", text: "+" }));
-    if (first) box.appendChild(el("div", { class: "big", text: "Invite your first Nearune partner" }));
+    if (first) {
+      var big = el("div", { class: "big", text: "Invite your first Nearune partner" });
+      box.appendChild(big);
+      addTranslation(box, "Invite your first Nearune partner");
+    }
     return box;
   }
 
@@ -381,6 +461,7 @@ export function buildHomePage(): string {
     var box = el("button", { class: "box friend", type: "button" });
     box.appendChild(el("div", { class: "glyph", text: "🤝" }));
     box.appendChild(el("div", { class: "big", text: "Make a friend" }));
+    addTranslation(box, "Make a friend");
     box.addEventListener("click", ageSheet);
     return box;
   }
@@ -410,6 +491,11 @@ export function buildHomePage(): string {
     if (pend && pend.status === "matched" && rooms.some(function (r) { return r.id === pend.roomId; })) setFriend(null);
     var wel = document.getElementById("welcome");
     if (wel) wel.hidden = rooms.length > 0 || !!jget(LS_FRIEND, null);
+    if (wel && !wel.hidden) {
+      var w1 = wel.querySelector(".w1"), w2 = wel.querySelector(".w2");
+      addTranslation(w1, "One question a day with someone you care about.");
+      addTranslation(w2, "You both answer, then see each other's answer, plus a peek at their weather, time and local life. Invite your person, or tap Make a friend to be matched with someone new.");
+    }
     regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
     for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox(regular.length === 0 && i === 0));
     var fr = friendRooms();

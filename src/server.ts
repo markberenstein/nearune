@@ -24,6 +24,7 @@ import {
   listRoomIds,
   loadRoomAliases,
   addRoomAlias,
+  roomSlug,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
@@ -129,6 +130,31 @@ function parseRoom(pathname: string): { roomId: string; restPath: string } {
 // invite / accept steps is written as one line with the room, step, status,
 // the error code, and the coarse device + language — never names, emails,
 // locations or other request content. Lets us see where a visitor stalled.
+// Room name typed by the first person on the setup screen (the home screen's
+// first tile creates the room with no name). Only applies while nobody has
+// signed up and the room has no name. Sets the title, and when the name
+// makes a usable code, a friendlier room code ("oursky", or "oursky47" if
+// taken) — the original id keeps working.
+async function applySignupRoomName(roomId: string, raw: unknown): Promise<"ok" | "blocked" | "skip"> {
+  const nm = typeof raw === "string" ? raw.trim().slice(0, 40) : "";
+  if (!nm || !roomId) return "skip";
+  const cur = await loadState(roomId);
+  if (cur.roomName || Object.values(cur.people || {}).some((p: any) => p && p.confirmed)) return "skip";
+  const verdict = await moderateContent({ text: nm });
+  console.log("[room-name] \"" + nm + "\" screening=" + verdict + " (setup)");
+  if (verdict === "blocked") return "blocked";
+  const stem = roomSlug(nm);
+  let code = "";
+  if (stem.length >= 4 && stem !== roomId) {
+    for (let i = 0; i < 12 && !code; i++) {
+      const cand = i === 0 ? stem : stem + String(10 + Math.floor(Math.random() * 90));
+      if (await addRoomAlias(cand, roomId)) code = cand;
+    }
+  }
+  await saveState(roomId, (s) => { if (!s.roomName) s.roomName = nm; if (code && !s.roomCode) s.roomCode = code; });
+  return "ok";
+}
+
 const SIGNUP_PATHS = new Set(["/api/create-room", "/api/register", "/api/invite", "/api/accept-invite", "/api/confirm", "/api/geo"]);
 function logSignupFailure(req: Request, pathname: string, res: Response): void {
   try {
@@ -1320,6 +1346,10 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       }
       if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      // Optional room name typed by the first person on the setup screen.
+      if ((await applySignupRoomName(roomId, body?.roomName)) === "blocked") {
+        return json({ error: "inappropriate_name" }, { status: 400 });
+      }
       if (!email) {
         // Instagram-handle sign-up: nothing is emailed (there's no address),
         // so there's nothing to confirm and nothing that could be used to

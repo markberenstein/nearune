@@ -20,13 +20,17 @@ export function buildHomePage(): string {
      WeatherKit, see roomSky()). One dark look in both phone themes. */
   :root { color-scheme: dark; --bg:#0B1230; --surface:#1A2252; --ink:#FFFFFF; --ink-soft:#C3C9E6; --line:rgba(255,255,255,0.22); --accent:#FFFFFF; --on-accent:#151A33; --friend:#FFD25A; --on-friend:#2A1B05; --danger:#FF9A88; --shadow:0 14px 34px rgba(0,0,0,0.35); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { margin:0; background:linear-gradient(180deg, #070C26 0%, #111A44 55%, #1B2656 100%) fixed, var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; min-height:100vh; padding:calc(36px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); display:flex; justify-content:center; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; min-height:100vh; padding:calc(36px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); display:flex; justify-content:center; }
   .wrap { max-width:460px; width:100%; }
   .brand { display:flex; align-items:center; justify-content:center; gap:12px; margin:0 0 26px; }
   .brand img { width:46px; height:46px; border-radius:11px; display:block; box-shadow:var(--shadow); }
   .brand h1 { font-weight:800; font-size:1.9rem; letter-spacing:-0.01em; margin:0; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  body::before { content:""; position:fixed; inset:0 0 50% 0; pointer-events:none; opacity:0.7; z-index:0;
+  /* Your own sky right now (WeatherKit for your city, see applyHomeSky()).
+     Until it loads, or if no room knows your city yet, the page is plain
+     dark blue with no stars, so nothing here is a made-up sky. */
+  #home-sky { position:fixed; inset:0; z-index:-1; pointer-events:none; transition:background 1.2s ease; }
+  body.home-stars::before { content:""; position:fixed; inset:0 0 50% 0; pointer-events:none; opacity:0.7; z-index:0;
     background-image: radial-gradient(1.2px 1.2px at 8% 12%, #fff 99%, transparent), radial-gradient(1px 1px at 24% 30%, #fff 99%, transparent), radial-gradient(1.4px 1.4px at 40% 8%, #fff 99%, transparent), radial-gradient(1px 1px at 58% 24%, #fff 99%, transparent), radial-gradient(1.2px 1.2px at 74% 10%, #fff 99%, transparent), radial-gradient(1px 1px at 90% 28%, #fff 99%, transparent), radial-gradient(1px 1px at 16% 56%, #fff 99%, transparent), radial-gradient(1.2px 1.2px at 84% 60%, #fff 99%, transparent), radial-gradient(1px 1px at 46% 70%, #fff 99%, transparent); }
   .wrap { position:relative; z-index:1; }
   .box { position:relative; aspect-ratio:1; border-radius:26px; background:rgba(255,255,255,0.08); border:1px solid var(--line); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:14px; text-align:center; color:var(--ink); text-decoration:none; font:inherit; cursor:pointer; overflow:hidden; }
@@ -71,6 +75,7 @@ export function buildHomePage(): string {
 </style>
 </head>
 <body>
+<div id="home-sky"></div>
 <div class="wrap">
   <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
   <div class="welcome" id="welcome" hidden>
@@ -159,9 +164,13 @@ export function buildHomePage(): string {
       .then(function (s) {
         briefs[id] = { s: s };
         var me = viewerOf(id), other = me === "mark" ? "nikita" : "mark";
-        if (!me || !s || s.closed || !s.people || !s.people[other]) return;
+        if (!me || !s || s.closed || !s.people) return;
         return fetch(id ? "/r/" + id + "/api/weather" : "/api/weather").then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (d) { if (d && d.weather && d.weather[other]) briefs[id].w = d.weather[other]; })
+          .then(function (d) {
+            if (!d || !d.weather) return;
+            if (s.people[other] && d.weather[other]) briefs[id].w = d.weather[other];
+            if (s.people[me] && d.weather[me]) briefs[id].mine = d.weather[me];
+          })
           .catch(function () {});
       })
       .catch(function () { briefs[id] = { gone: true }; });
@@ -692,7 +701,19 @@ export function buildHomePage(): string {
     });
     if (changed) saveRooms();
     render();
+    applyHomeSky();
   });
+  // The page background: your own sky right now, from the first room that
+  // knows your city.
+  function applyHomeSky() {
+    var mine = null;
+    for (var i = 0; i < rooms.length && !mine; i++) { var b = briefs[rooms[i].id]; if (b && b.mine) mine = b.mine; }
+    var sky = document.getElementById("home-sky");
+    if (!sky || !mine) return;
+    sky.style.background = roomSky(mine).replace(/170deg/g, "180deg");
+    var ph = mine.phase || (mine.isDay ? "day" : "night");
+    document.body.classList.toggle("home-stars", ph === "night" || ph === "dusk");
+  }
   // Partner times on the sky tiles tick over every 30 seconds.
   setInterval(function () {
     if (document.querySelector(".sheet-bg")) return;

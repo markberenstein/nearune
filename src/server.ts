@@ -38,6 +38,7 @@ import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
 import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { APP_STORE_BADGE_B64 } from "./badge";
+import { GOOGLE_PLAY_BADGE_SVG } from "./play-badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildChildSafetyPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
@@ -409,10 +410,10 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     if (req.method === "POST" && url.pathname === "/api/journey") {
       if (!rateLimit("funnel:" + clientIp(req, server), 400, HOUR)) return json({ ok: true });
       const fb2 = await readJson(req);
-      if (fb2 && (fb2.step === "lp_view" || fb2.step === "lp_tap")) {
+      if (fb2 && (fb2.step === "lp_view" || fb2.step === "lp_tap" || fb2.step === "lp_play")) {
         const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : fb2.page === "get (new)" ? "get (new)" : "";
         const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
-        if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : "tap");
+        if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : fb2.step === "lp_play" ? "play" : "tap");
         return json({ ok: true });
       }
       if (fb2 && fb2.step === "time" && isValidFunnelDevice(fb2.device)) {
@@ -2177,6 +2178,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return new Response(f.slice(start, end + 1), { status: 206, headers: { ...base, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
       }
       return new Response(f, { headers: { ...base, "content-length": String(size) } });
+    }
+
+    if (req.method === "GET" && url.pathname === "/google-play-badge.svg") {
+      return new Response(GOOGLE_PLAY_BADGE_SVG, {
+        headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
+      });
     }
 
     if (req.method === "GET" && url.pathname === "/app-store-badge.png") {

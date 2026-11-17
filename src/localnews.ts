@@ -147,11 +147,11 @@ async function pickQuirkiest(place: string, headlines: string[], strict = true):
         system:
           "You pick one news headline for two people who live far apart to smile over together. " +
           "Choose the headline that is funniest: absurd, deadpan, delightfully odd or a charming local mishap, with a wink of humor. Prefer humor over merely sweet; heartwarming is the tiebreaker. It must be about something that actually happened near " + place + ". " +
-          "It must be in " + place + " itself: if the headline or the outlet suggests a different city with the same name (for example Fremont, Washington versus Fremont, California) or a city far from " + place + ", do not choose it, and if you cannot tell where it happened, prefer a different headline. " +
+          "It must be in " + place + " itself: if the headline or the outlet suggests a different city with the same name (for example Fremont, Washington versus Fremont, California) or a city far from " + place + ", do not choose it. If no headline is clearly from " + place + ", reply NONE. " +
           "It must be lighthearted and safe: no death, injury, crime, politics, disasters, ads, listicles, sports results or weather alerts. " +
           (strict
-            ? "Reply with only the number of the best headline, or NONE if none is genuinely fun."
-            : "Reply with only the number of the lightest, most pleasant headline. Reply NONE only if every headline is grim, political or an ad."),
+            ? "Reply with only the number of the best headline, or NONE if none is genuinely fun or clearly from " + place + "."
+            : "Reply with only the number of the lightest, most pleasant headline. Reply NONE if every headline is grim, political or an ad, or if none is clearly from " + place + "."),
         messages: [{ role: "user", content: headlines.map((h, i) => (i + 1) + ". " + h).join("\n") }],
       }),
     });
@@ -259,6 +259,57 @@ function alreadySeen(headline: string, seen: string[]): boolean {
   return false;
 }
 
+// Place check for stories. US_STATES pairs each state's abbreviation with its
+// name, so a loose-tier search for "Fremont, CA" can require the state.
+const US_STATES: [string, string][] = "AL Alabama,AK Alaska,AZ Arizona,AR Arkansas,CA California,CO Colorado,CT Connecticut,DE Delaware,DC District of Columbia,FL Florida,GA Georgia,HI Hawaii,ID Idaho,IL Illinois,IN Indiana,IA Iowa,KS Kansas,KY Kentucky,LA Louisiana,ME Maine,MD Maryland,MA Massachusetts,MI Michigan,MN Minnesota,MS Mississippi,MO Missouri,MT Montana,NE Nebraska,NV Nevada,NH New Hampshire,NJ New Jersey,NM New Mexico,NY New York,NC North Carolina,ND North Dakota,OH Ohio,OK Oklahoma,OR Oregon,PA Pennsylvania,RI Rhode Island,SC South Carolina,SD South Dakota,TN Tennessee,TX Texas,UT Utah,VT Vermont,VA Virginia,WA Washington,WV West Virginia,WI Wisconsin,WY Wyoming"
+  .split(",")
+  .map((s) => {
+    const i = s.indexOf(" ");
+    return [s.slice(0, i), s.slice(i + 1)] as [string, string];
+  });
+
+// The city as a whole word. "St."/"Saint" match each other, words may be
+// joined by a space or hyphen, and a trailing period on a word is ignored.
+function cityPattern(city: string): RegExp {
+  const words = city
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) =>
+      /^(st|saint)\.?$/i.test(w)
+        ? "(?:st\\.?|saint)"
+        : w.replace(/\.$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    );
+  return new RegExp("(?<![\\p{L}\\p{N}])" + words.join("[\\s-]+") + "(?![\\p{L}\\p{N}])", "iu");
+}
+
+// The US state in a "City, State, Country" label, or null (Delhi, London, UK).
+function usStateOf(location: string): [string, string] | null {
+  const region = location.split(",").slice(1).join(" ");
+  const byAbbr = US_STATES.find(([abbr]) => region.split(/[\s,]+/).includes(abbr));
+  if (byAbbr) return byAbbr;
+  const lower = region.toLowerCase();
+  // Longest name first, so "West Virginia" is not read as "Virginia".
+  return [...US_STATES].sort((a, b) => b[1].length - a[1].length).find(([, name]) => lower.includes(name.toLowerCase())) || null;
+}
+
+function stateInText(st: [string, string], text: string): boolean {
+  const [abbr, name] = st;
+  return new RegExp("(?<!\\p{L})" + abbr + "(?!\\p{L})", "u").test(text) ||
+    new RegExp("(?<!\\p{L})" + name + "(?!\\p{L})", "iu").test(text);
+}
+
+// Whether a story is about the place. Every tier needs the city as a whole
+// word in the headline or outlet. Loose tiers also need the state (abbreviation
+// or name) when the place has one. Places without a US state use the city alone.
+export function namesPlace(story: { headline: string; source: string }, location: string, loose: boolean): boolean {
+  const city = location.split(",")[0].trim();
+  if (!city) return false;
+  const text = story.headline + " | " + (story.source || "");
+  if (!cityPattern(city).test(text)) return false;
+  const st = usStateOf(location);
+  return !loose || !st || stateInText(st, text);
+}
+
 // Excluded so a story merely mentioning "event" or "festival" in passing
 // (a shooting AT an event, a crash NEAR a festival) can't sneak through —
 // Google News search supports "-" exclusion the same way its web search does.
@@ -298,7 +349,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   const city = q.split(",")[0].trim() || q;
   // Keep the state/region with the city so "Fremont, CA" never matches Fremont, WA.
   const region = q.split(",").slice(1).join(" ").trim();
-  const cityRegion = region ? city + " " + region : city;
+  const cityRegion = region ? '"' + city + '" ' + region : '"' + city + '"';
   // Tiers, strictest first, so every place still gets a story most days:
   // today's theme, a second theme, then looser "quirky" searches that go back
   // a month and use just the city name (a long "City, State, Country" label
@@ -310,9 +361,11 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
     { query: cityRegion + " (viral OR quirky OR unusual OR funny OR bizarre OR heartwarming OR adorable) " + EXCLUDE_TERMS + " when:30d", strict: false },
     { query: cityRegion + " (festival OR tradition OR \"local favorite\" OR \"first-ever\" OR unveils OR celebrates) " + EXCLUDE_TERMS + " when:30d", strict: false },
   ];
-  for (const tier of tiers) {
+  let tierNo = 0;
+  for (let ti = 0; ti < tiers.length; ti++) {
+    const tier = tiers[ti];
     const cands = (await fetchCandidates(tier.query))
-      .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen));
+      .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, q, !tier.strict));
     // Pick the best story, open it, and if it turns out to be paywalled drop it and
     // pick again (up to 3 tries per tier) so a story nobody can read is never shown.
     let pool = cands;
@@ -331,10 +384,13 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
       value = { ...cand, access };
       break;
     }
-    if (value) break;
+    if (value) {
+      tierNo = ti + 1;
+      break;
+    }
   }
   console.log(
-    "[localnews] " + q + " (theme=" + theme.name + ") -> " +
+    "[localnews] " + q + " (theme=" + theme.name + ", tier=" + (value ? tierNo : 0) + ") -> " +
     (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" : "no on-theme story found")
   );
   if (value) {

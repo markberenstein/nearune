@@ -64,6 +64,13 @@ export type WeatherNow = {
   // view. Empty if the hourly call didn't come back cleanly (current
   // conditions still work either way).
   recentHours: HourlyPoint[];
+  // Where the sun is for that city right now, from WeatherKit's sunrise and
+  // sunset times: "dawn" / "dusk" within 45 minutes of either, otherwise
+  // "day" or "night" (WeatherKit's own daylight flag when there are no
+  // sun times). Drives the room's sky gradient in page.ts.
+  phase: "dawn" | "day" | "dusk" | "night";
+  sunrise: string | null;
+  sunset: string | null;
   // Who supplied the current reading. "apple" means WeatherKit, which Apple
   // requires to be credited on screen (see page.ts's weatherWidgetBlock()).
   source: "apple" | "open-meteo";
@@ -101,23 +108,23 @@ const ICON_STORM =
 // of condition colors.
 const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
   clear: {
-    day: { key: "clear-day", label: "Clear", sky: ["#5AA6E6", "#A9D8F7"], glow: "#FFD27A", icon: ICON_SUN },
+    day: { key: "clear-day", label: "Clear", sky: ["#2F7BDB", "#9ACCF3"], glow: "#FFD27A", icon: ICON_SUN },
     night: { key: "clear-night", label: "Clear", sky: ["#060B1E", "#141B3D"], glow: "#4C62A8", icon: ICON_MOON },
   },
   cloudy: {
-    day: { key: "cloudy-day", label: "Cloudy", sky: ["#8497AA", "#B6C4D1"], glow: "#8C97A3", icon: ICON_CLOUD },
+    day: { key: "cloudy-day", label: "Cloudy", sky: ["#5F7387", "#A7B6C4"], glow: "#8C97A3", icon: ICON_CLOUD },
     night: { key: "cloudy-night", label: "Cloudy", sky: ["#171D27", "#2B333F"], glow: "#49525F", icon: ICON_CLOUD },
   },
   fog: {
-    day: { key: "fog-day", label: "Fog", sky: ["#98A2AA", "#CBD2D6"], glow: "#AEB7BD", icon: ICON_FOG },
+    day: { key: "fog-day", label: "Fog", sky: ["#77828C", "#BFC7CC"], glow: "#AEB7BD", icon: ICON_FOG },
     night: { key: "fog-night", label: "Fog", sky: ["#1C2227", "#333B41"], glow: "#4B545B", icon: ICON_FOG },
   },
   rain: {
-    day: { key: "rain-day", label: "Rain", sky: ["#7C90A6", "#A9BCCD"], glow: "#3A5068", icon: ICON_RAIN },
+    day: { key: "rain-day", label: "Rain", sky: ["#56697F", "#93A7B9"], glow: "#3A5068", icon: ICON_RAIN },
     night: { key: "rain-night", label: "Rain", sky: ["#0A121C", "#1B2733"], glow: "#2C4056", icon: ICON_RAIN },
   },
   snow: {
-    day: { key: "snow-day", label: "Snow", sky: ["#AFD0E6", "#E6F1FA"], glow: "#9AC0DD", icon: ICON_SNOW },
+    day: { key: "snow-day", label: "Snow", sky: ["#7FA6CB", "#D6E6F3"], glow: "#9AC0DD", icon: ICON_SNOW },
     night: { key: "snow-night", label: "Snow", sky: ["#17222F", "#2B3D51"], glow: "#3C5570", icon: ICON_SNOW },
   },
   storm: {
@@ -139,6 +146,38 @@ function bucketForCode(code: number): keyof typeof THEMES {
 export function themeFor(code: number, isDay: boolean): WeatherTheme {
   const bucket = THEMES[bucketForCode(code)];
   return isDay ? bucket.day : bucket.night;
+}
+
+// Sunrise / sunset skies per weather bucket: [top, middle] plus the
+// horizon glow. Clear and partly cloudy get the full color; rain, fog and
+// storms stay muted, the way a grey sunset really looks.
+const TWILIGHT: Record<string, { dawn: [string, string, string]; dusk: [string, string, string] }> = {
+  clear: { dawn: ["#3E5BA8", "#C89BB5", "#F6B48A"], dusk: ["#16194A", "#6E4C8C", "#E8875E"] },
+  cloudy: { dawn: ["#56618A", "#B79AA8", "#E0AE8E"], dusk: ["#1F2240", "#5A4A72", "#C07A62"] },
+  fog: { dawn: ["#7B8296", "#C9B9B8", "#D9BFA8"], dusk: ["#2B2E3D", "#6A5F6E", "#A98A7A"] },
+  rain: { dawn: ["#45506A", "#8C8A9C", "#B39A8E"], dusk: ["#141A2A", "#3E3F57", "#7C6670"] },
+  snow: { dawn: ["#7E93C0", "#D8C6D4", "#F2CDBF"], dusk: ["#20284A", "#6B6A93", "#C7A0A6"] },
+  storm: { dawn: ["#2E2A44", "#5E5272", "#8E6E7A"], dusk: ["#0E0B1A", "#33284A", "#6A4A5E"] },
+};
+const TWILIGHT_WINDOW_MS = 45 * 60 * 1000;
+function sunPhase(isDay: boolean, sunrise: string | null, sunset: string | null): "dawn" | "day" | "dusk" | "night" {
+  const now = Date.now();
+  const rise = sunrise ? Date.parse(sunrise) : NaN;
+  const set = sunset ? Date.parse(sunset) : NaN;
+  if (!isNaN(rise) && Math.abs(now - rise) <= TWILIGHT_WINDOW_MS) return "dawn";
+  if (!isNaN(set) && Math.abs(now - set) <= TWILIGHT_WINDOW_MS) return "dusk";
+  return isDay ? "day" : "night";
+}
+function themeForPhase(bucketKey: string, phase: "dawn" | "day" | "dusk" | "night", base: WeatherTheme): WeatherTheme {
+  if (phase !== "dawn" && phase !== "dusk") return base;
+  const tw = (TWILIGHT[bucketKey] || TWILIGHT.cloudy)[phase];
+  const bucket = THEMES[bucketKey] || THEMES.cloudy;
+  return Object.assign({}, base, {
+    key: bucketKey + "-" + phase,
+    sky: [tw[0], tw[1]] as [string, string],
+    glow: tw[2],
+    icon: phase === "dawn" ? bucket.day.icon : bucket.night.icon,
+  });
 }
 
 function themeForBucket(bucketKey: string, isDay: boolean): WeatherTheme {
@@ -181,7 +220,7 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
       // WeatherKit (only actually called when configured — see
       // weatherKitCurrentWeather, which returns null instantly otherwise).
       const [res, weatherKit] = await Promise.all([
-        fetch(url),
+        fetch(url).catch(() => ({ ok: false } as any)),
         weatherKitConfigured() ? weatherKitCurrentWeather(point.lat, point.lon) : Promise.resolve(null),
       ]);
       // Temporary diagnostic — lets us confirm from the Railway logs
@@ -191,9 +230,14 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
         "[weather] " + q + " -> " +
         (weatherKit ? "WeatherKit ok (" + weatherKit.conditionCode + ")" : weatherKitConfigured() ? "WeatherKit configured but failed, using Open-Meteo" : "WeatherKit not configured, using Open-Meteo")
       );
-      if (res.ok) {
-        const data: any = await res.json();
-        const cur = data && data.current;
+      // If Open-Meteo is down but WeatherKit answered, still show Apple's
+      // reading (just without the 6-hour trend).
+      let data: any = null;
+      if (res.ok) { try { data = await res.json(); } catch {} }
+      const cur = (data && data.current) || (weatherKit
+        ? { weather_code: 3, is_day: weatherKit.isDay ? 1 : 0, temperature_2m: weatherKit.tempC, relative_humidity_2m: null, time: "" }
+        : null);
+      {
         if (cur && typeof cur.weather_code === "number") {
           const recentHours: HourlyPoint[] = [];
           const hourly = data && data.hourly;
@@ -238,9 +282,12 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
           // text ("Mostly Clear", "Scattered T-Storms", ...) instead of our
           // coarser bucket label — cloned rather than mutating the shared
           // THEMES object, which every other call also reads from.
-          const theme = weatherKit
-            ? Object.assign({}, themeForBucket(weatherKitBucket(weatherKit.conditionCode), isDay), { label: weatherKitLabel(weatherKit.conditionCode) })
+          const bucketKey = weatherKit ? weatherKitBucket(weatherKit.conditionCode) : String(bucketForCode(cur.weather_code));
+          const phase = weatherKit ? sunPhase(isDay, weatherKit.sunrise, weatherKit.sunset) : (isDay ? "day" : "night");
+          const baseTheme = weatherKit
+            ? Object.assign({}, themeForBucket(bucketKey, isDay), { label: weatherKitLabel(weatherKit.conditionCode) })
             : themeFor(cur.weather_code, isDay);
+          const theme = themeForPhase(bucketKey, phase, baseTheme);
           value = {
             location: point.name || q,
             temp,
@@ -252,6 +299,9 @@ export async function currentWeather(location: string): Promise<WeatherNow | nul
             humidity,
             theme,
             recentHours: recentHours.slice(-6),
+            phase,
+            sunrise: weatherKit ? weatherKit.sunrise : null,
+            sunset: weatherKit ? weatherKit.sunset : null,
             source: weatherKit ? "apple" : "open-meteo",
           };
         }

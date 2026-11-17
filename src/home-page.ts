@@ -15,28 +15,39 @@ export function buildHomePage(): string {
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-  :root { color-scheme: light; --bg:#FBF3EC; --surface:#FFFFFF; --ink:#2B211B; --ink-soft:#6F6054; --line:#E8D9C8; --accent:#A9532B; --on-accent:#FFF8F1; --friend:#F3E6F3; --danger:#B3361F; --shadow:0 6px 18px rgba(80,50,30,0.10); }
-  @media (prefers-color-scheme: dark) {
-    :root { color-scheme: dark; --bg:#14171F; --surface:#1D2130; --ink:#F2EFE9; --ink-soft:#A9AAB8; --line:#2B3040; --accent:#E8B75A; --on-accent:#1D2130; --friend:#2A2338; --danger:#FF8A75; --shadow:0 6px 18px rgba(0,0,0,0.35); }
-  }
+  /* Live-sky look (Nov 2026): a night sky behind everything, each room
+     tile painted with that partner's real sky right now (their weather from
+     WeatherKit, see roomSky()). One dark look in both phone themes. */
+  :root { color-scheme: dark; --bg:#0B1230; --surface:#1A2252; --ink:#FFFFFF; --ink-soft:#C3C9E6; --line:rgba(255,255,255,0.22); --accent:#FFFFFF; --on-accent:#151A33; --friend:#FFD25A; --on-friend:#2A1B05; --danger:#FF9A88; --shadow:0 14px 34px rgba(0,0,0,0.35); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; min-height:100vh; padding:calc(36px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); display:flex; justify-content:center; }
+  body { margin:0; background:linear-gradient(180deg, #070C26 0%, #111A44 55%, #1B2656 100%) fixed, var(--bg); color:var(--ink); font-family:'Manrope',sans-serif; min-height:100vh; padding:calc(36px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); display:flex; justify-content:center; }
   .wrap { max-width:460px; width:100%; }
   .brand { display:flex; align-items:center; justify-content:center; gap:12px; margin:0 0 26px; }
   .brand img { width:46px; height:46px; border-radius:11px; display:block; box-shadow:var(--shadow); }
   .brand h1 { font-weight:800; font-size:1.9rem; letter-spacing:-0.01em; margin:0; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .box { position:relative; aspect-ratio:1; border-radius:24px; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:14px; text-align:center; color:var(--ink); text-decoration:none; font:inherit; cursor:pointer; overflow:hidden; }
-  .box.empty { background:transparent; border:2px dashed var(--line); box-shadow:none; }
+  body::before { content:""; position:fixed; inset:0 0 50% 0; pointer-events:none; opacity:0.7; z-index:0;
+    background-image: radial-gradient(1.2px 1.2px at 8% 12%, #fff 99%, transparent), radial-gradient(1px 1px at 24% 30%, #fff 99%, transparent), radial-gradient(1.4px 1.4px at 40% 8%, #fff 99%, transparent), radial-gradient(1px 1px at 58% 24%, #fff 99%, transparent), radial-gradient(1.2px 1.2px at 74% 10%, #fff 99%, transparent), radial-gradient(1px 1px at 90% 28%, #fff 99%, transparent), radial-gradient(1px 1px at 16% 56%, #fff 99%, transparent), radial-gradient(1.2px 1.2px at 84% 60%, #fff 99%, transparent), radial-gradient(1px 1px at 46% 70%, #fff 99%, transparent); }
+  .wrap { position:relative; z-index:1; }
+  .box { position:relative; aspect-ratio:1; border-radius:26px; background:rgba(255,255,255,0.08); border:1px solid var(--line); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:14px; text-align:center; color:var(--ink); text-decoration:none; font:inherit; cursor:pointer; overflow:hidden; }
+  .box.empty { background:transparent; border:2px dashed rgba(255,255,255,0.28); box-shadow:none; }
   .box.empty .plus { font-size:2.6rem; font-weight:300; color:var(--ink-soft); line-height:1; }
   .box.empty.first { background:var(--accent); border:none; box-shadow:var(--shadow); }
   .box.empty.first .plus, .box.empty.first .big, .box.empty.first .tr { color:var(--on-accent); }
-  .box.friend { background:var(--friend); }
+  .box.friend { background:var(--friend); border:none; color:var(--on-friend); }
+  .box.friend .x { color:var(--on-friend); }
+  .box.sky { color:#FFFFFF; border:1px solid rgba(255,255,255,0.20); text-shadow:0 1px 8px rgba(0,0,0,0.30); justify-content:flex-end; align-items:flex-start; text-align:left; gap:2px; padding:16px; }
+  .box.sky .who { font-size:0.7rem; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .box.sky .time { font-size:1.75rem; font-weight:800; letter-spacing:-0.03em; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .box.sky .wx { font-size:0.78rem; font-weight:600; opacity:0.95; }
+  .box.sky .small { color:rgba(255,255,255,0.88); }
+  .box.sky .dot { position:absolute; top:16px; left:16px; }
+  .box.sky .x { color:#FFFFFF; }
   .box .big { font-weight:800; font-size:1.15rem; line-height:1.2; word-break:break-word; max-width:100%; }
   .box .small { font-size:0.78rem; color:var(--ink-soft); word-break:break-word; max-width:100%; }
   .box .glyph { font-size:2.1rem; line-height:1; }
   .box .dot { width:9px; height:9px; border-radius:50%; background:var(--ink-soft); opacity:0.5; }
-  .box .dot.live { background:#3E9B5F; opacity:1; }
+  .box .dot.live { background:#6BE39A; opacity:1; }
   .box.gone { opacity:0.55; }
   .x { position:absolute; top:8px; right:10px; background:none; border:none; font:inherit; font-size:1.25rem; line-height:1; color:var(--ink-soft); padding:6px; cursor:pointer; }
   .pulse { animation:pulse 1.6s ease-in-out infinite; }
@@ -49,7 +60,7 @@ export function buildHomePage(): string {
   .msg { text-align:center; font-size:0.85rem; color:var(--danger); margin:14px 0 0; min-height:1em; }
   .foot { text-align:center; margin-top:26px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
-  .sheet-bg { position:fixed; inset:0; background:rgba(20,15,10,0.45); display:flex; align-items:flex-end; justify-content:center; z-index:10; }
+  .sheet-bg { position:fixed; inset:0; background:rgba(4,8,24,0.60); display:flex; align-items:flex-end; justify-content:center; z-index:10; }
   .sheet { background:var(--surface); width:100%; max-width:460px; border-radius:24px 24px 0 0; padding:26px 22px calc(26px + env(safe-area-inset-bottom)); text-align:center; }
   .sheet h2 { margin:0 0 18px; font-size:1.25rem; font-weight:800; }
   .btn { display:block; width:100%; background:var(--accent); color:var(--on-accent); border:none; border-radius:999px; padding:14px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; margin:0 0 10px; }
@@ -145,7 +156,14 @@ export function buildHomePage(): string {
   var briefs = {}; // id -> {state} | {gone:true}
   function loadBrief(id) {
     return fetch(stateUrl(id)).then(function (r) { if (!r.ok) throw new Error("x"); return r.json(); })
-      .then(function (s) { briefs[id] = { s: s }; })
+      .then(function (s) {
+        briefs[id] = { s: s };
+        var me = viewerOf(id), other = me === "mark" ? "nikita" : "mark";
+        if (!me || !s || s.closed || !s.people || !s.people[other]) return;
+        return fetch(id ? "/r/" + id + "/api/weather" : "/api/weather").then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) { if (d && d.weather && d.weather[other]) briefs[id].w = d.weather[other]; })
+          .catch(function () {});
+      })
       .catch(function () { briefs[id] = { gone: true }; });
   }
 
@@ -154,8 +172,41 @@ export function buildHomePage(): string {
     return null;
   }
 
+  // The partner's sky right now, as a CSS background, from the room's own
+  // weather (WeatherKit: condition, day/night, sunrise/sunset glow).
+  function roomSky(w) {
+    if (!w || !w.theme || !w.theme.sky) return "";
+    var sky = w.theme.sky, glow = w.theme.glow || sky[1];
+    var phase = w.phase || (w.isDay ? "day" : "night");
+    if (phase === "dawn" || phase === "dusk") return "linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 60%, " + glow + " 100%)";
+    return "radial-gradient(ellipse 120% 70% at 50% -10%, " + glow + "55, transparent 65%), linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
+  }
+  function localTime(tz) {
+    try { return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: tz }); } catch (e) { return ""; }
+  }
   function roomBox(entry, isFriend) {
     var id = entry.id, b = briefs[id];
+    if (b && b.s && b.w && !b.s.closed) {
+      var sme = viewerOf(id), sother = sme === "mark" ? "nikita" : "mark";
+      var sp = sme && b.s.people && b.s.people[sother];
+      if (sp && sp.confirmed !== false) {
+        var tile = el("a", { class: "box sky", href: roomHref(id) });
+        tile.style.background = roomSky(b.w);
+        tile.appendChild(el("span", { class: "dot live" }));
+        tile.appendChild(el("div", { class: "who", text: String(sp.name || "").split(" ")[0] + (sp.location ? " · " + String(sp.location).split(",")[0] : "") }));
+        tile.appendChild(el("div", { class: "time", text: localTime(sp.travelTz || sp.tz) }));
+        var wtemp = b.w.unit === "F" ? b.w.tempF + "°F" : b.w.tempC + "°C";
+        tile.appendChild(el("div", { class: "wx", text: (b.w.theme.label || "") + " · " + wtemp }));
+        if (b.s.roomName) tile.appendChild(el("div", { class: "small", text: b.s.roomName }));
+        var sx = el("button", { class: "x", type: "button", text: "×", "aria-label": "Remove" });
+        sx.addEventListener("click", function (ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          if (window.confirm("Remove this room from this device?")) removeRoom(id);
+        });
+        tile.appendChild(sx);
+        return tile;
+      }
+    }
     var name = "", sub = id === "" ? "Original room" : id, dead = false, gone = false, live = false;
     if (b && b.gone) { name = "Unavailable"; gone = true; }
     else if (b && b.s) {
@@ -633,6 +684,11 @@ export function buildHomePage(): string {
     if (changed) saveRooms();
     render();
   });
+  // Partner times on the sky tiles tick over every 30 seconds.
+  setInterval(function () {
+    if (document.querySelector(".sheet-bg")) return;
+    if (document.querySelectorAll(".box.sky").length) render();
+  }, 30000);
 })();
 </script>
 </body>

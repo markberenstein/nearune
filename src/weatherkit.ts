@@ -58,7 +58,12 @@ function signedToken(): string | null {
   return token;
 }
 
-export type WeatherKitCurrent = { tempC: number; conditionCode: string; isDay: boolean; humidityPct: number | null } | null;
+export type WeatherKitCurrent = {
+  tempC: number; conditionCode: string; isDay: boolean; humidityPct: number | null;
+  // Today's sunrise and sunset for that spot (ISO times), from WeatherKit's
+  // daily forecast. Null in polar day/night or if the daily set is missing.
+  sunrise: string | null; sunset: string | null;
+} | null;
 
 // WeatherKit's conditionCode values (a fixed enum Apple documents), mapped
 // to our own theme buckets — see weather.ts's THEMES. Anything unlisted
@@ -155,7 +160,7 @@ export async function weatherKitCurrentWeather(lat: number, lon: number): Promis
     const token = signedToken();
     if (!token) return null;
     const url =
-      "https://weatherkit.apple.com/api/v1/weather/en/" + lat + "/" + lon + "?dataSets=currentWeather&timezone=UTC";
+      "https://weatherkit.apple.com/api/v1/weather/en/" + lat + "/" + lon + "?dataSets=currentWeather,forecastDaily&timezone=UTC";
     const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
     if (!res.ok) {
       // Temporary diagnostic — surfaces *why* a call failed (Apple's status
@@ -174,7 +179,17 @@ export async function weatherKitCurrentWeather(lat: number, lon: number): Promis
     }
     // WeatherKit reports humidity as a 0-1 fraction — shown as a percent.
     const humidityPct = typeof cur.humidity === "number" ? Math.round(cur.humidity * 100) : null;
-    return { tempC: cur.temperature, conditionCode: cur.conditionCode, isDay: cur.daylight !== false, humidityPct };
+    // The forecast day that contains "now" (days run local midnight to
+    // midnight); falls back to the first day.
+    let sunrise: string | null = null, sunset: string | null = null;
+    const days: any[] = (data.forecastDaily && Array.isArray(data.forecastDaily.days)) ? data.forecastDaily.days : [];
+    const nowMs = Date.now();
+    const today = days.find((d) => d && Date.parse(d.forecastStart) <= nowMs && nowMs < Date.parse(d.forecastEnd)) || days[0];
+    if (today) {
+      if (typeof today.sunrise === "string") sunrise = today.sunrise;
+      if (typeof today.sunset === "string") sunset = today.sunset;
+    }
+    return { tempC: cur.temperature, conditionCode: cur.conditionCode, isDay: cur.daylight !== false, humidityPct, sunrise, sunset };
   } catch (err: any) {
     console.log("[weatherkit] " + lat + "," + lon + " -> threw: " + (err && err.message ? err.message : String(err)));
     return null;

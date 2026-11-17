@@ -507,6 +507,105 @@ const RAW = String.raw`<!doctype html>
   .photo-zoom-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px; width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 20px; z-index: 2; cursor: pointer; }
   .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
   [hidden] { display: none !important; }
+
+  /* ===== Live-sky look (Nov 2026 redesign) =====
+     When the partner's weather is known (body.weather-active), the whole
+     room sits on their real sky (see applyWeatherSky) and everything else
+     becomes frosted glass with white text, like Raise Your Right Hand.
+     Done mostly through the color tokens, so every card follows. */
+  body.weather-active {
+    --bg: rgba(10,16,42,0.34);
+    --surface: rgba(10,16,42,0.40);
+    --surface-2: rgba(255,255,255,0.12);
+    --ink: #FFFFFF;
+    --ink-soft: rgba(255,255,255,0.84);
+    --line: rgba(255,255,255,0.22);
+    --accent: #FFFFFF;
+    --accent-ink: #AEB9FF;
+    --accent-2: #8E9BFF;
+    --on-accent: #151A33;
+    --good: #9BE7B4;
+    --shadow: rgba(0,0,0,0.22);
+    --weather-ink: #FFFFFF;
+    color-scheme: dark;
+    background: #0B1230;
+    color: #FFFFFF;
+    padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+  }
+  body.weather-active #app { text-shadow: 0 1px 6px rgba(0,0,0,0.22); }
+  body.weather-active input, body.weather-active textarea, body.weather-active select, body.weather-active button { text-shadow: none; }
+  body.weather-active input::placeholder, body.weather-active textarea::placeholder { color: rgba(255,255,255,0.72); }
+  body.weather-active .card,
+  body.weather-active .clocks,
+  body.weather-active .status-chip,
+  body.weather-active .streak-card,
+  body.weather-active .top-action-row,
+  body.weather-active .voice-card,
+  body.weather-active .puzzle-card,
+  body.weather-active .edit-form,
+  body.weather-active .weather-widget-detail {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: none;
+  }
+  body.weather-active .card { border-radius: 26px; }
+  body.weather-active .puzzle-card .translate-inline { color: var(--ink-soft); }
+  body.weather-active .comment-send, body.weather-active .puzzle-guess-btn { background: #FFFFFF; color: #151A33; }
+  body.weather-active .weather-widget-detail { max-width: none; border-radius: 20px; }
+  body.weather-active .trend-bar-fill { background: #FFFFFF; }
+
+  /* Hero: the partner's local time, big, over their sky. */
+  .sky-top { display: flex; align-items: center; gap: 8px; }
+  .sky-pill { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 19px; background: rgba(10,16,42,0.34); border: 1px solid rgba(255,255,255,0.24); color: #FFFFFF; font: inherit; font-size: 0.86rem; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .sky-pill svg { width: 16px; height: 16px; flex: none; }
+  .sky-pill.round { width: 38px; padding: 0; justify-content: center; }
+  .sky-pill.code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .sky-spacer { flex: 1 1 auto; }
+  .sky-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 16px 0 4px; }
+  .sky-hero-label { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+  .sky-hero-time { white-space: nowrap; font-size: clamp(3rem, 16.5vw, 5rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,0.28); }
+  .sky-hero-weather { margin-top: 8px; background: none; border: none; color: #FFFFFF; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; text-shadow: 0 1px 8px rgba(0,0,0,0.30); }
+  .sky-hero-weather svg { width: 20px; height: 20px; }
+  .sky-hero-you { font-size: 0.9rem; font-weight: 600; opacity: 0.95; }
+  .sky-hero-you .clock-time { font-size: inherit; font-weight: inherit; }
+  .sky-credit { font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.86); text-decoration: none; margin-top: 2px; }
+  .sky-room-name { text-align: center; font-size: 1rem; font-weight: 800; margin-top: 6px; }
+
+  /* Floating glass tab bar at the bottom of the screen. */
+  .tab-bar.floating {
+    position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    width: min(532px, calc(100% - 24px)); box-sizing: border-box;
+    height: 70px; padding: 6px; gap: 2px; border-radius: 35px; align-items: stretch;
+    background: rgba(10,16,42,0.58); border: 1px solid rgba(255,255,255,0.20);
+    -webkit-backdrop-filter: blur(18px) saturate(150%); backdrop-filter: blur(18px) saturate(150%);
+    box-shadow: 0 12px 34px rgba(0,0,0,0.30);
+  }
+  .tab-bar.floating .tab-btn { color: rgba(255,255,255,0.82); border-radius: 29px; justify-content: center; font-size: 0.66rem; padding: 4px 2px; }
+  .tab-bar.floating .tab-btn.active { background: rgba(255,255,255,0.20); color: #FFFFFF; }
+  .tab-bar.floating .tab-ico svg { width: 22px; height: 22px; display: block; }
+  .tab-bar.floating .tab-badge { top: 2px; right: calc(50% - 22px); background: rgba(255,255,255,0.22); color: #FFFFFF; }
+  .tab-bar.floating .tab-badge.alert { background: #E5372B; }
+
+  /* Stars on a dusk or night sky. */
+  body.sky-night #weather-sky::after, body.sky-dusk #weather-sky::after {
+    content: ""; position: absolute; inset: 0 0 45% 0; pointer-events: none; opacity: 0.8;
+    background-image:
+      radial-gradient(1.2px 1.2px at 8% 12%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 22% 30%, #fff 99%, transparent),
+      radial-gradient(1.4px 1.4px at 38% 8%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 54% 22%, #fff 99%, transparent),
+      radial-gradient(1.2px 1.2px at 70% 10%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 86% 26%, #fff 99%, transparent),
+      radial-gradient(1.3px 1.3px at 94% 6%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 14% 52%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 62% 46%, #fff 99%, transparent),
+      radial-gradient(1.2px 1.2px at 80% 58%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 32% 64%, #fff 99%, transparent);
+  }
+  body.sky-dusk #weather-sky::after { opacity: 0.55; }
 </style>
 <link rel="manifest" id="manifestLink" href="/manifest.json">
 <meta name="theme-color" content="#FAF6EE" media="(prefers-color-scheme: light)">
@@ -2913,8 +3012,11 @@ const RAW = String.raw`<!doctype html>
 
   function tabBar() {
     var unlocked = puzzleUnlockedCount();
+    var skyOn = skyMode();
+    var SHORT = { "Local Feel": "Local", "Never Have I Ever": "Never" };
     function mk(id, icon, label, badge) {
-      var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
+      var ico = skyOn && SKY_ICONS[id] ? h("span", { class: "tab-ico", html: SKY_ICONS[id] }) : h("span", { class: "tab-ico", text: icon });
+      var kids = [ico, h("span", { text: t(skyOn && SHORT[label] ? SHORT[label] : label) })];
       if (badge) kids.push(h("span", { class: "tab-badge" + (id === "never" || (id === "puzzle" && badge === "1") ? " alert" : ""), text: badge }));
       var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
       btn.addEventListener("click", function () { setActiveTab(id); });
@@ -2932,7 +3034,7 @@ const RAW = String.raw`<!doctype html>
     var nhOther = viewerKey ? otherKeyOf(viewerKey) : null;
     var nhYourTurn = !!(nh && viewerKey && nhOther && nh.voted && nh.voted[nhOther] && !nh.voted[viewerKey] && !nhieMyChoice[nh.round]);
     tabs.push(mk("never", "🥃", "Never Have I Ever", nhYourTurn ? "1" : ""));
-    return h("div", { class: "tab-bar" }, tabs);
+    return h("div", { class: "tab-bar" + (skyOn ? " floating" : ""), role: "tablist" }, tabs);
   }
 
   function puzzleFlashBanner() {
@@ -4447,6 +4549,8 @@ const RAW = String.raw`<!doctype html>
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
+    var skyOn = skyMode();
+    if (skyOn && !weatherExpanded) return null;
     // Which unit leads the big number: based on whoever is actually
     // holding THIS device (viewerKey — their real, device-pinned identity,
     // not previewKey/effectiveViewKey, so peeking at a partner's screen
@@ -4510,11 +4614,11 @@ const RAW = String.raw`<!doctype html>
       ),
       h("strong", { text: solo ? t("The sky over your head right now.") : tTemplate("The sky over {name}'s head right now.", { name: (shownTraveling ? "✈️ " : "") + shownName }) }),
     ]);
-    wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
+    if (!skyOn) wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     // Apple requires WeatherKit data to carry the Apple Weather mark and a
     // link to its data-source page. The Apple logo character only draws on
     // Apple devices, so everyone else sees the words "Apple Weather".
-    if (w.source === "apple") {
+    if (w.source === "apple" && !skyOn) {
       var appleUa = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
       wrap.appendChild(h("a", {
         class: "weather-attribution",
@@ -4589,7 +4693,71 @@ const RAW = String.raw`<!doctype html>
       h("div", { class: "puzzle-guess-note", style: "margin: 2px 0 0;", text: sub }),
     ]);
   }
+  // The live-sky layout applies once this viewer is signed up and the sky
+  // we show (the partner's, or your own while solo) has loaded.
+  var skyMoreOpen = false;
+  function skyMode() {
+    var me = viewerKey && state && state.people && state.people[viewerKey];
+    return !!(me && me.confirmed && currentSkyWeather());
+  }
+  var SKY_ICONS = {
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+    today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    local: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    puzzle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4a2 2 0 1 1 4 0h4v4a2 2 0 1 1 0 4v4H4z"/></svg>',
+    never: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1 9a4 4 0 0 1-8 0z"/><path d="M12 16v5M8 21h8"/></svg>'
+  };
+  function shortCity(loc) { return String(loc || "").split(",")[0].trim(); }
+  function skyHeader() {
+    var w = currentSkyWeather();
+    var solo = soloMode();
+    var key = worldKey();
+    var code = displayCode() || "q7mvx3ke";
+    var back = h("a", { class: "sky-pill", href: "/home", html: SKY_ICONS.back + "<span></span>" });
+    back.lastChild.textContent = t("Rooms");
+    var codePill = h("button", { class: "sky-pill code", type: "button", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
+    codePill.addEventListener("click", function () {
+      try { navigator.clipboard.writeText(code); codePill.textContent = t("Copied!"); setTimeout(function () { codePill.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
+    });
+    var more = h("button", { class: "sky-pill round", type: "button", "aria-label": t("More"), "aria-expanded": skyMoreOpen ? "true" : "false", html: SKY_ICONS.more });
+    more.addEventListener("click", function () { skyMoreOpen = !skyMoreOpen; renderApp(); });
+    var top = h("div", { class: "sky-top" }, [back, h("div", { class: "sky-spacer" }), codePill, more]);
+    var city = shortCity(effectiveClockLocation(key)) || (w && w.location) || "";
+    var label = solo
+      ? tTemplate("Your sky in {city}", { city: city })
+      : tTemplate("{name}'s sky in {city}", { name: (personIsTraveling(key) ? "✈️ " : "") + personName(key), city: city });
+    var viewerWeather = weatherByPerson[viewerKey];
+    var viewerIsUS = !!(viewerWeather && viewerWeather.unit === "F");
+    var temp = viewerIsUS ? (w.tempF + "°F · " + w.tempC + "°C") : (w.tempC + "°C");
+    var phaseWord = w.phase === "dawn" ? t("Sunrise") : w.phase === "dusk" ? t("Sunset") : "";
+    var wx = h("button", { class: "sky-hero-weather", type: "button", "aria-expanded": weatherExpanded ? "true" : "false", html: (w.theme && w.theme.icon) || "" });
+    wx.appendChild(document.createTextNode((phaseWord ? phaseWord + " · " : "") + t(w.theme.label) + " · " + temp));
+    wx.addEventListener("click", function () { weatherExpanded = !weatherExpanded; renderApp(); });
+    var hero = h("div", { class: "sky-hero" }, [
+      h("div", { class: "sky-hero-label", text: label }),
+      h("div", { class: "sky-hero-time clock-time", "data-key": key, text: clockFor(effectiveClockTz(key), isMilitaryKey(key)) }),
+      wx,
+    ]);
+    if (!solo) {
+      hero.appendChild(h("div", { class: "sky-hero-you" }, [
+        document.createTextNode(t("You") + " · " + shortCity(effectiveClockLocation(viewerKey)) + " "),
+        h("span", { class: "clock-time", "data-key": viewerKey, text: clockFor(effectiveClockTz(viewerKey), isMilitaryKey(viewerKey)) }),
+      ]));
+    } else {
+      hero.appendChild(h("div", { class: "sky-hero-you", text: t("Your partner's sky shows here once they join.") }));
+    }
+    if (w.source === "apple") {
+      var appleUa = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
+      hero.appendChild(h("a", { class: "sky-credit", href: "https://weatherkit.apple.com/legal-attribution.html", target: "_blank", rel: "noopener noreferrer", text: appleUa ? "\uF8FF Weather" : "Apple Weather" }));
+    }
+    var kids = [top];
+    if (state && state.roomName) kids.push(h("div", { class: "sky-room-name", text: state.roomName }));
+    kids.push(hero);
+    return h("div", {}, kids);
+  }
   function header() {
+    if (skyMode()) return skyHeader();
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
     var solo = soloMode();
     var markClock = solo && !isConfirmedKey("mark") ? pendingClockBlock("mark") : clockBlock("mark");
@@ -5570,6 +5738,7 @@ const RAW = String.raw`<!doctype html>
   function travelBlock() {
     var my = state.people && state.people[viewerKey];
     if (!my) return null;
+    if (skyMode() && !skyMoreOpen && !travelFormOpen && !travelActive(my, dateKey(new Date()))) return null;
     var today = dateKey(new Date());
     var wrap = h("div", {});
     if (travelFormOpen) {
@@ -5913,24 +6082,35 @@ const RAW = String.raw`<!doctype html>
     if (!w || !w.theme) {
       el.style.background = "";
       document.body.classList.remove("weather-active");
+      ["sky-dawn", "sky-day", "sky-dusk", "sky-night"].forEach(function (c) { document.body.classList.remove(c); });
       document.body.style.removeProperty("--weather-tint");
       return;
     }
     var sky = w.theme.sky;
     var glow = w.theme.glow;
-    // Full page height (not just a fading sliver near the top) and a
-    // stronger glow, so it reads clearly as "the sky changed" — see the
-    // comment on #weather-sky for why this used to be too subtle.
-    el.style.background =
-      "radial-gradient(ellipse 140% 70% at 50% -10%, " + glow + "59, transparent 65%), " +
-      "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
+    // Sunrise and sunset (from WeatherKit's sunrise/sunset times for that
+    // city) put the glow on the horizon at the bottom; day and night keep
+    // it as a soft light from above.
+    var phase = w.phase || (w.isDay ? "day" : "night");
+    if (phase === "dawn" || phase === "dusk") {
+      el.style.background =
+        "radial-gradient(ellipse 120% 45% at 50% 108%, " + glow + "CC, transparent 70%), " +
+        "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 62%, " + glow + " 100%)";
+    } else {
+      el.style.background =
+        "radial-gradient(ellipse 140% 70% at 50% -10%, " + glow + "59, transparent 65%), " +
+        "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
+    }
+    ["sky-dawn", "sky-day", "sky-dusk", "sky-night"].forEach(function (c) { document.body.classList.remove(c); });
+    document.body.classList.add("sky-" + phase);
     document.body.classList.add("weather-active");
     document.body.style.setProperty("--weather-tint", glow);
     // Night themes' sky gradient is near-black (see weather.ts's THEMES),
     // so text pinned to dark ink (the daytime default) goes nearly
     // invisible against it — switch to a pale ink instead whenever it's
     // nighttime at the OTHER person's location (the sky shown here).
-    document.body.style.setProperty("--weather-ink", inkForSky(sky));
+    // The live-sky look puts dark glass behind text, so text is always white.
+    document.body.style.setProperty("--weather-ink", "#FFFFFF");
   }
 
   async function poll() {

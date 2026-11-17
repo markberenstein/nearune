@@ -143,8 +143,8 @@ export function buildAnalyticsPage(rooms: AdminRoomSummary[], rep: FunnelReport 
       .join("")}</div>`;
 
   const landing = rep && rep.landing.length
-    ? rep.landing.map((x) => `<tr><td>/${esc(x.page)}</td><td>${esc(x.source)}</td><td>${x.views}</td><td>${x.taps}</td><td>${pct(x.taps, x.views)}</td></tr>`).join("")
-    : `<tr><td colspan="5" class="muted">No landing page visits yet in this period.</td></tr>`;
+    ? rep.landing.map((x) => `<tr><td>/${esc(x.page)}</td><td>${esc(x.source)}</td><td>${x.views}</td><td>${x.taps}</td><td>${x.playTaps || 0}</td><td>${pct(x.taps + (x.playTaps || 0), x.views)}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="muted">No landing page visits yet in this period.</td></tr>`;
 
   const recent = rep && rep.recent.length
     ? rep.recent
@@ -284,7 +284,7 @@ ${ADMIN_THEME_CSS}
   <div class="card">
     <h2>Where new users come from</h2>
     <p class="hint">Landing page visits and App Store taps by source. Tag ad links like ?utm_campaign=military_test.</p>
-    <div class="tblwrap"><table class="funnel"><thead><tr><th>Page</th><th>Source</th><th>Visits</th><th>App Store taps</th><th>Tap rate</th></tr></thead><tbody>${landing}</tbody></table></div>
+    <div class="tblwrap"><table class="funnel"><thead><tr><th>Page</th><th>Source</th><th>Visits</th><th>App Store taps</th><th>Google Play taps</th><th>Tap rate</th></tr></thead><tbody>${landing}</tbody></table></div>
   </div>
 
   <div class="card">

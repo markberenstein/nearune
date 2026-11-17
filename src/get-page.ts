@@ -69,6 +69,8 @@ function landingStatsScript(page: string): string {
     if (!seen) send("lp_view");
     var badges = document.querySelectorAll("a.badge");
     for (var i = 0; i < badges.length; i++) badges[i].addEventListener("click", function () { send("lp_tap"); });
+    var play = document.querySelectorAll("a.badge2");
+    for (var j = 0; j < play.length; j++) play[j].addEventListener("click", function () { send("lp_play"); });
   } catch (e) {}
 })();
 </script>`;
@@ -283,8 +285,9 @@ a{color:var(--rust-dark)}
 h1{margin:40px 0 12px;font-size:44px;line-height:1.05;font-weight:800;letter-spacing:-1.5px}
 h1 span{color:var(--rust)}
 .lede{margin:0 0 28px;font-size:19px;color:var(--muted);font-weight:500}
-.badge{display:inline-block;line-height:0}
-.badge img{height:56px;width:auto}
+.badges{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.badge,.badge2{display:inline-block;line-height:0}
+.badge img,.badge2 img{height:56px;width:auto}
 .note{margin:12px 0 0;font-size:14px;color:var(--muted);font-weight:500}
 .cards{margin:44px 0 0;display:grid;gap:14px}
 .card{background:var(--card);border-radius:20px;padding:20px 22px;box-shadow:0 10px 30px rgba(31,26,23,.08)}
@@ -304,15 +307,20 @@ footer{margin:40px 0 0;font-size:13px;color:var(--muted);text-align:center}
 <main class="wrap">
   <div class="top">
     <div class="logo">Nearune</div>
-    <div class="pill">Free on iPhone</div>
+    <div class="pill">Free on iPhone and Android</div>
   </div>
 
   <h1>${c.h1}</h1>
   <p class="lede">${c.lede}</p>
 
-  <a class="badge" href="${appStoreUrl}" aria-label="Download Nearune on the App Store">
-    <img src="/app-store-badge.png" alt="Download on the App Store">
-  </a>
+  <div class="badges">
+    <a class="badge" href="${appStoreUrl}" aria-label="Download Nearune on the App Store">
+      <img src="/app-store-badge.png" alt="Download on the App Store">
+    </a>
+    <a class="badge2" href="https://play.google.com/store/apps/details?id=com.nearune.app" aria-label="Get Nearune on Google Play">
+      <img src="/google-play-badge.svg" alt="Get it on Google Play">
+    </a>
+  </div>
   <p class="note">Closer only by invite. Download, then invite one person.</p>
 
   <section class="cards" aria-label="What's inside">
@@ -325,10 +333,15 @@ footer{margin:40px 0 0;font-size:13px;color:var(--muted);text-align:center}
 
   <section class="cta">
     <h2>${c.cta}</h2>
-    <p>Free on iPhone, iOS 15 or later.</p>
-    <a class="badge" href="${appStoreUrl}" aria-label="Download Nearune on the App Store">
-      <img src="/app-store-badge.png" alt="Download on the App Store">
-    </a>
+    <p>Free on iPhone (iOS 15 or later) and Android.</p>
+    <div class="badges">
+      <a class="badge" href="${appStoreUrl}" aria-label="Download Nearune on the App Store">
+        <img src="/app-store-badge.png" alt="Download on the App Store">
+      </a>
+      <a class="badge2" href="https://play.google.com/store/apps/details?id=com.nearune.app" aria-label="Get Nearune on Google Play">
+        <img src="/google-play-badge.svg" alt="Get it on Google Play">
+      </a>
+    </div>
   </section>
 
   <footer>&copy; 2026 Nearune &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/support">Support</a><span id="nrSupport" style="display:none"> &middot; <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></footer>

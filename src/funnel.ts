@@ -48,7 +48,7 @@ type Device = {
   secs?: Record<string, number>; // YYYY-MM-DD -> seconds on screen that day
 };
 // Landing pages (/get, /military): daily counts per page + source. No IDs.
-type LandingDay = Record<string, { v: number; t: number }>; // "page|source" -> views, App Store taps
+type LandingDay = Record<string, { v: number; t: number; p?: number }>; // "page|source" -> views, App Store taps, Google Play taps
 // Feature use per room, counted on the server for everyone (existing users
 // and the Original room included): roomId ("" = Original) -> day -> kind -> count.
 export const ROOM_USE_KINDS = ["answer", "voice_played", "voice_recorded", "puzzle_uploaded", "nhie_vote"] as const;
@@ -143,14 +143,14 @@ export async function recordTime(device: string, seconds: number, plat: "app" | 
   dirty = true;
 }
 
-export async function recordLanding(page: string, source: string, kind: "view" | "tap"): Promise<void> {
+export async function recordLanding(page: string, source: string, kind: "view" | "tap" | "play"): Promise<void> {
   const d = await load();
   const day = new Date().toISOString().slice(0, 10);
   if (!d.landing) d.landing = {};
   const L = (d.landing[day] = d.landing[day] || {});
   const key = page + "|" + source;
   const row = (L[key] = L[key] || { v: 0, t: 0 });
-  if (kind === "view") row.v++; else row.t++;
+  if (kind === "view") row.v++; else if (kind === "play") row.p = (row.p || 0) + 1; else row.t++;
   // Keep about six months of days.
   const days = Object.keys(d.landing).sort();
   while (days.length > 190) delete d.landing[days.shift()!];
@@ -175,7 +175,7 @@ export async function recordRoomUse(roomId: string, kind: RoomUseKind): Promise<
 
 export type FunnelReport = {
   days: number;
-  landing: { page: string; source: string; views: number; taps: number }[];
+  landing: { page: string; source: string; views: number; taps: number; playTaps: number }[];
   roomUse: Record<string, Partial<Record<RoomUseKind, number>> & { lastDay?: string }>; // per room, within the window
   daily: { day: string; newUsers: number; returning: number; app: number; web: number; minutes: number }[];
   avgMinutesPerDay: number; // average minutes on screen per person per active day (window)
@@ -302,16 +302,16 @@ export async function funnelReport(days: number, fresh = false): Promise<FunnelR
     })(),
     landing: (() => {
       const sinceDay = new Date(since).toISOString().slice(0, 10);
-      const agg: Record<string, { v: number; t: number }> = {};
+      const agg: Record<string, { v: number; t: number; p: number }> = {};
       for (const [day, rows] of Object.entries(d.landing || {})) {
         if (day < sinceDay) continue;
         for (const [k, r] of Object.entries(rows)) {
-          const a = (agg[k] = agg[k] || { v: 0, t: 0 });
-          a.v += r.v; a.t += r.t;
+          const a = (agg[k] = agg[k] || { v: 0, t: 0, p: 0 });
+          a.v += r.v; a.t += r.t; a.p += r.p || 0;
         }
       }
       return Object.entries(agg)
-        .map(([k, r]) => ({ page: k.split("|")[0] || "", source: k.split("|").slice(1).join("|") || "direct", views: r.v, taps: r.t }))
+        .map(([k, r]) => ({ page: k.split("|")[0] || "", source: k.split("|").slice(1).join("|") || "direct", views: r.v, taps: r.t, playTaps: r.p }))
         .sort((a, b) => b.views - a.views);
     })(),
     retention: { nextDay, nextDayOf, week, weekOf },

@@ -3353,16 +3353,18 @@ const RAW = String.raw`<!doctype html>
     // In a browser (not the app): lead with the app. Tapping the button also
     // copies this invite link, so it can be pasted on the app's first screen.
     if (!IN_NATIVE_APP && APP_STORE_URL && !/^__APP/.test(APP_STORE_URL)) {
-      var getApp = h("a", { class: "puzzle-upload-btn", href: APP_STORE_URL, style: "display:block;text-align:center;text-decoration:none;margin:4px 0 8px;", text: t("Get the Nearune app") });
-      getApp.addEventListener("click", function () {
+      var copyInvite = function () {
         try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
-      });
-      card.appendChild(getApp);
-      var getPlay = h("a", { class: "puzzle-upload-btn", href: "https://play.google.com/store/apps/details?id=com.nearune.app", style: "display:block;text-align:center;text-decoration:none;margin:0 0 8px;", text: t("Get it on Google Play") });
-      getPlay.addEventListener("click", function () {
-        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
-      });
-      card.appendChild(getPlay);
+      };
+      var getApp = h("a", { href: APP_STORE_URL, "aria-label": "Download Nearune on the App Store", style: "display:inline-block;line-height:0;" }, [
+        h("img", { src: "/app-store-badge.png", alt: "Download on the App Store", style: "height:48px;width:auto;" })
+      ]);
+      getApp.addEventListener("click", copyInvite);
+      var getPlay = h("a", { href: "https://play.google.com/store/apps/details?id=com.nearune.app", "aria-label": "Get Nearune on Google Play", style: "display:inline-block;line-height:0;" }, [
+        h("img", { src: "/google-play-badge.svg", alt: "Get it on Google Play", style: "height:48px;width:auto;" })
+      ]);
+      getPlay.addEventListener("click", copyInvite);
+      card.appendChild(h("div", { style: "display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;margin:4px 0 12px;" }, [getApp, getPlay]));
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your invite link is copied when you tap this. After installing, open Nearune and paste it into the box on the first screen. Or just continue below in your browser.") }));
     }
     var form = h("div", { class: "puzzle-setup" });

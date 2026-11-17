@@ -38,7 +38,7 @@ import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
 import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { APP_STORE_BADGE_B64 } from "./badge";
-import { GOOGLE_PLAY_BADGE_SVG } from "./play-badge";
+import { GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_BADGE_PNG_B64, GOOGLE_PLAY_URL } from "./play-badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildChildSafetyPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
@@ -1551,7 +1551,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
             ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
               "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
               "<td style=\"vertical-align:middle\"><div style=\"font-size:15px;margin-bottom:8px\">Get the Nearune app</div>" +
-              "<a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a></td>" +
+              "<a href=\"" + Bun.env.APP_STORE_URL + "\" style=\"display:inline-block;margin:0 8px 6px 0\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a>" +
+              "<a href=\"" + GOOGLE_PLAY_URL + "\" style=\"display:inline-block;margin:0 0 6px 0\"><img src=\"" + publicOrigin + "/google-play-badge.png\" width=\"182\" alt=\"Get it on Google Play\" style=\"display:block;border:0;height:auto\"></a></td>" +
               "</tr></table>"
             : "") +
           "<p style=\"font-size:14px\">Already have the app? Copy the link above, open Nearune and tap <b>Paste my invite</b>. Nearune only reads the link you just copied.</p>" +
@@ -2183,6 +2184,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     if (req.method === "GET" && url.pathname === "/google-play-badge.svg") {
       return new Response(GOOGLE_PLAY_BADGE_SVG, {
         headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/google-play-badge.png") {
+      return new Response(Buffer.from(GOOGLE_PLAY_BADGE_PNG_B64, "base64"), {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
       });
     }
 

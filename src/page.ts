@@ -3358,6 +3358,11 @@ const RAW = String.raw`<!doctype html>
         try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
       });
       card.appendChild(getApp);
+      var getPlay = h("a", { class: "puzzle-upload-btn", href: "https://play.google.com/store/apps/details?id=com.nearune.app", style: "display:block;text-align:center;text-decoration:none;margin:0 0 8px;", text: t("Get it on Google Play") });
+      getPlay.addEventListener("click", function () {
+        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
+      });
+      card.appendChild(getPlay);
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your invite link is copied when you tap this. After installing, open Nearune and paste it into the box on the first screen. Or just continue below in your browser.") }));
     }
     var form = h("div", { class: "puzzle-setup" });

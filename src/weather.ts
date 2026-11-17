@@ -108,19 +108,19 @@ const ICON_STORM =
 // of condition colors.
 const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
   clear: {
-    day: { key: "clear-day", label: "Clear", sky: ["#2F7BDB", "#9ACCF3"], glow: "#FFD27A", icon: ICON_SUN },
+    day: { key: "clear-day", label: "Clear", sky: ["#4B8DE0", "#9ACCF3"], glow: "#FFD27A", icon: ICON_SUN },
     night: { key: "clear-night", label: "Clear", sky: ["#060B1E", "#141B3D"], glow: "#4C62A8", icon: ICON_MOON },
   },
   cloudy: {
-    day: { key: "cloudy-day", label: "Cloudy", sky: ["#5F7387", "#A7B6C4"], glow: "#8C97A3", icon: ICON_CLOUD },
+    day: { key: "cloudy-day", label: "Cloudy", sky: ["#7C8D9D", "#A7B6C4"], glow: "#8C97A3", icon: ICON_CLOUD },
     night: { key: "cloudy-night", label: "Cloudy", sky: ["#171D27", "#2B333F"], glow: "#49525F", icon: ICON_CLOUD },
   },
   fog: {
-    day: { key: "fog-day", label: "Fog", sky: ["#77828C", "#BFC7CC"], glow: "#AEB7BD", icon: ICON_FOG },
+    day: { key: "fog-day", label: "Fog", sky: ["#828D96", "#BFC7CC"], glow: "#AEB7BD", icon: ICON_FOG },
     night: { key: "fog-night", label: "Fog", sky: ["#1C2227", "#333B41"], glow: "#4B545B", icon: ICON_FOG },
   },
   rain: {
-    day: { key: "rain-day", label: "Rain", sky: ["#56697F", "#93A7B9"], glow: "#3A5068", icon: ICON_RAIN },
+    day: { key: "rain-day", label: "Rain", sky: ["#7E8D9D", "#93A7B9"], glow: "#3A5068", icon: ICON_RAIN },
     night: { key: "rain-night", label: "Rain", sky: ["#0A121C", "#1B2733"], glow: "#2C4056", icon: ICON_RAIN },
   },
   snow: {

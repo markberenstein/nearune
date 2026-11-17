@@ -1,0 +1,2368 @@
+// Nearune — Bun HTTP server. Room-scoped: "/" is the original room (same
+// as the single-file version always was), "/r/<roomId>" is any other room,
+// and "/new" lets anyone spin up a fresh private room for themselves.
+
+import { roomExists } from "./storage";
+import { screenText } from "./moderation";
+import { startStatsSchedule, refreshStats } from "./stats";
+import { isPerson, type PersonKey } from "./types";
+import {
+  loadState,
+  saveState,
+  createRoom,
+  deleteRoom,
+  puzzleImageKey,
+  localPuzzlePath,
+  photoKey,
+  localPhotoPath,
+  useS3,
+  s3,
+  ensurePuzzleMigrated,
+  addToEmailIndex,
+  lookupEmailIndex,
+  removeFromEmailIndex,
+  listRoomIds,
+  loadRoomAliases,
+  addRoomAlias,
+  roomSlug,
+} from "./storage";
+import { resolveTranslation, translateEmailStrings } from "./translate";
+import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
+import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
+import { regionAbbr } from "./usstates";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
+import { currentWeather } from "./weather";
+import { topLocalStory } from "./localnews";
+import { newRound } from "./nhie";
+import { topSongs, previewClip } from "./music";
+import { topMovies } from "./movies";
+import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { APP_STORE_BADGE_B64 } from "./badge";
+import { GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_BADGE_PNG_B64, GOOGLE_PLAY_URL } from "./play-badge";
+import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildChildSafetyPage, buildManifestJson, buildServiceWorkerJs } from "./page";
+import { rateLimit, clientIp } from "./rate-limit";
+import { buildGetPage } from "./get-page";
+import { buildInvitePage } from "./invite-page";
+import { buildHomePage } from "./home-page";
+import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, friendRequeue, type FriendProfile } from "./friend";
+import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep } from "./funnel";
+import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
+const tzBackfillAt = new Map<string, number>();
+import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
+// Deferred invites: network address -> invite destination, held in memory
+// for 48 hours (see /api/deferred-invite). Cleared on restart; never written.
+const deferredInvites = new Map<string, { dest: string; at: number }>();
+setInterval(() => { const cut = Date.now() - 48 * 60 * 60 * 1000; for (const [k, v] of deferredInvites) if (v.at < cut) deferredInvites.delete(k); }, 10 * 60 * 1000);
+
+// Vulgar / NSFW screen for text people write. Returns a Response to send back
+// when the text is rejected (friend rooms), otherwise null. Every hit is
+// recorded for the admin page.
+async function moderate(roomId: string, who: string, kind: string, text: string, confirmed = false): Promise<Response | null> {
+  const word = screenText(text);
+  if (!word) return null;
+  // Rooms between people who know each other: warn first and let the writer
+  // edit. Nothing is saved or logged until they choose to post it anyway.
+  if (!confirmed && (await loadState(roomId)).origin !== "friend") {
+    return new Response(JSON.stringify({ error: "flagged_confirm" }), { status: 409, headers: { "content-type": "application/json" } });
+  }
+  let friend = false;
+  await saveState(roomId, (s) => {
+    friend = s.origin === "friend";
+    if (!s.flags) s.flags = [];
+    if (s.flags.length < 100) s.flags.push({ at: new Date().toISOString(), who, kind, word, excerpt: text.slice(0, 120) });
+  });
+  console.log("[moderation] room=" + roomId + " kind=" + kind + " who=" + who + " word=" + word + (friend ? " blocked" : " logged"));
+  return friend ? new Response(JSON.stringify({ error: "content_blocked" }), { status: 422, headers: { "content-type": "application/json" } }) : null;
+}
+
+
+// Counts rooms created today (Pacific time). Scanned once per day / process
+// start, then incremented as rooms are created.
+const regToday = { day: "", n: 0 };
+function pacificDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Slack heads-up at every 10th new room of the day (10, 20, ... 100). Needs a
+// Slack "Incoming Webhook" URL in SLACK_WEBHOOK_URL; without one this does
+// nothing. Fire-and-forget so it can never slow down or break room creation.
+function notifyRoomMilestone(n: number): void {
+  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  if (!hook || n < 10 || n % 10 !== 0) return;
+  const cap = parseInt(Bun.env.REGISTRATION_DAILY_CAP || "50", 10) || 50;
+  const text = ":tada: Nearune: " + n + " new rooms created today (" + pacificDay(new Date()) + ")." + (n >= cap ? " Daily cap of " + cap + " reached \u2014 new rooms are paused until tomorrow." : "");
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] milestone post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] milestone post error", e));
+}
+
+async function roomsCreatedToday(): Promise<number> {
+  const day = pacificDay(new Date());
+  if (regToday.day !== day) {
+    let n = 0;
+    try {
+      for (const id of await listRoomIds()) {
+        if (!id) continue;
+        const st = await loadState(id);
+        if (st.createdAt && pacificDay(new Date(st.createdAt)) === day) n++;
+      }
+    } catch {}
+    regToday.day = day;
+    regToday.n = n;
+  }
+  return regToday.n;
+}
+
+
+const FUNNEL_STEPS = new Set([
+  "reg_screen", "reg_city", "reg_name", "reg_email", "reg_clicked",
+  "reg_err_city", "reg_err_name", "reg_err_relationship", "reg_err_server",
+  "confirm_screen", "invite_screen",
+]);
+
+const PORT = Number(Bun.env.PORT) || 3000;
+
+function parseRoom(pathname: string): { roomId: string; restPath: string } {
+  const m = pathname.match(/^\/r\/([a-zA-Z0-9]{1,40})(\/.*)?$/);
+  if (m) return { roomId: m[1], restPath: m[2] && m[2].length > 0 ? m[2] : "/" };
+  return { roomId: "", restPath: pathname };
+}
+
+// Sign-up trouble log. Any failed (4xx/5xx) call on the create / register /
+// invite / accept steps is written as one line with the room, step, status,
+// the error code, and the coarse device + language — never names, emails,
+// locations or other request content. Lets us see where a visitor stalled.
+// Room name typed by the first person on the setup screen (the home screen's
+// first tile creates the room with no name). Only applies while nobody has
+// signed up and the room has no name. Sets the title, and when the name
+// makes a usable code, a friendlier room code ("oursky", or "oursky47" if
+// taken) — the original id keeps working.
+async function applySignupRoomName(roomId: string, raw: unknown): Promise<"ok" | "blocked" | "skip"> {
+  const nm = typeof raw === "string" ? raw.trim().slice(0, 40) : "";
+  if (!nm || !roomId) return "skip";
+  const cur = await loadState(roomId);
+  if (cur.roomName || Object.values(cur.people || {}).some((p: any) => p && p.confirmed)) return "skip";
+  const verdict = await moderateContent({ text: nm });
+  console.log("[room-name] \"" + nm + "\" screening=" + verdict + " (setup)");
+  if (verdict === "blocked") return "blocked";
+  const stem = roomSlug(nm);
+  let code = "";
+  if (stem.length >= 4 && stem !== roomId) {
+    for (let i = 0; i < 12 && !code; i++) {
+      const cand = i === 0 ? stem : stem + String(10 + Math.floor(Math.random() * 90));
+      if (await addRoomAlias(cand, roomId)) code = cand;
+    }
+  }
+  await saveState(roomId, (s) => { if (!s.roomName) s.roomName = nm; if (code && !s.roomCode) s.roomCode = code; });
+  return "ok";
+}
+
+const SIGNUP_PATHS = new Set(["/api/create-room", "/api/register", "/api/invite", "/api/accept-invite", "/api/confirm", "/api/geo"]);
+function logSignupFailure(req: Request, pathname: string, res: Response): void {
+  try {
+    const { roomId, restPath } = parseRoom(pathname);
+    const step = pathname === "/api/create-room" ? pathname : restPath;
+    if (!SIGNUP_PATHS.has(step) || res.status < 400) return;
+    const ua = req.headers.get("user-agent") || "";
+    const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "other";
+    const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+    const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
+    res.clone().json().then((b: any) => {
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " error=" + ((b && b.error) || "?") + " via=" + device + " " + kind + " " + lang);
+    }).catch(() => {
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " via=" + device + " " + kind + " " + lang);
+    });
+  } catch {}
+}
+
+await loadRoomAliases();
+
+Bun.serve({
+  port: PORT,
+  idleTimeout: 60,
+  async fetch(req, server) {
+    const res = await handleRequest(req, server);
+    const path = new URL(req.url).pathname;
+    logSignupFailure(req, path, res);
+    // Private pages (rooms, invites, the app's own screens) must never be
+    // listed by search engines, even if a link to one is shared publicly.
+    if (NOINDEX_PATH.test(path)) {
+      try { res.headers.set("X-Robots-Tag", "noindex, nofollow"); } catch (e) {}
+    }
+    // Public pages: tell search engines which address is the main one, so
+    // /get/, /get?utm=... and the Railway domain all count as nearune.ai/get.
+    const publicPath = path.length > 1 ? path.replace(/\/+$/, "") : path;
+    if (res.status === 200 && SITEMAP_PATHS.includes(publicPath)) {
+      try { res.headers.set("Link", '<' + CANONICAL_ORIGIN + publicPath + '>; rel="canonical"'); } catch (e) {}
+    }
+    // Google Analytics only on the download pages ads point to — never inside
+    // rooms or the app (which loads nearune.ai), so answers are never seen.
+    if (res.status === 200 && ANALYTICS_PATHS.includes(publicPath)) {
+      try {
+        const html = await res.text();
+        const headers = new Headers(res.headers);
+        return new Response(html.replace(/<head>/i, "<head>" + GOOGLE_TAG), { status: 200, headers });
+      } catch (e) {}
+    }
+    return res;
+  },
+});
+
+// Never Have I Ever pool for a room. Make-a-friend matches just met, so
+// they get the new-friends pool (no shared past, nothing romantic) even
+// if the room was made before the match code saved relationship on it.
+function roomRelationship(s: any): any {
+  if (s.origin === "friend") return "friend_match";
+  return s.relationship;
+}
+
+const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
+// Public pages listed for search engines.
+const CANONICAL_ORIGIN = "https://nearune.ai";
+const ANALYTICS_PATHS = ["/get", "/military"];
+const GOOGLE_TAG = '<script async src="https://www.googletagmanager.com/gtag/js?id=G-C8J788WTJR"></script>' +
+  "<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-C8J788WTJR');</script>";
+const SITEMAP_PATHS = ["/get","/military", "/support", "/privacy", "/terms", "/child-safety"];
+
+async function handleRequest(req: Request, server: any): Promise<Response> {
+    const url = new URL(req.url);
+    if (req.method === "GET" && url.pathname === "/robots.txt") {
+      const origin0 = ((req.headers.get("x-forwarded-proto") || "").split(",")[0].trim() || url.protocol.replace(":", "")) + "://" + url.host;
+      const body = [
+        "User-agent: *",
+        // Rooms, invites and app screens are kept out of search with a
+        // noindex header instead of a Disallow line: a crawler has to load a
+        // page to see its noindex, and link-preview bots (WhatsApp, iMessage)
+        // must still be able to read invite pages.
+        "Disallow: /api/",
+        "Disallow: /admin",
+        "Allow: /",
+        "",
+        "Sitemap: " + origin0 + "/sitemap.xml",
+        "",
+      ].join("\n");
+      return new Response(body, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    if (req.method === "GET" && url.pathname === "/sitemap.xml") {
+      const origin0 = ((req.headers.get("x-forwarded-proto") || "").split(",")[0].trim() || url.protocol.replace(":", "")) + "://" + url.host;
+      const body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+        SITEMAP_PATHS.map((p) => "  <url><loc>" + origin0 + p + "</loc></url>").join("\n") + "\n</urlset>\n";
+      return new Response(body, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    // Behind Railway's proxy req.url is plain http; links we hand out (invite,
+    // confirm, etc.) must use the public https origin instead.
+    const fwdProto = (req.headers.get("x-forwarded-proto") || "").split(",")[0].trim();
+    const publicOrigin = fwdProto ? fwdProto + "://" + url.host : url.origin;
+    const { roomId, restPath } = parseRoom(url.pathname);
+
+    // Short invite links: /j/<room>/<token> redirects to the full
+    // /r/<room>/?invite=<who>&token=<token> form the app already understands.
+    const shortInvite = url.pathname.match(/^\/j\/([a-zA-Z0-9]{1,40})\/([a-zA-Z0-9-]{6,64})\/?$/);
+    if (req.method === "GET" && shortInvite) {
+      const [, sRoom, sToken] = shortInvite;
+      if (!(await roomExists(sRoom))) return new Response(null, { status: 302, headers: { location: "/new?notfound=1" } });
+      const sState = await loadState(sRoom);
+      let sWho = "";
+      for (const k of ["mark", "nikita"] as const) {
+        if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken) sWho = k;
+      }
+      const dest = "/r/" + sRoom + "/" + (sWho ? "?invite=" + sWho + "&token=" + sToken : "");
+      // The inviter's first name is shown on the landing page and in the link
+      // preview ("Mark invited you to Nearune").
+      const sOther = sWho === "mark" ? "nikita" : "mark";
+      const sInviter = sState.people && sState.people[sOther] && sState.people[sOther]!.confirmed ? sState.people[sOther]!.name : "";
+      return new Response(buildInvitePage({ origin: publicOrigin, inviter: sInviter, roomId: sRoom, dest }), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    const roomPrefix = roomId ? "/r/" + roomId : "";
+    const HOUR = 60 * 60 * 1000;
+
+    // Deferred invite: someone opens an invite link in Safari, taps the App
+    // Store badge, installs Nearune, then opens the app — which starts on the
+    // home screen with no idea which room they were invited to. When the badge
+    // is tapped we hold the invite for 48 hours against the visitor's network
+    // address (memory only, never saved), and a brand-new install on the same
+    // network asks once for it and goes straight to the invite.
+    if (req.method === "POST" && url.pathname === "/api/deferred-invite") {
+      if (!rateLimit("deferred-set:" + clientIp(req, server), 20, HOUR)) return json({ ok: false }, { status: 429 });
+      const db = await readJson(req);
+      const dest = typeof db?.dest === "string" ? db.dest : "";
+      if (!/^\/r\/[a-z0-9]{1,40}\/\?invite=(mark|nikita)&token=[a-zA-Z0-9-]{6,64}$/.test(dest)) return json({ ok: false }, { status: 400 });
+      deferredInvites.set(clientIp(req, server), { dest, at: Date.now() });
+      return json({ ok: true });
+    }
+    if (req.method === "GET" && url.pathname === "/api/deferred-invite") {
+      const ip = clientIp(req, server);
+      const hit = deferredInvites.get(ip);
+      if (hit && Date.now() - hit.at < 48 * HOUR) { deferredInvites.delete(ip); return json({ dest: hit.dest }); }
+      return json({ dest: null });
+    }
+
+    // Typing a room code on the Join screen: if that room is waiting for a
+    // partner, go straight to its invite (name, city, language); otherwise
+    // just open the room. A made-up code goes back with "not found".
+    if (req.method === "GET" && url.pathname === "/api/join-code") {
+      if (!rateLimit("join-code:" + clientIp(req, server), 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const jc = (url.searchParams.get("code") || "").trim().toLowerCase();
+      if (!/^[a-z0-9]{4,40}$/.test(jc) || !(await roomExists(jc))) return json({ dest: "/new?notfound=1" });
+      const jst = await loadState(jc);
+      if (jst.origin !== "friend") {
+        for (const k of ["mark", "nikita"] as const) {
+          const inv = jst.pendingInvite && jst.pendingInvite[k];
+          if (inv && inv.token && !(jst.people && jst.people[k] && jst.people[k]!.confirmed)) return json({ dest: "/j/" + jc + "/" + inv.token });
+        }
+      }
+      return json({ dest: "/r/" + jc + "/" });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/music-preview") {
+      if (!rateLimit("music-preview:" + clientIp(req, server), 120, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "", { id: url.searchParams.get("i") || "", cc: url.searchParams.get("c") || "" });
+      if (!clip) return json({ error: "no_preview" }, { status: 404 });
+      return new Response(clip.bytes, { headers: { "content-type": clip.type, "cache-control": "public, max-age=3600", "accept-ranges": "none" } });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/create-room") {
+      // Caps how many fresh rooms one visitor can spin up — a real couple
+      // needs one, ever.
+      if (!rateLimit("create-room:" + clientIp(req, server), 5, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      // Guardrails: a manual kill switch (REGISTRATIONS_PAUSED=1) and a daily
+      // cap (REGISTRATION_DAILY_CAP, default 50 new rooms per Pacific day).
+      // Only creating a NEW room is gated — existing rooms and invited
+      // partners joining them are never blocked.
+      const waitMsg = "Nearune is getting a lot of love today, and we're working to catch up before welcoming more new rooms. Please check back tomorrow — we'd love to have you!";
+      if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
+        return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
+      }
+      const cap = parseInt(Bun.env.REGISTRATION_DAILY_CAP || "50", 10) || 50;
+      if ((await roomsCreatedToday()) >= cap) {
+        return json({ error: "registrations_paused", message: waitMsg }, { status: 503 });
+      }
+      // Optional room name from the first partner ("Our Sky" -> oursky, or oursky47 if taken).
+      // Screened like any other user text; only an explicit block refuses it.
+      const reqBody = await readJson(req);
+      const rawName = typeof reqBody?.name === "string" ? reqBody.name.trim().slice(0, 40) : "";
+      let useName = "";
+      if (rawName) {
+        const verdict = await moderateContent({ text: rawName });
+        console.log("[room-name] \"" + rawName + "\" screening=" + verdict);
+        if (verdict === "blocked") return json({ error: "inappropriate_name" }, { status: 400 });
+        // Only an explicit BLOCK refuses the name. If screening is down or gave
+        // no clear answer, still honor the name — it only becomes this room's
+        // own link, so a failed check shouldn't silently swap in random words.
+        useName = rawName;
+      }
+      // Coarse hint about who made the room (no IP stored): device, app vs web,
+      // browser language. Lets the admin tell a real visitor from a test.
+      const ua = req.headers.get("user-agent") || "";
+      const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "other";
+      const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+      const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
+      const via = device + " " + kind + " " + lang;
+      const id = await createRoom(useName, via, useName || undefined);
+      regToday.n++;
+      console.log("[room-created] " + id + " via " + via);
+      notifyRoomMilestone(regToday.n);
+      return json({ roomId: id });
+    }
+
+    // "My rooms": the opening page. The room list lives on the device itself.
+    if (req.method === "GET" && url.pathname === "/home") {
+      return new Response(buildHomePage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    // Make a friend: anonymous matching with the next person who taps it.
+    if (req.method === "POST" && url.pathname === "/api/friend/join") {
+      if (!rateLimit("friend-join:" + clientIp(req, server), 8, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const fb = await readJson(req);
+      const device = typeof fb?.device === "string" ? fb.device : "";
+      if (!/^[A-Za-z0-9]{16,64}$/.test(device)) return json({ error: "invalid" }, { status: 400 });
+      if (fb?.adult !== true) return json({ error: "adult_required" }, { status: 400 });
+      if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
+        return json({ error: "registrations_paused" }, { status: 503 });
+      }
+      // Name, city and language (from the Make a friend sheet) so the room is
+      // created with this person already signed up.
+      let profile: FriendProfile | undefined;
+      const fp = fb?.profile;
+      if (fp && typeof fp === "object") {
+        const pName = typeof fp.name === "string" ? fp.name.trim().slice(0, 80) : "";
+        const pLoc = typeof fp.location === "string" ? fp.location.trim().slice(0, 80) : "";
+        const pLang = typeof fp.language === "string" ? fp.language.trim().slice(0, 40) : "";
+        const pTz = typeof fp.tz === "string" ? fp.tz.trim().slice(0, 60) : "";
+        if (!pName || !pLoc || !pLang) return json({ error: "profile_required" }, { status: 400 });
+        if (await isBlockedLocation(pLoc)) return json({ error: "region_unavailable" }, { status: 403 });
+        if (!(await isCityLevelLocation(pLoc))) return json({ error: "city_required" }, { status: 400 });
+        const resolvedTz = await resolveTimezoneFromLocation(pLoc);
+        profile = { name: pName, location: pLoc, language: pLang, ...((resolvedTz || pTz) ? { tz: resolvedTz || pTz } : {}) };
+      }
+      const fr = await friendJoin(device, profile);
+      console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId + " signedUp=" + fr.signedUp : "") + (profile ? " withProfile" : ""));
+      return json(fr);
+    }
+    // In-app tip completed (Apple handles the payment; this is only a log line
+    // so tips show up in the server logs). No personal data.
+    // Anonymous new-user funnel step (random device ID + step name only).
+    if (req.method === "POST" && url.pathname === "/api/journey") {
+      if (!rateLimit("funnel:" + clientIp(req, server), 400, HOUR)) return json({ ok: true });
+      const fb2 = await readJson(req);
+      if (fb2 && (fb2.step === "lp_view" || fb2.step === "lp_tap" || fb2.step === "lp_play")) {
+        const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : fb2.page === "get (new)" ? "get (new)" : "";
+        const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
+        if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : fb2.step === "lp_play" ? "play" : "tap");
+        return json({ ok: true });
+      }
+      if (fb2 && fb2.step === "time" && isValidFunnelDevice(fb2.device)) {
+        const secs = Math.max(0, Math.min(600, Math.round(Number(fb2.seconds) || 0)));
+        if (secs > 0) await recordTime(fb2.device, secs, fb2.platform === "app" ? "app" : "web");
+        return json({ ok: true });
+      }
+      if (fb2 && isValidFunnelDevice(fb2.device) && isFunnelStep(fb2.step)) {
+        await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
+      }
+      return json({ ok: true });
+    }
+    if (req.method === "POST" && url.pathname === "/api/tip-log") {
+      if (!rateLimit("tip-log:" + clientIp(req, server), 20, HOUR)) return json({ ok: true });
+      const tb = await readJson(req);
+      const product = typeof tb?.product === "string" ? tb.product.replace(/[^a-z0-9._]/gi, "").slice(0, 60) : "";
+      console.log("[tip] in-app tip " + (product || "unknown"));
+      return json({ ok: true });
+    }
+    if (req.method === "GET" && url.pathname === "/api/friend/status") {
+      if (!rateLimit("friend-status:" + clientIp(req, server), 900, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const t = url.searchParams.get("ticket") || "";
+      if (!/^[a-f0-9]{24}$/.test(t)) return json({ status: "none" });
+      return json(await friendStatus(t));
+    }
+    if (req.method === "POST" && url.pathname === "/api/friend/push") {
+      if (!rateLimit("friend-push:" + clientIp(req, server), 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const pb = await readJson(req);
+      const t = typeof pb?.ticket === "string" ? pb.ticket : "";
+      const sub = pb?.subscription;
+      const kind = sub && (sub.kind === "fcm" ? "fcm" : sub.kind === "apns" ? "apns" : "");
+      if (!/^[a-f0-9]{24}$/.test(t) || !kind || typeof sub.token !== "string" || !sub.token || sub.token.length > 4096) return json({ error: "invalid" }, { status: 400 });
+      const okp = await friendSetPush(t, { kind: kind as "apns" | "fcm", token: sub.token });
+      return json({ ok: okp });
+    }
+    if (req.method === "POST" && url.pathname === "/api/friend/cancel") {
+      const cb = await readJson(req);
+      const t = typeof cb?.ticket === "string" ? cb.ticket : "";
+      if (/^[a-f0-9]{24}$/.test(t)) await friendCancel(t);
+      return json({ ok: true });
+    }
+
+    if (req.method === "GET" && url.pathname === "/new") {
+      return new Response(buildNewRoomPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/recover") {
+      return new Response(buildRecoverPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/recover-access") {
+      const body = await readJson(req);
+      const email = typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      // Always answer the same way whether or not the email matches, so this
+      // can't be used to probe which addresses are registered.
+      const generic = { ok: true };
+      if (!isValidEmail(email)) return json(generic);
+      if (!rateLimit("recover-ip:" + clientIp(req, server), 10, HOUR) || !rateLimit("recover-email:" + email.toLowerCase(), 3, HOUR)) {
+        return json(generic);
+      }
+      const entries = await lookupEmailIndex(await hashEmail(email));
+      if (entries.length > 0) {
+        const links = entries
+          .map((e) => publicOrigin + (e.roomId ? "/r/" + e.roomId : ""))
+          .filter((v, i, arr) => arr.indexOf(v) === i);
+        const list = links.map((l) => "<li><a href=\"" + l + "\">" + l + "</a></li>").join("");
+        await sendEmail(
+          email,
+          "Your Nearune link",
+          "<p>Here's your Nearune room:</p><ul>" + list + "</ul>" +
+            "<p style=\"color:#888;font-size:0.9em\">Didn't request this? You can ignore this email.</p>"
+        );
+      }
+      return json(generic);
+    }
+
+    if (req.method === "GET" && (url.pathname === "/military" || url.pathname === "/military/")) {
+      return new Response(buildGetPage("military"), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
+    }
+    if (req.method === "GET" && (url.pathname === "/get" || url.pathname === "/get/")) {
+      return new Response(buildGetPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/privacy") {
+      return new Response(buildPrivacyPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/support") {
+      return new Response(buildSupportPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/terms") {
+      return new Response(buildTermsPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/child-safety") {
+      return new Response(buildChildSafetyPage(), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && restPath === "/manifest.json") {
+      return new Response(buildManifestJson(roomId), {
+        headers: { "content-type": "application/manifest+json", "cache-control": "no-store" },
+      });
+    }
+
+    if (req.method === "GET" && restPath === "/sw.js") {
+      return new Response(buildServiceWorkerJs(), {
+        headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store", "service-worker-allowed": "/" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/push-public-key") {
+      return json({ key: vapidPublicKey, configured: pushConfigured });
+    }
+
+    if (req.method === "POST" && restPath === "/api/push-subscribe") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      const subscription = body && body.subscription;
+      if (!isPerson(who) || !subscription) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (subscription.kind === "apns" || subscription.kind === "fcm") {
+        if (typeof subscription.token !== "string" || !subscription.token) {
+          return json({ error: "invalid" }, { status: 400 });
+        }
+        const nativeKind = subscription.kind === "fcm" ? "fcm" : "apns";
+        await saveState(roomId, (s) => {
+          if (!s.pushSubs) s.pushSubs = {};
+          s.pushSubs[who] = { kind: nativeKind, token: subscription.token };
+        });
+        return json({ ok: true });
+      }
+      if (
+        typeof subscription.endpoint !== "string" ||
+        !subscription.keys ||
+        typeof subscription.keys.p256dh !== "string" ||
+        typeof subscription.keys.auth !== "string"
+      ) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      await saveState(roomId, (s) => {
+        if (!s.pushSubs) s.pushSubs = {};
+        s.pushSubs[who] = { endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } };
+      });
+      return json({ ok: true });
+    }
+
+    if (req.method === "POST" && restPath === "/api/push-unsubscribe") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      await saveState(roomId, (s) => {
+        if (s.pushSubs) delete s.pushSubs[who];
+      });
+      return json({ ok: true });
+    }
+
+    // Support tool: change one person's saved location. Needs the x-cron-secret header.
+    // Body: { name, from, to } updates every person with that name and current location.
+    if (req.method === "POST" && url.pathname === "/api/admin/set-location") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const nm = String(b?.name || "").trim(), from = String(b?.from || "").trim().toLowerCase(), to = String(b?.to || "").trim().slice(0, 80);
+      if (!nm || !from || !to) return json({ error: "invalid" }, { status: 400 });
+      const tz = await resolveTimezoneFromLocation(to);
+      let changed = 0;
+      for (const id of await listRoomIds()) {
+        const st = await loadState(id);
+        for (const k of ["mark", "nikita"] as PersonKey[]) {
+          const p: any = st.people?.[k];
+          if (p && String(p.name || "").trim() === nm && String(p.location || "").trim().toLowerCase() === from) {
+            await saveState(id, (s) => { const q: any = s.people?.[k]; if (q) { q.location = to; if (tz) q.tz = tz; } });
+            changed++;
+          }
+        }
+      }
+      return json({ ok: true, changed, tz });
+    }
+
+    // Admin tool: skip a room's current Never Have I Ever prompt and start a
+    // fresh round from the room's own set (friend matches get the next
+    // getting-to-know-you prompt). Same secret as the reminder.
+    if (req.method === "POST" && url.pathname === "/api/admin/nhie-refresh") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const nb = await readJson(req);
+      const rid = typeof nb?.roomId === "string" ? nb.roomId : "";
+      if (!rid || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
+      const st = await saveState(rid, (s) => { s.nhie = newRound(s.nhie, roomRelationship(s)); });
+      console.log("[admin] nhie refreshed room=" + rid + " round=" + (st.nhie && st.nhie.round));
+      return json({ ok: true, round: st.nhie && st.nhie.round, text: st.nhie && st.nhie.text });
+    }
+
+    // Admin tool: end a room (without erasing it). Same secret as the reminder.
+    if (req.method === "POST" && url.pathname === "/api/admin/close") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const cb = await readJson(req);
+      const rid = typeof cb?.roomId === "string" ? cb.roomId : "";
+      if (!rid) return json({ error: "invalid" }, { status: 400 });
+      await saveState(rid, (s) => { s.closed = true; s.closedBy = "admin"; });
+      console.log("[admin] closed room " + rid);
+      return json({ ok: true });
+    }
+
+    // Admin tool: change a room's display name (title only; the room code and
+    // links stay the same). Blank removes the name.
+    if (req.method === "POST" && url.pathname === "/api/admin/rename") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const rb = await readJson(req);
+      const rid = typeof rb?.roomId === "string" ? rb.roomId : "";
+      const nm = typeof rb?.name === "string" ? rb.name.trim().slice(0, 40) : "";
+      const newCode = typeof rb?.code === "string" ? rb.code.trim().toLowerCase() : "";
+      if (!rid || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
+      if (newCode) {
+        // A friendlier room code. The old code keeps working as the stored id.
+        if (!/^[a-z0-9]{4,40}$/.test(newCode)) return json({ error: "bad_code" }, { status: 400 });
+        if (!(await addRoomAlias(newCode, rid))) return json({ error: "code_taken" }, { status: 409 });
+      }
+      await saveState(rid, (s) => { if (nm) s.roomName = nm; else delete s.roomName; if (newCode) s.roomCode = newCode; });
+      console.log("[admin] renamed room " + rid + " -> " + (nm || "(no name)") + (newCode ? " code " + newCode : ""));
+      return json({ ok: true });
+    }
+
+    // Admin tool: correct a person's registered city (and timezone). Body:
+    // { roomId, who, location }.
+    if (req.method === "POST" && url.pathname === "/api/admin/location") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const lb = await readJson(req);
+      const rid = typeof lb?.roomId === "string" ? lb.roomId : "";
+      const who = lb?.who;
+      let loc = typeof lb?.location === "string" ? lb.location.trim().slice(0, 80) : "";
+      if (!rid || !isPerson(who) || !loc || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
+      if (!(await isCityLevelLocation(loc))) return json({ error: "city_required" }, { status: 400 });
+      loc = await canonicalPlaceLabel(loc);
+      const tzNew = await resolveTimezoneFromLocation(loc);
+      let found = false;
+      await saveState(rid, (s) => {
+        const p = s.people && s.people[who];
+        if (!p) return;
+        found = true;
+        p.location = loc;
+        if (tzNew) p.tz = tzNew;
+      });
+      if (!found) return json({ error: "no_person" }, { status: 404 });
+      console.log("[admin] location room=" + rid + " who=" + who + " -> " + loc + (tzNew ? " (" + tzNew + ")" : ""));
+      return json({ ok: true, location: loc });
+    }
+
+    // Admin tool: email a "finish registering" reminder to someone whose email
+    // sign-up is still unconfirmed. Called by the nearune-admin service with
+    // the x-cron-secret header. Body: { roomId, who }.
+    // Admin Home "Refresh now": run the stats snapshot on demand.
+    if (req.method === "POST" && url.pathname === "/api/admin/stats-refresh") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      // Waits up to 45s (under the 60s idle limit); a slower run keeps going and saves when done.
+      const run = refreshStats().then(() => "done", (e: any) => "error: " + String(e?.message || e).slice(0, 120));
+      const res = await Promise.race([run, new Promise<string>((r) => setTimeout(() => r("pending"), 45_000))]);
+      if (res === "done") return json({ ok: true });
+      if (res === "pending") return json({ ok: true, pending: true });
+      return json({ error: res }, { status: 500 });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/admin/remind") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const rid = typeof b?.roomId === "string" ? b.roomId : "";
+      const w = b?.who;
+      if (!rid || !isPerson(w)) return json({ error: "invalid" }, { status: 400 });
+      const st = await loadState(rid);
+      const pp = st.people && st.people[w];
+      const pc = st.pendingConfirm && st.pendingConfirm[w];
+      if (!pp || pp.emailVerified !== false || !pc) return json({ error: "nothing_pending" }, { status: 409 });
+      if (!pc.email) return json({ error: "no_email_kept" }, { status: 409 });
+      if ((pc.reminders || 0) >= 3) return json({ error: "max_reminders" }, { status: 429 });
+      if (pc.remindedAt && Date.now() - new Date(pc.remindedAt).getTime() < 20 * 60 * 60 * 1000) return json({ error: "too_soon" }, { status: 429 });
+      const fwd = req.headers.get("x-forwarded-proto");
+      const origin = fwd ? fwd + "://" + url.host : url.origin;
+      const rPrefix = rid ? "/r/" + rid : "";
+      const link = origin + rPrefix + "/api/confirm?who=" + w + "&token=" + pc.token;
+      const [subjR, hiR, bodyR, linkR, footR] = await translateEmailStrings(
+        [
+          "Finish setting up Nearune",
+          "Hi",
+          "You started setting up Nearune but haven't confirmed your email yet. It takes one tap:",
+          "Confirm your email",
+          "Not you, or already done? You can ignore this email.",
+        ],
+        pp.language
+      );
+      const rr = await sendEmail(
+        pc.email,
+        subjR,
+        "<p>" + hiR + " " + pp.name + ",</p><p>" + bodyR + "</p>" +
+          "<p><a href=\"" + link + "\">" + linkR + "</a></p>" +
+          "<p style=\"color:#888;font-size:0.9em\">" + footR + "</p>"
+      );
+      console.log("[remind] room=" + (rid || "main") + " who=" + w + " ok=" + rr.ok + (rr.ok ? "" : " error=" + rr.error));
+      if (rr.ok) {
+        await saveState(rid, (s) => {
+          const e = s.pendingConfirm && s.pendingConfirm[w];
+          if (e) { e.reminders = (e.reminders || 0) + 1; e.remindedAt = new Date().toISOString(); }
+        });
+      }
+      return json({ ok: rr.ok, error: rr.error });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/cron/daily-push") {
+      const secret = Bun.env.CRON_SECRET;
+      const given = req.headers.get("x-cron-secret") || "";
+      if (!secret || given !== secret) return json({ error: "forbidden" }, { status: 403 });
+      if (!anyPushConfigured) return json({ ok: true, sent: 0, note: "push not configured" });
+      const ids = await listRoomIds();
+      let sent = 0;
+      for (const id of ids) {
+        try {
+          const state = await loadState(id);
+          if (!state.pushSubs) continue;
+          const today = todayKeyFor(state);
+          // "Still waiting" nudges for someone whose invited partner hasn't
+          // joined: at most three, spaced out, each worded differently and
+          // led by what they get, not by what's missing. Only people who
+          // turned notifications on can receive them. Not for Make a friend
+          // rooms (the match arrives on its own).
+          const DAY_MS = 24 * 60 * 60 * 1000;
+          const NUDGES = [
+            { after: 1 * DAY_MS, title: "Your Nearune is almost ready", body: "One text from you and your first question opens for the two of you. Your invite link is waiting." },
+            { after: 3 * DAY_MS, title: "Your partner is one tap away", body: "Send your link again. It takes ten seconds, and a daily question is better with two." },
+            { after: 7 * DAY_MS, title: "Your room is still open", body: "Whenever you're ready, share your invite and start the daily question together." },
+          ];
+          for (const other of ["mark", "nikita"] as PersonKey[]) {
+            if (state.origin === "friend") break;
+            const inv = state.pendingInvite && state.pendingInvite[other];
+            const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
+            const inviterSub = state.pushSubs[inviterKey];
+            if (!inv || !inviterSub) continue;
+            if (state.people && state.people[other] && state.people[other]!.confirmed) continue;
+            const sentCount = state.inviteNudgeCount || (state.inviteNudgeAt ? 1 : 0);
+            if (sentCount >= NUDGES.length) continue;
+            const lastNudge = state.inviteNudgeAt ? Date.parse(state.inviteNudgeAt) : 0;
+            const startAt = Date.parse(inv.at);
+            if (!startAt || Date.now() - startAt < NUDGES[sentCount].after || Date.now() - lastNudge < 2 * DAY_MS) continue;
+            const nres = await sendPush(inviterSub, {
+              title: NUDGES[sentCount].title,
+              body: NUDGES[sentCount].body,
+              tag: "invite-nudge",
+            });
+            if (nres.ok) {
+              sent++;
+              console.log("[invite-nudge] room=" + (id || "main") + " #" + (sentCount + 1));
+              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = sentCount + 1; });
+            }
+            if (nres.gone) {
+              await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+            }
+          }
+          if (state.pushLastMorningKey === today) continue;
+          const count = unansweredCount(state, today);
+          if (count > 0) {
+            for (const who of ["mark", "nikita"] as PersonKey[]) {
+              const a = state.answers[today];
+              const answered = !!(a && a[who] && a[who]!.text);
+              const sub = state.pushSubs[who];
+              if (answered || !sub) continue;
+              const res = await sendPush(sub, {
+                title: "Today's question is up",
+                body: "Your Nearune question for today is ready.",
+                badge: count,
+                tag: "morning",
+              });
+              if (res.ok) sent++;
+              if (res.gone) {
+                await saveState(id, (s) => {
+                  if (s.pushSubs) delete s.pushSubs[who];
+                });
+              }
+            }
+          }
+          await saveState(id, (s) => {
+            s.pushLastMorningKey = today;
+          });
+        } catch (err) {
+          console.error("[cron-push] room " + id + " failed", err);
+        }
+      }
+      return json({ ok: true, sent });
+    }
+
+    // Room visibility and the delete-room action now live in the separate
+    // nearune-admin service (admin-app/), which reads this same storage —
+    // see that service for the /admin equivalent.
+
+    if (req.method === "GET" && restPath === "/") {
+      // A made-up or mistyped room code must not open a blank sign-up screen
+      // (registering there would quietly create a stray room).
+      if (roomId && !(await roomExists(roomId))) return new Response(null, { status: 302, headers: { location: "/new?notfound=1" } });
+      // Date-tag icon URLs so iOS treats each day's icon as a fresh resource.
+      const html = buildPageHtml(roomId, todayKeyPT());
+      return new Response(html, {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, must-revalidate" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/qa") {
+      // Summary only (counts and check names, no room data).
+      return json(lastQaReport() || (await runQa()));
+    }
+
+    if (req.method === "GET" && restPath === "/api/state") {
+      let state = await loadState(roomId);
+      // Existing users: a room with anyone located in (or traveling to) a blocked country is closed.
+      try {
+        for (const k of ["mark", "nikita"] as PersonKey[]) {
+          const p: any = state.people?.[k];
+          if (!p) continue;
+          if (await isBlockedLocation(String(p.location || "")) || (p.travelLocation && await isBlockedLocation(String(p.travelLocation)))) {
+            return json({ error: "region_unavailable" }, { status: 403 });
+          }
+        }
+      } catch {}
+      // Self-heal: a person with a saved location but no timezone (the
+      // lookup failed at registration) would otherwise show UTC clocks.
+      // Resolve it now, at most once every 10 minutes per room.
+      try {
+        const missing = (["mark", "nikita"] as PersonKey[]).filter((k) => state.people?.[k]?.location && !state.people?.[k]?.tz);
+        const last = tzBackfillAt.get(roomId) || 0;
+        if (missing.length && Date.now() - last > 10 * 60 * 1000) {
+          tzBackfillAt.set(roomId, Date.now());
+          const found: Partial<Record<PersonKey, string>> = {};
+          for (const k of missing) {
+            const tz = await resolveTimezoneFromLocation(state.people![k]!.location!);
+            if (tz) found[k] = tz;
+          }
+          if (Object.keys(found).length) {
+            state = await saveState(roomId, (s) => {
+              for (const k of Object.keys(found) as PersonKey[]) {
+                if (s.people?.[k] && !s.people[k]!.tz) s.people[k]!.tz = found[k];
+              }
+            });
+          }
+        }
+      } catch (e) { /* never block state on a timezone lookup */ }
+      try { roomQaOnce(roomId, state); } catch (e) {}
+      const out: any = forClient(state);
+      // Never Have I Ever: a viewer may always see their OWN answer (never the partner's).
+      try {
+        const who = url.searchParams.get("who");
+        const mine = (who === "mark" || who === "nikita") ? (state as any).nhie?.votes?.[who] : undefined;
+        if (mine && out.nhie) out.nhie.mine = mine;
+      } catch {}
+      return json(out);
+    }
+
+    if (req.method === "POST" && restPath === "/api/delete-room") {
+      // No password auth exists in this app — possessing the room link is
+      // already the same trust level everything else here relies on, so
+      // that's the bar for this too. Removes both people from the recovery
+      // index (if they registered one), then wipes the room's data entirely.
+      const cur = await loadState(roomId);
+      if (cur.people) {
+        for (const key of Object.keys(cur.people) as PersonKey[]) {
+          const hash = cur.people[key]?.emailHash;
+          if (hash) removeFromEmailIndex(hash, roomId, key).catch(() => {});
+        }
+      }
+      await deleteRoom(roomId);
+      return json({ ok: true });
+    }
+
+    if (req.method === "POST" && restPath === "/api/answer") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { date, who, text } = body || {};
+      if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !isPerson(who) || typeof text !== "string" || !text.trim()) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      const trimmed = text.trim().slice(0, 4000);
+      const blockedA = await moderate(roomId, who, "answer", trimmed, body.confirmFlagged === true);
+      if (blockedA) return blockedA;
+      const state = await saveState(roomId, (s) => {
+        if (!s.answers[date]) s.answers[date] = {};
+        const prev = s.answers[date][who];
+        s.answers[date][who] = {
+          text: trimmed,
+          at: prev?.at || new Date().toISOString(),
+          ...(prev ? { editedAt: new Date().toISOString() } : {}),
+        };
+      });
+      // Nudge whoever hasn't answered yet, and sync badges to the shared
+      // "how many of you two still need to answer today" count (0/1/2) —
+      // both people's badges always show the same number. Fire-and-forget —
+      // a slow or failed push shouldn't delay the answer response, and a
+      // dead subscription is cleaned up in the background rather than
+      // blocking this request.
+      if (anyPushConfigured && state.pushSubs) {
+        const count = unansweredCount(state, date);
+        if (count > 0) {
+          const answererName = state.people?.[who]?.name || "Your partner";
+          for (const other of (["mark", "nikita"] as PersonKey[]).filter((k) => k !== who)) {
+            const a = state.answers[date];
+            const answered = !!(a && a[other] && a[other]!.text);
+            const sub = state.pushSubs[other];
+            if (answered || !sub) continue;
+            sendPush(sub, {
+              title: answererName + " answered today's question",
+              body: "Your turn on Nearune.",
+              badge: count,
+              tag: "partner-answered",
+            })
+              .then((res) => {
+                if (res.gone) {
+                  saveState(roomId, (s) => {
+                    if (s.pushSubs) delete s.pushSubs[other];
+                  }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          }
+          // The answerer's own native badge still shows the pre-answer
+          // count — a real alert push only went to whoever hasn't answered
+          // yet, and native has no client-side badge API to update it
+          // locally otherwise. Won't show as a visible banner in practice:
+          // this fires immediately after the person's own answer request
+          // completes, so their app is in the foreground, and the app has
+          // no `presentationOptions` configured, which means iOS presents
+          // nothing for a foregrounded notification — only the badge
+          // updates. Only needed for APNs; web subs sync locally via the
+          // poll loop.
+          const ownSub = state.pushSubs[who];
+          if (ownSub && ownSub.kind === "apns") {
+            sendPush(ownSub, {
+              title: "Answer saved",
+              body: "Waiting on your partner to answer today's question.",
+              badge: count,
+              tag: "own-answered",
+            })
+              .then((res) => {
+                if (res.gone) {
+                  saveState(roomId, (s) => {
+                    if (s.pushSubs) delete s.pushSubs[who];
+                  }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          }
+        } else {
+          // Both answers are in — clear both native badges to 0. Native has
+          // no client-side badge API (no navigator.setAppBadge in
+          // Capacitor's WebView), so a push is the only way to update it —
+          // but a silent (content-available) push is low-priority and iOS
+          // can throttle its delivery for an unpredictable amount of time,
+          // which isn't good enough for "the badge should clear now". A
+          // real alert push is delivered immediately, so this sends one to
+          // both people, collapsed under one tag so re-editing an answer
+          // afterward doesn't pile up repeat notifications. Web
+          // subscriptions already sync their own badge client-side, so this
+          // only targets APNs.
+          for (const person of ["mark", "nikita"] as PersonKey[]) {
+            const sub = state.pushSubs[person];
+            if (!sub || (sub.kind !== "apns" && sub.kind !== "fcm")) continue;
+            const solo = isSoloRoom(state);
+            sendPush(sub, {
+              title: solo ? "Answer saved" : "You're all caught up",
+              body: solo ? "Invite someone on Nearune to see their answer too." : "Both answers are in for today on Nearune.",
+              badge: 0,
+              tag: "day-complete",
+            })
+              .then((res) => {
+                if (res.gone) {
+                  saveState(roomId, (s) => {
+                    if (s.pushSubs) delete s.pushSubs[person];
+                  }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      }
+      recordRoomUse(roomId, "answer");
+      return json(forClient(state));
+    }
+
+    // "Make a friend" rooms are joined only through the invite token the
+    // matcher issued: no open registration, and no inviting third parties.
+    if (req.method === "POST" && (restPath === "/api/register" || restPath === "/api/invite")) {
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "not_allowed" }, { status: 403 });
+    }
+
+    // Leave a "Make a friend" room, optionally reporting the other person.
+    // Ends the room for both, and those two devices are never paired again.
+    if (req.method === "POST" && restPath === "/api/leave-friend") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (cur.origin !== "friend") return json({ error: "not_friend_room" }, { status: 400 });
+      const wasClosed = !!cur.closed;
+      const report = body.report === true;
+      const about: PersonKey = who === "mark" ? "nikita" : "mark";
+      const note = typeof body.note === "string" ? body.note.slice(0, 300) : undefined;
+      const state = await saveState(roomId, (s) => {
+        s.closed = true;
+        if (!s.closedBy) s.closedBy = who;
+        if (report) s.reported = true;
+        if (!s.reports) s.reports = [];
+        s.reports.push({ by: who, about, kind: report ? "friend-report" : "friend-leave", note, at: new Date().toISOString() });
+        if (s.reports.length > 50) s.reports = s.reports.slice(-50);
+      });
+      await friendBlock(cur.friendDevices && cur.friendDevices.mark, cur.friendDevices && cur.friendDevices.nikita);
+      // A plain leave (not a report) before the other person answered anything:
+      // they did nothing wrong, so they go back to the front of the line.
+      if (!report && !wasClosed) {
+        const stayerAnswered = Object.values((cur as any).answers || {}).some((day: any) => day && day[about]);
+        const sp: any = cur.people && (cur.people as any)[about];
+        if (!stayerAnswered) {
+          await friendRequeue(cur.friendDevices && (cur.friendDevices as any)[about],
+            sp && sp.name && sp.location ? { name: sp.name, location: sp.location, language: sp.language || "English", ...(sp.tz ? { tz: sp.tz } : {}) } : undefined);
+          console.log("[friend-leave] room=" + roomId + " other person requeued at front");
+        }
+      }
+      console.log("[friend-leave] room=" + roomId + " by=" + who + " report=" + report + (note ? " note=" + JSON.stringify(note) : ""));
+      return json(forClient(state));
+    }
+
+    // Report objectionable content from your partner (photo, answer,
+    // comment, puzzle, …). Logged for the app owner — visible in the server
+    // logs and stored (not sent to browsers) on the room.
+    if (req.method === "POST" && restPath === "/api/report") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, kind, note } = body || {};
+      if (!isPerson(who) || typeof kind !== "string") return json({ error: "invalid" }, { status: 400 });
+      const about: PersonKey = who === "mark" ? "nikita" : "mark";
+      const cleanKind = kind.slice(0, 30);
+      const cleanNote = typeof note === "string" ? note.slice(0, 300) : undefined;
+      const state = await saveState(roomId, (s) => {
+        if (!s.reports) s.reports = [];
+        s.reports.push({ by: who, about, kind: cleanKind, note: cleanNote, at: new Date().toISOString() });
+        if (s.reports.length > 50) s.reports = s.reports.slice(-50);
+      });
+      console.log("[report] room=" + (roomId || "legacy") + " by=" + who + " about=" + about + " kind=" + cleanKind + (cleanNote ? " note=" + JSON.stringify(cleanNote) : ""));
+      return json(forClient(state));
+    }
+
+    // Block / unblock your partner: hides their photo, answers, comments and
+    // puzzle from YOUR screen only.
+    if (req.method === "POST" && restPath === "/api/block") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, blocked } = body || {};
+      if (!isPerson(who) || typeof blocked !== "boolean") return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.blocked) s.blocked = {};
+        if (blocked) s.blocked[who] = true; else delete s.blocked[who];
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/comment") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { date, who, text } = body || {};
+      if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !isPerson(who) || typeof text !== "string" || !text.trim()) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      const trimmed = text.trim().slice(0, 300);
+      const blockedC = await moderate(roomId, who, "comment", trimmed, body.confirmFlagged === true);
+      if (blockedC) return blockedC;
+      const state = await saveState(roomId, (s) => {
+        if (!s.comments[date]) s.comments[date] = [];
+        s.comments[date].push({ who, text: trimmed, at: new Date().toISOString() });
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "GET" && restPath === "/api/geo") {
+      const location = url.searchParams.get("location") || "";
+      const info = await resolveLocationInfo(location);
+      const city = await isCityLevelLocation(location);
+      let places = await searchPlaces(location);
+      let suggested = false;
+      // Nothing matches as typed (a misspelling): offer the places for the corrected spelling.
+      if (!places.length && info.corrected) { places = await searchPlaces(info.corrected); suggested = places.length > 0; }
+      return json({ ...info, city, places, suggested });
+    }
+
+    // "Use my current location": turns browser coordinates into a "City, Region, Country" label.
+    // Coordinates are rounded to about a kilometre and not stored.
+    if (req.method === "GET" && restPath === "/api/reverse-geo") {
+      if (!rateLimit("reverse-geo:" + clientIp(req, server), 20, 60 * 60 * 1000)) return json({ error: "rate_limited" }, { status: 429 });
+      const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+      if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return json({ error: "invalid" }, { status: 400 });
+      try {
+        const r = await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=" + lat.toFixed(2) + "&lon=" + lon.toFixed(2), { headers: { "user-agent": "Nearune/1.0 (https://nearune.ai)" } });
+        if (!r.ok) return json({ label: null });
+        const d: any = await r.json();
+        const a = d?.address || {};
+        const city = a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || "";
+        if (!city) return json({ label: null });
+        {
+          const cc3 = String(a.country_code || "").toUpperCase();
+          const st = a.state || a.region || "";
+          return json({ label: [city, regionAbbr(cc3, st), cc3 || a.country || ""].filter(Boolean).join(", ") });
+        }
+      } catch { return json({ label: null }); }
+    }
+
+    // SANDBOX EXPERIMENT: current weather at the OTHER person's registered
+    // location — used to tint the app's background. `who` is the person
+    // asking, so this looks up their partner.
+    // Both people's weather in one call — the client picks which one to
+    // display (its own partner's, by default, or the previewed person's
+    // partner's, in the click-to-preview experiment), which needs no extra
+    // round trip this way since currentWeather() is cached per location
+    // server-side regardless.
+    if (req.method === "GET" && restPath === "/api/weather") {
+      const state = await loadState(roomId);
+      const today = todayKeyFor(state);
+      const [markWeather, nikitaWeather] = await Promise.all([
+        currentWeather(effectiveLocation(state.people?.mark, today)),
+        currentWeather(effectiveLocation(state.people?.nikita, today)),
+      ]);
+      return json({ weather: { mark: markWeather, nikita: nikitaWeather } });
+    }
+
+    // SANDBOX EXPERIMENT: top local news story (biased toward genuinely
+    // odd/funny real stories — see localnews.ts) at each person's
+    // effective location (their travel city if they've set one and it
+    // hasn't expired, their registered home city otherwise — see
+    // util.ts's effectiveLocation) — same shape and caching approach as
+    // /api/weather above, no API key required.
+    if (req.method === "GET" && restPath === "/api/news") {
+      const state = await loadState(roomId);
+      const today = todayKeyFor(state);
+      const [markNews, nikitaNews] = await Promise.all([
+        topLocalStory(effectiveLocation(state.people?.mark, today)),
+        topLocalStory(effectiveLocation(state.people?.nikita, today)),
+      ]);
+      return json({ news: { mark: markNews, nikita: nikitaNews } });
+    }
+
+    // Top songs chart (see music.ts) at each person's effective location —
+    // same shape/caching approach as /api/weather and /api/news above, no
+    // API key required. Country-level, not city-level (see music.ts for
+    // why) — `limit` lets the client ask for the full top-5 at once rather
+    // than needing a second round trip when someone expands the list.
+    if (req.method === "GET" && restPath === "/api/music") {
+      const state = await loadState(roomId);
+      const today = todayKeyFor(state);
+      const [markMusic, nikitaMusic] = await Promise.all([
+        topSongs(effectiveLocation(state.people?.mark, today), 5),
+        topSongs(effectiveLocation(state.people?.nikita, today), 5),
+      ]);
+      return json({ music: { mark: markMusic, nikita: nikitaMusic } });
+    }
+
+    // Top movies chart (see movies.ts) — same shape as /api/music above.
+    if (req.method === "GET" && restPath === "/api/movies") {
+      const state = await loadState(roomId);
+      const today = todayKeyFor(state);
+      const [markMovies, nikitaMovies] = await Promise.all([
+        topMovies(effectiveLocation(state.people?.mark, today), 5),
+        topMovies(effectiveLocation(state.people?.nikita, today), 5),
+      ]);
+      return json({ movies: { mark: markMovies, nikita: nikitaMovies } });
+    }
+
+    // Sets or clears a traveling override of where THIS person is shown as
+    // being, for their partner's weather/local-lore widgets AND clock (see
+    // types.ts's travel* fields and util.ts's effectiveLocation/
+    // effectiveTz/isTraveling) — their real registered location/timezone,
+    // the daily question rollover, and everything else are untouched. An
+    // empty location clears it outright, back to home. `from`/`until` are
+    // optional date keys (YYYY-MM-DD): `from` schedules travel ahead of
+    // time instead of starting it immediately, and `showEarly` (only
+    // meaningful with a future `from`) opts into the override appearing
+    // TRAVEL_EARLY_DAYS days before `from` rather than exactly on it, so
+    // the partner gets a few days' heads-up. Leaving out `until` means it
+    // stays set until explicitly cleared.
+    if (req.method === "POST" && restPath === "/api/travel") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who } = body || {};
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      let location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      if (location && await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (location && !(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      if (location) location = await canonicalPlaceLabel(location);
+      const asDateKey = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
+      const from = asDateKey(body?.from);
+      const until = asDateKey(body?.until);
+      const showEarly = !!body?.showEarly;
+      // Resolved up front (needs a network call) rather than inside
+      // saveState's mutator, which must stay synchronous — same geocoding
+      // lookup registration uses (see geo.ts), so a travel city gets a
+      // real timezone for the clock without anyone typing one by hand.
+      const travelTz = location ? await resolveTimezoneFromLocation(location) : null;
+      const state = await saveState(roomId, (s) => {
+        if (!s.people || !s.people[who]) return;
+        if (!location) {
+          delete s.people[who]!.travelLocation;
+          delete s.people[who]!.travelTz;
+          delete s.people[who]!.travelFrom;
+          delete s.people[who]!.travelUntil;
+          delete s.people[who]!.travelShowEarly;
+          return;
+        }
+        s.people[who]!.travelLocation = location;
+        if (travelTz) s.people[who]!.travelTz = travelTz;
+        else delete s.people[who]!.travelTz;
+        if (from) s.people[who]!.travelFrom = from;
+        else delete s.people[who]!.travelFrom;
+        if (until) s.people[who]!.travelUntil = until;
+        else delete s.people[who]!.travelUntil;
+        if (from && showEarly) s.people[who]!.travelShowEarly = true;
+        else delete s.people[who]!.travelShowEarly;
+      });
+      return json(forClient(state));
+    }
+
+    // Turn military (24-hour) time on or off for this person's clock.
+    if (req.method === "POST" && restPath === "/api/military") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const on = body.on === true;
+      const state = await saveState(roomId, (s) => {
+        if (!s.people || !s.people[who]) return;
+        if (on) s.people[who]!.military = true;
+        else delete s.people[who]!.military;
+      });
+      return json(forClient(state));
+    }
+
+    // A section of the room page failed to draw on someone's device. The page
+    // skips that section and keeps going; this just writes the error to the
+    // log so it can be fixed. No personal data, capped length.
+    if (req.method === "POST" && restPath === "/api/client-error") {
+      if (!rateLimit("clienterr:" + clientIp(req, server), 30, HOUR)) return json({ ok: false }, { status: 429 });
+      const ce = await readJson(req);
+      const clip = (v: any, n: number) => String(v == null ? "" : v).replace(/[\r\n]+/g, " | ").slice(0, n);
+      console.log("[client-error] room=" + (roomId || "main") + " who=" + clip(ce?.who, 10) + " part=" + clip(ce?.part, 30) + " msg=" + clip(ce?.msg, 200) + " at=" + clip(ce?.stack, 400) + " ua=" + clip(req.headers.get("user-agent"), 120));
+      return json({ ok: true });
+    }
+
+    // Anonymous sign-up funnel: records the first time a room reaches each
+    // step of the registration screens, so the admin view can show where
+    // people give up. Whitelisted step names only; no personal data.
+    if (req.method === "POST" && restPath === "/api/funnel") {
+      if (!rateLimit("funnel:" + clientIp(req, server), 60, HOUR)) return json({ ok: false }, { status: 429 });
+      const body = await readJson(req);
+      const step = typeof body?.step === "string" ? body.step : "";
+      if (!FUNNEL_STEPS.has(step)) return json({ ok: false }, { status: 400 });
+      const cur = await loadState(roomId);
+      // Only rooms that were really created (never conjure a room from a made-up id).
+      if (roomId && !cur.createdAt) return json({ ok: false }, { status: 404 });
+      if (cur.funnel && cur.funnel[step]) return json({ ok: true });
+      await saveState(roomId, (s) => {
+        if (!s.funnel) s.funnel = {};
+        if (!s.funnel[step]) s.funnel[step] = new Date().toISOString();
+      });
+      return json({ ok: true });
+    }
+
+    if (req.method === "POST" && restPath === "/api/status") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, text } = body || {};
+      if (!isPerson(who) || typeof text !== "string") {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      const trimmed = text.trim().slice(0, 60);
+      const state = await saveState(roomId, (s) => {
+        s.status[who] = { text: trimmed, at: new Date().toISOString() };
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/register") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const name = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
+      // "contact" is either an email or an Instagram handle (older cached
+      // clients still send "email", which keeps working).
+      const contact =
+        typeof body?.contact === "string" ? body.contact.trim().slice(0, 200)
+        : typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      const email = isValidEmail(contact) ? contact : "";
+      const handle = email ? null : normalizeInstagramHandle(contact);
+      const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
+      const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      const relationship =
+        body?.relationship === "significant_other" ||
+        body?.relationship === "family" ||
+        body?.relationship === "friend" ||
+        body?.relationship === "its_complicated"
+          ? body.relationship
+          : undefined;
+      const military = body?.military === true;
+      // Email / Instagram is optional: a contact that is given must still be
+      // valid, but none at all is fine (the person just can't recover the
+      // room by email later, so they keep their Nearune link).
+      if (!isPerson(who) || !name || (contact && !email && !handle)) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      // Optional room name typed by the first person on the setup screen.
+      if ((await applySignupRoomName(roomId, body?.roomName)) === "blocked") {
+        return json({ error: "inappropriate_name" }, { status: 400 });
+      }
+      if (!email) {
+        // Instagram-handle sign-up: nothing is emailed (there's no address),
+        // so there's nothing to confirm and nothing that could be used to
+        // spam anyone — an IP limit is enough. The handle is just a label
+        // shown to the partner; it can't be verified, which is why this
+        // path has no email recovery (see types.ts's PersonProfile.instagram).
+        if (!rateLimit("register-ip:" + clientIp(req, server), 10, HOUR)) {
+          return json({ error: "rate_limited" }, { status: 429 });
+        }
+        const curH = await loadState(roomId);
+        if (curH.people && curH.people[who] && curH.people[who]!.confirmed) {
+          return json({ error: "already_registered" }, { status: 409 });
+        }
+        const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
+        const stateH = await saveState(roomId, (s) => {
+          if (!s.people) s.people = {};
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}), ...(military ? { military: true } : {}) };
+          if (s.pendingConfirm) delete s.pendingConfirm[who];
+          if (relationship && !s.relationship) s.relationship = relationship;
+        });
+        return json({ ...forClient(stateH), _viaHandle: true });
+      }
+      // Two limits: how many confirm emails this visitor can trigger, and
+      // how many any single inbox can be sent regardless of who's asking —
+      // the second one is what actually stops someone using this as a way
+      // to spam a stranger's email address.
+      if (!rateLimit("register-ip:" + clientIp(req, server), 10, HOUR) || !rateLimit("register-email:" + email.toLowerCase(), 3, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const cur = await loadState(roomId);
+      if (cur.people && cur.people[who] && cur.people[who]!.confirmed && cur.people[who]!.emailVerified !== false) {
+        return json({ error: "already_registered" }, { status: 409 });
+      }
+      // The typed location is the source of truth for timezone when it
+      // resolves to a real place; the registering device's own timezone is
+      // only a fallback (covers an empty/unrecognized location, or the
+      // geocoding lookup being unreachable).
+      const resolvedTz = await resolveTimezoneFromLocation(location);
+      const tz = resolvedTz || browserTz;
+      // Re-registering with the same address (Resend confirmation) keeps the
+      // same token, so an earlier email's link keeps working instead of
+      // being cut off by the newer one.
+      const emailHash0 = await hashEmail(email);
+      const sameEmailPending =
+        cur.people && cur.people[who] && cur.people[who]!.emailHash === emailHash0 && cur.pendingConfirm && cur.pendingConfirm[who];
+      const token = sameEmailPending ? cur.pendingConfirm![who]!.token : crypto.randomUUID();
+      // Keyed hash only — the address itself is never stored on the person's
+      // profile, just this one-way fingerprint (see hashEmail).
+      const emailHash = await hashEmail(email);
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash, ...(military ? { military: true } : {}) };
+        if (!s.pendingConfirm) s.pendingConfirm = {};
+        const prevPc = s.pendingConfirm[who];
+        s.pendingConfirm[who] = {
+          token, at: new Date().toISOString(), email,
+          reminders: sameEmailPending && prevPc ? prevPc.reminders : undefined,
+          remindedAt: sameEmailPending && prevPc ? prevPc.remindedAt : undefined,
+        };
+        // Only whoever registers first sets this for the room — the second
+        // person's own registration (or re-registering after a bounced
+        // confirm) never overwrites an already-chosen relationship.
+        if (relationship && !s.relationship) s.relationship = relationship;
+      });
+      const confirmUrl = publicOrigin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
+      // Sent in whichever language this person just picked on the
+      // registration form (translateEmailStrings falls back to English,
+      // string-by-string, if that language is unset/unrecognized or a
+      // translation call fails) — "Hi" and the name are kept separate so
+      // the name itself is never run through a translator.
+      const [subjT, hiT, setupT, confirmLinkT, step2T, footerT] = await translateEmailStrings(
+        [
+          "Confirm your Nearune account",
+          "Hi",
+          "You're almost set up:",
+          "Confirm your email",
+          "Go to the Nearune link to complete your partner's information",
+          "Don't see this arriving right away next time? Check your spam folder.",
+        ],
+        language
+      );
+      const r = await sendEmail(
+        email,
+        subjT,
+        "<p>" + hiT + " " + name + ",</p>" +
+          "<p>" + setupT + "</p>" +
+          "<ol><li><a href=\"" + confirmUrl + "\">" + confirmLinkT + "</a></li>" +
+          "<li>" + step2T + "</li></ol>" +
+          "<p style=\"color:#888;font-size:0.9em\">" + footerT + "</p>"
+      );
+      // Lets this person recover their room link later if they lose it.
+      addToEmailIndex(emailHash, { roomId, who }).catch(() => {});
+      // Same pattern /api/invite already uses below: the link goes back only
+      // to the browser that just submitted this request, so exposing it
+      // here is no bigger a surface than the invite link already is — and
+      // it's what lets registration finish immediately if the email is
+      // slow, misdelivered, or (in a sandbox with no email provider
+      // configured) never sent at all.
+      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _confirmUrl: confirmUrl });
+    }
+
+    if (req.method === "GET" && restPath === "/api/confirm") {
+      const who = url.searchParams.get("who") || "";
+      const token = url.searchParams.get("token") || "";
+      let ok = false;
+      if (isPerson(who)) {
+        const cur = await loadState(roomId);
+        if (cur.pendingConfirm && cur.pendingConfirm[who] && cur.pendingConfirm[who]!.token === token) {
+          await saveState(roomId, (s) => {
+            if (s.people && s.people[who]) { s.people[who]!.confirmed = true; s.people[who]!.emailVerified = true; }
+            if (s.pendingConfirm) delete s.pendingConfirm[who];
+          });
+          ok = true;
+        } else if (cur.people && cur.people[who] && cur.people[who]!.confirmed && cur.people[who]!.emailVerified !== false) {
+          // Already confirmed (link clicked twice, or an email app pre-opened
+          // it): that's a success, not an expired link.
+          ok = true;
+        }
+      }
+      // ?viewer=<who> lets the client auto-select this person as "you" on
+      // load — without it, clicking the confirm link in a browser context
+      // that doesn't share localStorage with wherever they registered (e.g.
+      // an email app's in-app browser) drops them on the "who's here?"
+      // picker instead of straight into their next step.
+      const backUrl = publicOrigin + roomPrefix + "/" + (ok ? "?viewer=" + who : "");
+      const html = ok
+        ? "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Confirmed</title></head><body style=\"font-family:sans-serif;text-align:center;padding:60px 24px;color:#2B211B\"><h1>Confirmed 🎉</h1><p style=\"font-size:1.15rem;line-height:1.5\">You're all set. Switch back to the <strong>Nearune app</strong> to keep going.</p><p style=\"margin-top:40px;font-size:0.9rem;color:#6F6054\">Using Nearune in your browser instead? <a href=\"" + backUrl + "\" style=\"color:#6F6054\">Continue in browser</a></p></body></html>"
+        : "<!doctype html><body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\"><h1>Link expired</h1><p>Request a new one from the app.</p></body>";
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
+
+    if (req.method === "POST" && restPath === "/api/invite") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const contact =
+        typeof body?.contact === "string" ? body.contact.trim().slice(0, 200)
+        : typeof body?.email === "string" ? body.email.trim().slice(0, 200) : "";
+      // via === "link": no email or handle — just hand back a link (with the
+      // room code) for the inviter to send by text, WhatsApp, etc.
+      const viaLink = body && body.via === "link";
+      const email = viaLink ? "" : isValidEmail(contact) ? contact : "";
+      const handle = viaLink || email ? null : normalizeInstagramHandle(contact);
+      if (!isPerson(who) || (!viaLink && !email && !handle)) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (!rateLimit("invite-ip:" + clientIp(req, server), 10, HOUR) || (email && !rateLimit("invite-email:" + email.toLowerCase(), 3, HOUR))) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const cur = await loadState(roomId);
+      if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) {
+        return json({ error: "not_confirmed" }, { status: 403 });
+      }
+      // Sending an invite BY EMAIL waits until this person's own email is
+      // confirmed (keeps unverified sign-ups from emailing strangers).
+      // Link and Instagram-handle invites work right away.
+      if (email && cur.people[who]!.emailVerified === false) {
+        return json({ error: "email_unverified" }, { status: 403 });
+      }
+      const other: PersonKey = who === "mark" ? "nikita" : "mark";
+      if (cur.people[other] && cur.people[other]!.confirmed) {
+        return json({ error: "already_registered" }, { status: 409 });
+      }
+      // 12 hex chars keeps the shareable link short; invites are rate-limited.
+      // A resend keeps the same token, so the link in an earlier email or
+      // message never stops working just because a newer one was sent.
+      const priorInvite = cur.pendingInvite && cur.pendingInvite[other];
+      const token = priorInvite && priorInvite.token ? priorInvite.token : crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      const state = await saveState(roomId, (s) => {
+        if (!s.pendingInvite) s.pendingInvite = {};
+        s.pendingInvite[other] = handle
+          ? { token, at: new Date().toISOString(), instagram: handle }
+          : viaLink
+            ? { token, at: new Date().toISOString(), link: true }
+            : { token, at: new Date().toISOString() };
+      });
+      const inviteUrl = roomId
+        ? publicOrigin + "/j/" + roomId + "/" + token
+        : publicOrigin + roomPrefix + "/?invite=" + other + "&token=" + token;
+      if (viaLink) {
+        console.log("[invite] room=" + (roomId || "main") + " via=link");
+        return json({ ...forClient(state), _viaHandle: true, _viaLink: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
+      }
+      if (handle) {
+        // Nothing to email — the link goes back to this browser and the
+        // inviter sends it themselves (e.g. as an Instagram DM).
+        console.log("[invite] room=" + (roomId || "main") + " via=instagram");
+        return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
+      }
+      const inviterName = String(cur.people[who]!.name || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as any)[c]);
+      const r = await sendEmail(
+        email,
+        inviterName + " invited you to Nearune",
+        "<p style=\"font-size:16px\">" + inviterName + " invited you to Nearune: one question a day, just for the two of you. It's free.</p>" +
+          "<p style=\"margin:20px 0\"><a href=\"" + inviteUrl + "\" style=\"background:#A9532C;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700;display:inline-block\">Accept " + inviterName + "'s invite</a></p>" +
+          (roomId ? "<p style=\"font-size:15px\">Your room code: <b>" + roomId + "</b><br><span style=\"font-size:14px\">If the link doesn't open the app, open Nearune, tap <b>Open an existing room</b> and enter this code.</span></p>" : "") +
+          (Bun.env.APP_STORE_URL
+            ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
+              "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
+              "<td style=\"vertical-align:middle\"><div style=\"font-size:15px;margin-bottom:8px\">Get the Nearune app</div>" +
+              "<a href=\"" + Bun.env.APP_STORE_URL + "\" style=\"display:inline-block;margin:0 8px 6px 0\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a>" +
+              "<a href=\"" + GOOGLE_PLAY_URL + "\" style=\"display:inline-block;margin:0 0 6px 0\"><img src=\"" + publicOrigin + "/google-play-badge.png\" width=\"182\" alt=\"Get it on Google Play\" style=\"display:block;border:0;height:auto\"></a></td>" +
+              "</tr></table>"
+            : "") +
+          "<p style=\"font-size:14px\">Already have the app? Copy the link above, open Nearune and tap <b>Paste my invite</b>. Nearune only reads the link you just copied.</p>" +
+          "<p>Prefer not to install anything? Use Nearune in your browser at <a href=\"https://nearune.ai\">nearune.ai</a>.</p>" +
+          "<p style=\"color:#888;font-size:0.9em\">Don't see this arriving right away next time? Check your spam folder.</p>"
+      );
+      console.log("[invite] room=" + (roomId || "main") + " via=email sent=" + r.ok + (r.ok ? "" : " error=" + JSON.stringify(String(r.error || "").slice(0, 200))));
+      return json({ ...forClient(state), _emailSent: r.ok, _emailError: r.error, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
+    }
+
+    if (req.method === "POST" && restPath === "/api/accept-invite") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const token = typeof body?.token === "string" ? body.token : "";
+      const name = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
+      const location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
+      const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
+      const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
+      if (!token || !name) return json({ error: "invalid" }, { status: 400 });
+      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      const cur = await loadState(roomId);
+      let who: PersonKey | null = null;
+      (["mark", "nikita"] as PersonKey[]).forEach((k) => {
+        if (cur.pendingInvite && cur.pendingInvite[k] && cur.pendingInvite[k]!.token === token) who = k;
+      });
+      if (!who) return json({ error: "invalid_token" }, { status: 400 });
+      const resolvedTz = await resolveTimezoneFromLocation(location);
+      const tz = resolvedTz || browserTz;
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        const invitedHandle = s.pendingInvite && s.pendingInvite[who!] && s.pendingInvite[who!]!.instagram;
+        s.people[who!] = { name, location, language, tz: tz || undefined, confirmed: true, ...(invitedHandle ? { instagram: invitedHandle } : {}) };
+        if (s.pendingInvite) delete s.pendingInvite[who!];
+      });
+      console.log("[invite-accepted] room=" + (roomId || "main") + " who=" + who);
+      // Let the person who sent the invite know their partner is in —
+      // otherwise the only way they'd find out is having the app open when
+      // the 6s poll happens to catch it. Push only (not email): we never
+      // keep a raw email on file past sending the original invite, so
+      // there's nothing to email this back to.
+      const inviter: PersonKey = who === "mark" ? "nikita" : "mark";
+      const inviterSub = state.pushSubs && state.pushSubs[inviter];
+      if (inviterSub) {
+        const today = todayKeyFor(state);
+        sendPush(inviterSub, {
+          title: "Your Nearune partner joined!",
+          body: name + " just joined Nearune — today's question is ready for you both.",
+          badge: unansweredCount(state, today),
+          tag: "partner-joined",
+        }).then((res) => {
+          if (res.gone) {
+            saveState(roomId, (s) => {
+              if (s.pushSubs) delete s.pushSubs[inviter];
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+      return json({ who, ...forClient(state) });
+    }
+
+    // The photo puzzle is off in "Make a friend" rooms (strangers).
+    if (req.method === "POST" && restPath.startsWith("/api/puzzle-")) {
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "puzzle_disabled" }, { status: 403 });
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-batch") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const items = body && body.items;
+      if (!isPerson(who) || !Array.isArray(items) || items.length < 1 || items.length > 10) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      const parsed: { id: string; answer: string; question: string; bytes: Uint8Array }[] = [];
+      for (const item of items) {
+        const dataUrl = item && item.dataUrl;
+        const answer = item && item.answer;
+        const question = item && item.question;
+        const match = typeof dataUrl === "string" ? dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
+        const trimmedAnswer = typeof answer === "string" ? answer.trim().slice(0, 200) : "";
+        const trimmedQuestion = typeof question === "string" ? question.trim().slice(0, 200) : "";
+        if (!match || !trimmedAnswer || !trimmedQuestion) return json({ error: "invalid" }, { status: 400 });
+        let bytes: Uint8Array;
+        try {
+          bytes = Buffer.from(match[1], "base64");
+        } catch {
+          return json({ error: "invalid" }, { status: 400 });
+        }
+        if (bytes.length > 6 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+        parsed.push({ id: crypto.randomUUID(), answer: trimmedAnswer, question: trimmedQuestion, bytes });
+      }
+      const current = await loadState(roomId);
+      // A new batch can be loaded once the current picture is finished (solved
+      // or every piece unlocked) and nothing is still queued behind it.
+      const curRevealed = !!current.puzzleCurrentId && (!!current.puzzleSolved || puzzleUnlockedCount(current) >= PUZZLE_TOTAL);
+      const curQueued = !!(current.puzzleQueue && current.puzzleQueue.length > 0);
+      if (curQueued || (current.puzzleCurrentId && !curRevealed)) {
+        return json({ error: "in_progress" }, { status: 409 });
+      }
+      const verdicts = await Promise.all(parsed.map((p) => moderateContent({ image: p.bytes, text: p.question + " " + p.answer })));
+      if (verdicts.indexOf("blocked") >= 0) return json({ error: "inappropriate" }, { status: 422 });
+      if (verdicts.indexOf("unavailable") >= 0) return json({ error: "moderation_unavailable" }, { status: 503 });
+      for (const p of parsed) {
+        if (useS3 && s3) {
+          await s3.file(puzzleImageKey(roomId, p.id)).write(p.bytes, { type: "image/jpeg" });
+        } else {
+          await Bun.write(localPuzzlePath(roomId, p.id), p.bytes);
+        }
+      }
+      const state = await saveState(roomId, (s) => {
+        const first = parsed[0];
+        const rest = parsed.slice(1).map((p) => ({ id: p.id, answer: p.answer, question: p.question }));
+        s.puzzleCurrentId = first.id;
+        s.puzzleAnswer = first.answer;
+        if (first.question) s.puzzleQuestion = first.question; else delete s.puzzleQuestion;
+        s.puzzleSetBy = who;
+        s.puzzleRoundStartDate = todayKeyFor(s);
+        s.puzzleBonusCredits = 0;
+        delete s.puzzleRoundBase;
+        s.puzzleSolved = false;
+        s.puzzlePendingBonus = false;
+        s.puzzleQueue = rest;
+        s.puzzleQueueBy = who;
+        s.puzzleQueueAt = new Date().toISOString();
+        s.puzzleQueueTotal = parsed.length;
+        delete s.puzzleLastGuessDate;
+        delete s.puzzleLastGuessBy;
+        delete s.puzzleLastGuessText;
+        delete s.puzzleLastGuessCorrect;
+      });
+      recordRoomUse(roomId, "puzzle_uploaded");
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-place") {
+      if (!rateLimit("puzzle-place:" + roomId, 40, HOUR)) return json({ place: null });
+      const body = await readJson(req);
+      const m = body && typeof body.dataUrl === "string" ? body.dataUrl.match(/^data:image\/jpeg;base64,(.+)$/) : null;
+      if (!m) return json({ place: null });
+      let bytes: Uint8Array;
+      try { bytes = Buffer.from(m[1], "base64"); } catch { return json({ place: null }); }
+      if (bytes.length < 200) return json({ place: null });
+      return json({ place: await guessPlaceFromImage(bytes) });
+    }
+
+    // Never Have I Ever: answer the current phrase. "round" guards against a
+    // stale tab answering a phrase that has already moved on.
+    if (req.method === "POST" && restPath === "/api/nhie-vote") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, choice, round } = body || {};
+      if (!isPerson(who) || (choice !== "never" && choice !== "have")) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie) s.nhie = newRound(undefined, roomRelationship(s));
+        if (s.nhie.round !== round) return;
+        if (!s.nhie.votes) s.nhie.votes = {};
+        s.nhie.votes[who] = choice;
+      });
+      recordRoomUse(roomId, "nhie_vote");
+      return json(forClient(state));
+    }
+
+    // Starts the next phrase. Only moves on once both have answered (or when
+    // there is no round yet), and only from the round the caller was looking
+    // at, so two quick taps never skip a phrase.
+    if (req.method === "POST" && restPath === "/api/nhie-next") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, round } = body || {};
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie) { s.nhie = newRound(undefined, roomRelationship(s)); return; }
+        const v = s.nhie.votes || {};
+        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, roomRelationship(s));
+      });
+      return json(forClient(state));
+    }
+
+    // Never Have I Ever: a short note on a revealed round (current one once
+    // both have answered, or any past one).
+    if (req.method === "POST" && restPath === "/api/nhie-comment") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, round, text } = body || {};
+      const trimmed = typeof text === "string" ? text.trim().slice(0, 300) : "";
+      if (!isPerson(who) || !Number.isInteger(round) || round < 1 || !trimmed) return json({ error: "invalid" }, { status: 400 });
+      const blockedN = await moderate(roomId, who, "nhie-comment", trimmed, body.confirmFlagged === true);
+      if (blockedN) return blockedN;
+      const state = await saveState(roomId, (s) => {
+        if (!s.nhie || round > s.nhie.round) return;
+        const v = s.nhie.votes || {};
+        if (round === s.nhie.round && !v[who as PersonKey]) return;
+        if (!s.nhie.comments) s.nhie.comments = {};
+        const list = s.nhie.comments[String(round)] || (s.nhie.comments[String(round)] = []);
+        if (list.length >= 50) return;
+        list.push({ who, text: trimmed, at: new Date().toISOString() });
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/badge-sync") {
+      // Self-heal for the native app-icon badge: the clear/set push is only
+      // sent at the moment an answer lands, and if it is missed the icon
+      // stays wrong. The open app asks for a resend of the true count.
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      if (!rateLimit("badge-sync:" + roomId + ":" + who, 20, 10 * 60 * 1000)) return json({ ok: true, skipped: true });
+      const cur = await loadState(roomId);
+      const sub = cur.pushSubs && cur.pushSubs[who];
+      if (!anyPushConfigured || !sub || sub.kind !== "apns") return json({ ok: true, skipped: true });
+      const count = unansweredCount(cur, todayKeyFor(cur));
+      sendPush(sub, { title: "", body: "", badge: count, tag: "badge-sync", silent: true })
+        .then((res) => {
+          if (res.gone) {
+            saveState(roomId, (s) => { if (s.pushSubs) delete s.pushSubs[who]; }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+      return json({ ok: true, count });
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-edit") {
+      // The person who set the current picture can fix its question/answer
+      // until it is solved. The answer stays server-side (never sent back).
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const q = typeof body?.question === "string" ? body.question.trim().slice(0, 200) : "";
+      const a = typeof body?.answer === "string" ? body.answer.trim().slice(0, 200) : "";
+      if (!isPerson(who) || !q || !a) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (!cur.puzzleCurrentId || cur.puzzleSetBy !== who) return json({ error: "not_setter" }, { status: 403 });
+      if (cur.puzzleSolved) return json({ error: "already_solved" }, { status: 409 });
+      const verdict = await moderateContent({ text: q + " " + a });
+      if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+      if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      const state = await saveState(roomId, (s) => {
+        if (s.puzzleCurrentId && s.puzzleSetBy === who && !s.puzzleSolved) {
+          s.puzzleQuestion = q;
+          s.puzzleAnswer = a;
+        }
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-advance") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        advanceQueue(s);
+      });
+      return json(forClient(state));
+    }
+
+    if (req.method === "POST" && restPath === "/api/voice-sample") {
+      // Cloning costs real money per call and a bad actor could otherwise
+      // hammer this — capped well above any legitimate re-recording need.
+      if (!rateLimit("voice-sample:" + roomId, 10, 24 * HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const dataUrl = body && body.dataUrl;
+      if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
+      const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]+);base64,(.+)$/);
+      if (!match) return json({ error: "invalid" }, { status: 400 });
+      const mimeType = match[1];
+      let bytes: Uint8Array;
+      try {
+        bytes = Buffer.from(match[2], "base64");
+      } catch {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      // A clean ~20-60s sample is plenty for Instant Voice Cloning — capping
+      // well above that (10MB) just guards against an oversized upload, not
+      // against a long recording that's actually fine.
+      if (bytes.length < 2000) return json({ error: "too_short" }, { status: 400 });
+      if (bytes.length > 10 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      const existing = await loadState(roomId);
+      const oldVoiceId = existing.people && existing.people[who] && existing.people[who]!.voiceId;
+      const label = "nearune-" + (roomId || "legacy") + "-" + who;
+      const result = await cloneVoice(bytes, mimeType, label);
+      if (!result.ok) return json({ error: result.error }, { status: 502 });
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
+        s.people[who]!.voiceId = result.voiceId;
+      });
+      // Old clone is no longer referenced by anything — clean it up at the
+      // provider rather than letting clones accumulate there forever.
+      if (oldVoiceId && oldVoiceId !== result.voiceId) deleteVoice(oldVoiceId).catch(() => {});
+      recordRoomUse(roomId, "voice_recorded");
+      return json(forClient(state));
+    }
+
+    // Clears a saved voice sample without recording a new one — e.g. the
+    // sample on file was recorded by the wrong person (device identity was
+    // on someone else's slot at the time) and needs to come off entirely
+    // rather than being replaced with another recording right away. Once
+    // cleared, speak/speakAs fall back to the plain default voice until
+    // that person records a real sample of their own.
+    if (req.method === "POST" && restPath === "/api/voice-sample-delete") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const existing = await loadState(roomId);
+      const oldVoiceId = existing.people && existing.people[who] && existing.people[who]!.voiceId;
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who]) delete s.people[who]!.voiceId;
+      });
+      if (oldVoiceId) deleteVoice(oldVoiceId).catch(() => {});
+      return json(forClient(state));
+    }
+
+    // SANDBOX EXPERIMENT: "share a recent photo" — one photo per person,
+    // overwritten each time (see storage.ts's photoKey/PersonProfile.photoAt),
+    // same resize-client-side-then-base64-POST approach as /api/voice-sample
+    // and /api/puzzle-batch above.
+    // Photo sharing is off in "Make a friend" rooms (strangers).
+    if (req.method === "POST" && (restPath === "/api/photo-upload" || restPath === "/api/photo-caption")) {
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "photos_disabled" }, { status: 403 });
+    }
+
+    if (req.method === "POST" && restPath === "/api/photo-upload") {
+      if (!rateLimit("photo-upload:" + roomId, 30, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const dataUrl = body && body.dataUrl;
+      if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
+      const match = dataUrl.match(/^data:image\/jpeg;base64,(.+)$/);
+      if (!match) return json({ error: "invalid" }, { status: 400 });
+      let bytes: Uint8Array;
+      try {
+        bytes = Buffer.from(match[1], "base64");
+      } catch {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (bytes.length < 200) return json({ error: "invalid" }, { status: 400 });
+      if (bytes.length > 6 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      {
+        const capText = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
+        const verdict = await moderateContent({ image: bytes, text: capText });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
+      if (useS3 && s3) {
+        await s3.file(photoKey(roomId, who)).write(bytes, { type: "image/jpeg" });
+      } else {
+        await Bun.write(localPhotoPath(roomId, who), bytes);
+      }
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
+        s.people[who]!.photoAt = new Date().toISOString();
+        const cap = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
+        if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+      });
+      return json(forClient(state));
+    }
+
+    // Edit the comment under an already-shared photo.
+    if (req.method === "POST" && restPath === "/api/photo-caption") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who) || typeof body.caption !== "string") return json({ error: "invalid" }, { status: 400 });
+      const cap = body.caption.trim().slice(0, 200);
+      if (cap) {
+        const verdict = await moderateContent({ text: cap });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who] && s.people[who]!.photoAt) {
+          if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+        }
+      });
+      return json(forClient(state));
+    }
+
+    // Removes a shared photo without replacing it — same idea as
+    // /api/voice-sample-delete above.
+    if (req.method === "POST" && restPath === "/api/photo-delete") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const state = await saveState(roomId, (s) => {
+        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; }
+      });
+      try {
+        if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
+        else await Bun.file(localPhotoPath(roomId, who)).delete();
+      } catch {}
+      return json(forClient(state));
+    }
+
+    if (req.method === "GET" && restPath === "/api/photo") {
+      const who = url.searchParams.get("who") || "";
+      if (!isPerson(who)) return new Response("Not found", { status: 404 });
+      try {
+        if (useS3 && s3) {
+          const file = s3.file(photoKey(roomId, who));
+          if (!(await file.exists())) return new Response("Not found", { status: 404 });
+          const bytes = await file.arrayBuffer();
+          return new Response(bytes, {
+            headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" },
+          });
+        } else {
+          const f = Bun.file(localPhotoPath(roomId, who));
+          if (!(await f.exists())) return new Response("Not found", { status: 404 });
+          const bytes = await f.arrayBuffer();
+          return new Response(bytes, {
+            headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" },
+          });
+        }
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
+    }
+
+    if (req.method === "POST" && restPath === "/api/speak") {
+      // Each call is a real text-to-speech request against a paid API — cap
+      // it well above normal use (someone tapping 🔊 on every line of a long
+      // conversation) without making it a hard wall for ordinary use.
+      if (!rateLimit("speak:" + roomId, 120, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body && body.who;
+      const text = typeof (body && body.text) === "string" ? body.text.slice(0, 2000).trim() : "";
+      if (!isPerson(who) || !text) return json({ error: "invalid" }, { status: 400 });
+      const current = await loadState(roomId);
+      const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
+      if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
+      const audio = await synthesizeSpeech(text, voiceId);
+      if (!audio) return json({ error: "synth_failed" }, { status: 502 });
+      recordRoomUse(roomId, "voice_played");
+      return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
+    }
+
+    if (req.method === "POST" && restPath === "/api/puzzle-guess") {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const { who, text } = body || {};
+      if (!isPerson(who) || typeof text !== "string" || !text.trim()) {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      const trimmed = text.trim().slice(0, 120);
+      const today = todayKeyFor(await loadState(roomId));
+
+      // guessMatches() (exact/substring) is the fast, free first check.
+      // aiGuessMatches() is the generous fallback — catches a paraphrase,
+      // synonym, or typo-past-what-substring-forgives that's still clearly
+      // the right answer. It's a network call, so it has to happen here,
+      // before the atomic save below, rather than inside saveState()'s
+      // synchronous mutator. If the puzzle changes out from under us
+      // between this peek and the save (new photo loaded, guess already
+      // answered elsewhere), the guard checks inside the mutator still
+      // protect against a guess landing on the wrong puzzle — that one
+      // unlucky request just falls back to the plain guessMatches() check,
+      // same as before this existed.
+      const peeked = await loadState(roomId);
+      const peekedAnswer = peeked.puzzleAnswer;
+      let correct = peekedAnswer ? guessMatches(trimmed, peekedAnswer) : false;
+      if (!correct && peekedAnswer) {
+        const aiVerdict = await aiGuessMatches(trimmed, peekedAnswer);
+        if (aiVerdict === true) correct = true;
+      }
+
+      let rejected = false;
+      const state = await saveState(roomId, (s) => {
+        if (!s.puzzleAnswer || s.puzzleSolved || puzzleUnlockedCount(s) >= PUZZLE_TOTAL) return;
+        if (s.puzzleSetBy && who === s.puzzleSetBy) { rejected = true; return; }
+        if (s.puzzleLastGuessDate === today) return;
+        const finalCorrect = s.puzzleAnswer === peekedAnswer ? correct : guessMatches(trimmed, s.puzzleAnswer);
+        s.puzzleLastGuessDate = today;
+        s.puzzleLastGuessBy = who;
+        s.puzzleLastGuessText = trimmed;
+        s.puzzleLastGuessCorrect = finalCorrect;
+        if (finalCorrect) {
+          s.puzzleSolved = true;
+          s.puzzleSolvedCount = (s.puzzleSolvedCount || 0) + 1;
+          s.puzzlePendingBonus = true;
+        }
+      });
+      if (rejected) return json({ error: "setter_cannot_guess" }, { status: 403 });
+      return json(forClient(state));
+    }
+
+    if (req.method === "GET" && restPath === "/api/puzzle-image") {
+      const id = url.searchParams.get("id") || "";
+      if (!/^[a-zA-Z0-9-]+$/.test(id)) return new Response("Not found", { status: 404 });
+      try {
+        if (useS3 && s3) {
+          const file = s3.file(puzzleImageKey(roomId, id));
+          if (!(await file.exists())) return new Response("Not found", { status: 404 });
+          const bytes = await file.arrayBuffer();
+          return new Response(bytes, {
+            headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" },
+          });
+        } else {
+          const f = Bun.file(localPuzzlePath(roomId, id));
+          if (!(await f.exists())) return new Response("Not found", { status: 404 });
+          const bytes = await f.arrayBuffer();
+          return new Response(bytes, {
+            headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" },
+          });
+        }
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
+    }
+
+    if (req.method === "GET" && restPath === "/api/translate") {
+      const text = (url.searchParams.get("text") || "").slice(0, 4000);
+      const langCodeRe = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
+      const targetRaw = url.searchParams.get("target") || "en";
+      const target = langCodeRe.test(targetRaw) ? targetRaw : "en";
+      const altRaw = url.searchParams.get("alt") || "";
+      const alt = langCodeRe.test(altRaw) ? altRaw : "";
+      if (!text.trim()) return json({ translated: "" });
+      const { translated, via, eff } = await resolveTranslation(text, target, alt);
+      console.log("[translate] via=" + via + " eff=" + eff + " ok=" + !!translated);
+      return json({ translated });
+    }
+
+    if (req.method === "GET" && restPath === "/api/geocode") {
+      const lat = url.searchParams.get("lat");
+      const lon = url.searchParams.get("lon");
+      if (!lat || !lon) return json({ place: "" });
+      try {
+        const gUrl =
+          "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" +
+          encodeURIComponent(lat) +
+          "&lon=" +
+          encodeURIComponent(lon) +
+          "&zoom=14&addressdetails=1";
+        const res = await fetch(gUrl, { headers: { "User-Agent": "NearuneApp/1.0 (personal use)" } });
+        if (!res.ok) return json({ place: "" });
+        const data: any = await res.json();
+        const addr = data.address || {};
+        const place = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
+        const region = addr.state || addr.country || "";
+        const label = place && region ? place + ", " + region : place || "";
+        return json({ place: label });
+      } catch {
+        return json({ place: "" });
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/icon-upload") {
+      const body = await readJson(req);
+      const key = body && body.key;
+      const dataUrl = body && body.dataUrl;
+      if ((key !== "favicon" && key !== "touch") || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
+      const match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
+      if (!match) return json({ error: "invalid" }, { status: 400 });
+      let bytes: Uint8Array;
+      try {
+        bytes = Buffer.from(match[1], "base64");
+      } catch {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      if (bytes.length > 2 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      if (useS3 && s3) {
+        await s3.file("brand/" + key + ".png").write(bytes, { type: "image/png" });
+      } else {
+        await Bun.write("./local-icon-" + key + ".png", bytes);
+      }
+      return json({ ok: true });
+    }
+
+    // Universal links: tells iOS that invite links (/j/...) and confirmation
+    // links belong to the Nearune app. Must be served as plain JSON at exactly
+    // this path, with no redirect. The Team ID comes from existing Apple vars.
+    if (req.method === "GET" && url.pathname === "/.well-known/apple-app-site-association") {
+      const teamId = Bun.env.APPLE_TEAM_ID || Bun.env.APNS_TEAM_ID || Bun.env.APPLE_WEATHERKIT_TEAM_ID || "";
+      if (!teamId) return new Response("Not found", { status: 404 });
+      const body = {
+        applinks: {
+          details: [
+            { appIDs: [teamId + ".com.nearune.app"], components: [{ "/": "/j/*" }, { "/": "/r/*/api/confirm" }] },
+          ],
+        },
+      };
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
+    }
+
+    // Android app links: tells Android that invite links (/j/...) open the
+    // Nearune app. The SHA-256 fingerprint(s) of the app's signing key come
+    // from ANDROID_SHA256_FINGERPRINTS (comma-separated, from Play Console →
+    // App integrity → App signing, plus the upload key if testing locally).
+    if (req.method === "GET" && url.pathname === "/.well-known/assetlinks.json") {
+      const fps = (Bun.env.ANDROID_SHA256_FINGERPRINTS || "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (!fps.length) return new Response("Not found", { status: 404 });
+      const body = [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: "com.nearune.app", sha256_cert_fingerprints: fps } }];
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
+    }
+
+    // The Never Have I Ever how-to clip. iOS needs Range support to play video.
+    if (req.method === "GET" && url.pathname === "/nhie-howto.mp4") {
+      const f = Bun.file(import.meta.dir + "/nhie-howto.mp4");
+      if (!(await f.exists())) return new Response("Not found", { status: 404 });
+      const size = f.size;
+      const base = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=86400" };
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") || "");
+      if (m && (m[1] || m[2])) {
+        let start = m[1] ? parseInt(m[1], 10) : Math.max(0, size - parseInt(m[2], 10));
+        let end = m[1] && m[2] ? parseInt(m[2], 10) : size - 1;
+        if (end >= size) end = size - 1;
+        if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size } });
+        return new Response(f.slice(start, end + 1), { status: 206, headers: { ...base, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
+      }
+      return new Response(f, { headers: { ...base, "content-length": String(size) } });
+    }
+
+    if (req.method === "GET" && url.pathname === "/google-play-badge.svg") {
+      return new Response(GOOGLE_PLAY_BADGE_SVG, {
+        headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/google-play-badge.png") {
+      return new Response(Buffer.from(GOOGLE_PLAY_BADGE_PNG_B64, "base64"), {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/app-store-badge.png") {
+      return new Response(Buffer.from(APP_STORE_BADGE_B64, "base64"), {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
+    }
+
+    if (req.method === "GET" && (url.pathname === "/favicon.png" || url.pathname === "/favicon.ico" || url.pathname === "/apple-touch-icon.png")) {
+      const key = url.pathname === "/apple-touch-icon.png" ? "touch" : "favicon";
+      try {
+        if (useS3 && s3) {
+          const file = s3.file("brand/" + key + ".png");
+          if (!(await file.exists())) return new Response("Not found", { status: 404 });
+          return new Response(await file.arrayBuffer(), { headers: { "content-type": "image/png", "cache-control": "public, max-age=3600" } });
+        }
+        const f = Bun.file("./local-icon-" + key + ".png");
+        if (!(await f.exists())) return new Response("Not found", { status: 404 });
+        return new Response(await f.arrayBuffer(), { headers: { "content-type": "image/png", "cache-control": "public, max-age=3600" } });
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
+    }
+
+    if (req.method === "GET" && restPath === "/healthz") {
+      return new Response("ok");
+    }
+
+    return new Response("Not found", { status: 404 });
+}
+
+console.log("Nearune listening on " + PORT + " (storage: " + (useS3 ? "s3" : "local file") + ")");
+ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed", err));
+
+// Rooms where someone tapped "create" but nobody ever registered pile up in
+// the admin list. Once a day, remove ones that are over 7 days old with no
+// people, no answers and no puzzle. Rooms with any registered person, and the
+// original room, are never touched.
+async function purgeEmptyRooms(): Promise<void> {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let removed = 0;
+    for (const id of await listRoomIds()) {
+      if (!id) continue;
+      const st = await loadState(id);
+      if (!st.createdAt || new Date(st.createdAt).getTime() > cutoff) continue;
+      const people = Object.values(st.people || {}).filter(Boolean).length;
+      const pending = Object.keys(st.pendingInvite || {}).length + Object.keys(st.pendingConfirm || {}).length;
+      if (people > 0 || pending > 0 || Object.keys(st.answers || {}).length > 0 || st.puzzleCurrentId) continue;
+      await deleteRoom(id);
+      removed++;
+      console.log("[room-purge] removed empty room " + id + " (created " + st.createdAt + ")");
+    }
+    if (removed) regToday.day = ""; // recount today's rooms next time
+  } catch (err) {
+    console.error("[room-purge] failed", err);
+  }
+}
+// Emails kept for reminders are dropped after 7 days even if never confirmed.
+async function purgeStaleEmails(): Promise<void> {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const id of await listRoomIds()) {
+      const st = await loadState(id);
+      for (const k of ["mark", "nikita"] as PersonKey[]) {
+        const e = st.pendingConfirm && st.pendingConfirm[k];
+        if (e && e.email && new Date(e.at).getTime() < cutoff) {
+          await saveState(id, (s) => { const x = s.pendingConfirm && s.pendingConfirm[k]; if (x) delete x.email; });
+          console.log("[email-purge] dropped kept email for room " + (id || "main") + " " + k);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[email-purge] failed", err);
+  }
+}
+// "Make a friend" no-shows: if one person signed up but their match hasn't
+// within 24 hours of being matched, close the room and tell the person who
+// showed up, so they can find a new friend instead of waiting forever.
+const FRIEND_NO_SHOW_MS = 24 * 60 * 60 * 1000;
+async function sweepFriendNoShows(): Promise<void> {
+  try {
+    const now = Date.now();
+    for (const id of await listRoomIds()) {
+      if (!id) continue;
+      let st: any;
+      try { st = await loadState(id); } catch { continue; }
+      if (st.origin !== "friend" || st.closed) continue;
+      const keys: PersonKey[] = ["mark", "nikita"];
+      const joined = keys.filter((k) => st.people && st.people[k]);
+      if (joined.length === 2) continue;
+      const missing = keys.filter((k) => !(st.people && st.people[k]));
+      const invAt = missing
+        .map((k) => st.pendingInvite && (st.pendingInvite as any)[k] && (st.pendingInvite as any)[k].at)
+        .filter(Boolean)
+        .map((a: string) => new Date(a).getTime());
+      const matchedAt = invAt.length ? Math.min(...invAt) : (st.createdAt ? new Date(st.createdAt).getTime() : NaN);
+      if (!isFinite(matchedAt) || now - matchedAt < FRIEND_NO_SHOW_MS) continue;
+      await saveState(id, (s) => { s.closed = true; s.closedBy = "no_show"; });
+      console.log("[friend] no-show closed room=" + id + " joined=" + joined.length + " waited=" + Math.round((now - matchedAt) / 3600000) + "h");
+      for (const k of joined) {
+        const sub = st.pushSubs && st.pushSubs[k];
+        if (!sub) continue;
+        sendPush(sub, {
+          title: "Your match didn't show up",
+          body: "Sorry about that. Tap to find a new friend on Nearune.",
+          tag: "friend-no-show",
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("[friend-no-show] failed", err);
+  }
+}
+setTimeout(sweepFriendNoShows, 3 * 60 * 1000);
+setInterval(sweepFriendNoShows, 60 * 60 * 1000);
+setTimeout(purgeStaleEmails, 6 * 60 * 1000);
+setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
+setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
+setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
+
+// ---- App-icon badge: always the true total, refreshed regularly ----------
+// A device can be in several rooms; the icon number is the sum of "people who
+// still need to answer today" across all of them. Scanned from storage (a
+// short cache keeps a burst of pushes from re-reading every room).
+let badgeScan: { at: number; byToken: Map<string, number> } | null = null;
+async function scanBadges(force = false): Promise<Map<string, number>> {
+  if (!force && badgeScan && Date.now() - badgeScan.at < 15000) return badgeScan.byToken;
+  const byToken = new Map<string, number>();
+  const ids = await listRoomIds();
+  for (const id of ids) {
+    try {
+      const st = await loadState(id);
+      if (st.closed || !st.pushSubs) continue;
+      const n = unansweredCount(st, todayKeyFor(st));
+      const seen = new Set<string>();
+      for (const who of ["mark", "nikita"] as PersonKey[]) {
+        const sub: any = st.pushSubs[who];
+        if (!sub || sub.kind !== "apns" || !sub.token || seen.has(sub.token)) continue;
+        seen.add(sub.token);
+        byToken.set(sub.token, (byToken.get(sub.token) || 0) + n);
+      }
+    } catch (e) {}
+  }
+  badgeScan = { at: Date.now(), byToken };
+  return byToken;
+}
+setBadgeResolver(async (token) => {
+  const m = await scanBadges();
+  return m.has(token) ? m.get(token)! : null;
+});
+// Every 10 minutes, push the right number to any device whose icon is out of
+// date (a missed push, a new day, an answer on another device).
+const lastBadgeSent = new Map<string, number>();
+async function badgeSweep() {
+  if (!anyPushConfigured) return;
+  try {
+    const m = await scanBadges(true);
+    for (const [token, n] of m) {
+      if (lastBadgeSent.get(token) === n) continue;
+      const r = await sendPush({ kind: "apns", token } as any, { title: "", body: "", badge: n, tag: "badge-sync", silent: true });
+      if (r.ok) lastBadgeSent.set(token, n);
+    }
+  } catch (err) {
+    console.error("[badge-sweep] failed", err);
+  }
+}
+setTimeout(badgeSweep, 60 * 1000);
+setInterval(badgeSweep, 10 * 60 * 1000);
+// Forget what was last sent every 6 hours so a badge that was cleared by hand
+// or never arrived gets corrected even when the number hasn't changed.
+setInterval(() => lastBadgeSent.clear(), 6 * 60 * 60 * 1000);
+
+startQaSchedule();
+startStatsSchedule();

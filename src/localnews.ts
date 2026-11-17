@@ -22,7 +22,9 @@ import { todayKeyPT } from "./util";
 import { recordClaude } from "./usage";
 import { readSideFile, writeSideFile } from "./storage";
 
-export type LocalStory = { headline: string; source: string; url: string; access?: "free" | "unverified" } | null;
+// near: set when the place itself had no story and this one is from a
+// nearby town (e.g. Dayton, OH for Piqua, OH); the headline names that town.
+export type LocalStory = { headline: string; source: string; url: string; access?: "free" | "unverified"; near?: string } | null;
 
 const newsCache = new Map<string, { at: number; value: LocalStory }>();
 const NEWS_TTL = 2 * 60 * 60 * 1000; // 2 hours — news doesn't need to be fresh-by-the-minute
@@ -204,6 +206,9 @@ async function checkArticleAccess(url: string): Promise<"free" | "paywalled" | "
 // storage (not just memory) because a restart used to empty it and the same
 // story came back; "daily" pins one story per place per day.
 const seenStories = new Map<string, string[]>();
+// Nearby towns per place (asked once, then saved): where to look when the
+// place itself has no quirky story.
+const nearbyCache = new Map<string, string[]>();
 const dailyPick = new Map<string, NonNullable<LocalStory>>();
 const NEWS_STATE_KEY = "localnews-state.json";
 let newsStateLoaded: Promise<void> | null = null;
@@ -217,6 +222,7 @@ function loadNewsState(): Promise<void> {
         const data = JSON.parse(raw);
         for (const [k, v] of Object.entries(data.seen || {})) seenStories.set(k, v as string[]);
         for (const [k, v] of Object.entries(data.daily || {})) dailyPick.set(k, v as NonNullable<LocalStory>);
+        for (const [k, v] of Object.entries(data.nearby || {})) if (Array.isArray(v)) nearbyCache.set(k, v as string[]);
       } catch (err: any) {
         console.log("[localnews] could not load saved state: " + (err && err.message ? err.message : String(err)));
       }
@@ -231,7 +237,7 @@ async function saveNewsState(): Promise<void> {
     const keep = [...dailyPick.keys()].sort().slice(-60);
     const daily: Record<string, unknown> = {};
     for (const k of keep) daily[k] = dailyPick.get(k);
-    await writeSideFile(NEWS_STATE_KEY, JSON.stringify({ seen: Object.fromEntries(seenStories), daily }));
+    await writeSideFile(NEWS_STATE_KEY, JSON.stringify({ seen: Object.fromEntries(seenStories), daily, nearby: Object.fromEntries(nearbyCache) }));
   } catch (err: any) {
     console.log("[localnews] could not save state: " + (err && err.message ? err.message : String(err)));
   }
@@ -310,6 +316,50 @@ export function namesPlace(story: { headline: string; source: string }, location
   return !loose || !st || stateInText(st, text);
 }
 
+// A story fits a place if it names the place, or (for a nearby pick) names
+// the nearby town it was found for.
+export function storyFits(story: { headline: string; source: string; near?: string }, location: string): boolean {
+  return namesPlace(story, location, false) || (!!story.near && namesPlace(story, story.near, false));
+}
+
+// Up to 3 nearby towns with their own local news, biggest or closest first,
+// as "City, ST" (US) or "City, Country". Asked of Claude once per place and
+// saved, since nearby towns don't change.
+async function nearbyPlaces(place: string): Promise<string[]> {
+  const hit = nearbyCache.get(place);
+  if (hit) return hit;
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 120,
+        system:
+          "You list nearby towns for a local news search. Given a place, reply with a JSON array of up to 3 real towns or cities within about 40 miles (65 km) of it " +
+          "that have their own local news coverage, closest or biggest first. Never repeat the place itself. Format each as \"City, ST\" for the US (two-letter state) " +
+          "or \"City, Country\" elsewhere. Reply with only the JSON array.",
+        messages: [{ role: "user", content: place }],
+      }),
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    recordClaude("news", data);
+    const text = String(data?.content?.[0]?.text || "");
+    const m = text.match(/\[[\s\S]*\]/);
+    const arr = m ? JSON.parse(m[0]) : [];
+    const self = place.split(",")[0].trim().toLowerCase();
+    const list = (Array.isArray(arr) ? arr : [])
+      .filter((x: any) => typeof x === "string" && x.includes(",") && x.length < 60 && x.split(",")[0].trim().toLowerCase() !== self)
+      .slice(0, 3);
+    nearbyCache.set(place, list);
+    console.log("[localnews] nearby for " + place + ": " + (list.join("; ") || "none"));
+    return list;
+  } catch { return []; }
+}
+
 // Excluded so a story merely mentioning "event" or "festival" in passing
 // (a shooting AT an event, a crash NEAR a festival) can't sneak through —
 // Google News search supports "-" exclusion the same way its web search does.
@@ -337,7 +387,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   const theme = todaysTheme();
   const dayKey = todayKeyPT() + "|" + q;
   const pinned = dailyPick.get(dayKey);
-  if (pinned && namesPlace(pinned, q, false)) return pinned;
+  if (pinned && storyFits(pinned, q)) return pinned;
   if (pinned) {
     // A pin saved before the place filter (or from a bad search) must still name the place.
     console.log("[localnews] dropped pinned story for " + q + ": place not named");
@@ -347,7 +397,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   // across the app's day boundary and serve yesterday's story.
   const cacheKey = todayKeyPT() + "|" + theme.name + "|" + q;
   const cached = newsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < NEWS_TTL && (!cached.value || namesPlace(cached.value, q, false))) return cached.value;
+  if (cached && Date.now() - cached.at < NEWS_TTL && (!cached.value || storyFits(cached.value, q))) return cached.value;
   const seen = seenStories.get(q) || [];
   let value: LocalStory = null;
   const idx = THEMES.findIndex((t) => t.name === theme.name);
@@ -394,9 +444,31 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
       break;
     }
   }
+  // Nothing named the place itself: try a few nearby towns (the story then
+  // says "from Dayton" in the app). Same safety rules, looser humor bar.
+  if (!value) {
+    const near = await nearbyPlaces(q);
+    for (let ni = 0; ni < near.length && !value; ni++) {
+      const n = near[ni];
+      const nCity = n.split(",")[0].trim();
+      const nRegion = n.split(",").slice(1).join(" ").trim();
+      const nq = (nRegion ? '"' + nCity + '" ' + nRegion : '"' + nCity + '"') + " (viral OR quirky OR unusual OR funny OR bizarre OR heartwarming OR adorable OR festival OR tradition) " + EXCLUDE_TERMS + " when:30d";
+      let pool = (await fetchCandidates(nq))
+        .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, n, true));
+      for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
+        const pick = Bun.env.ANTHROPIC_API_KEY ? await pickQuirkiest(n, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), false) : 0;
+        if (pick === null) break;
+        const cand = pool[pick];
+        const access = await checkArticleAccess(cand.url);
+        if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }
+        value = { ...cand, access, near: n };
+        tierNo = tiers.length + 1 + ni;
+      }
+    }
+  }
   console.log(
     "[localnews] " + q + " (theme=" + theme.name + ", tier=" + (value ? tierNo : 0) + ") -> " +
-    (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" : "no on-theme story found")
+    (value ? "ok: " + JSON.stringify(value.headline) + " [" + value.source + "]" + (value.near ? " (nearby: " + value.near + ")" : "") : "no on-theme story found")
   );
   if (value) {
     seenStories.set(q, [...seen, value.headline].slice(-60));
@@ -406,7 +478,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
   }
   const throttled = Date.now() - gnThrottledAt < 2 * 60 * 1000;
   const good = lastGood.get(q);
-  if (!value && good && namesPlace(good, q, false)) {
+  if (!value && good && storyFits(good, q)) {
     // Fresh search found nothing (or was throttled): keep showing the last good story.
     value = good;
     console.log("[localnews] " + q + " -> reusing last good story" + (throttled ? " (Google throttled)" : ""));

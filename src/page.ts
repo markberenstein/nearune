@@ -4425,7 +4425,10 @@ const RAW = String.raw`<!doctype html>
     if (!story || !story.headline) return null;
     var shownName = worldLabel(worldKey());
     var line = h("p", { class: "news-line" });
-    line.appendChild(document.createTextNode(tTemplate("🤪 Quirky story near {name}: ", { name: shownName })));
+    // A story from a nearby town says which one ("from Dayton").
+    line.appendChild(document.createTextNode(story.near
+      ? tTemplate("🤪 Quirky story near {name}, from {town}: ", { name: shownName, town: String(story.near).split(",")[0] })
+      : tTemplate("🤪 Quirky story near {name}: ", { name: shownName })));
     line.appendChild(
       h("a", { class: "news-link", href: story.url || "#", target: "_blank", rel: "noopener noreferrer", text: story.headline })
     );

@@ -1,4 +1,4 @@
-import { topLocalStory, namesPlace } from "./localnews";
+import { topLocalStory, storyFits } from "./localnews";
 // Admin snapshot: room counts, city-level user locations (no names), and
 // ElevenLabs usage. Logged as one "[stats] {json}" line at 12:00 and 00:00
 // Pacific (and shortly after boot); a scheduled task reads the latest line
@@ -186,11 +186,11 @@ export async function computeStats() {
     for (const loc of [...newsLocs].slice(0, 8)) {
       let st: any = null;
       try { st = await topLocalStory(loc); } catch {}
-      const onPlace = !!st && namesPlace(st, loc, false);
-      nitems.push({ label: loc, ok: onPlace, note: !st ? "no story found today" : !onPlace ? "story does not name " + loc.split(",")[0].trim() + ": " + String(st.headline).slice(0, 80) : String(st.headline).slice(0, 80) + (st.source ? " (" + st.source + ")" : "") + (st.access === "free" ? " - opens free" : " - link not verified") });
+      const onPlace = !!st && storyFits(st, loc);
+      nitems.push({ label: loc, ok: onPlace, note: !st ? "no story found today" : !onPlace ? "story does not name " + loc.split(",")[0].trim() + ": " + String(st.headline).slice(0, 80) : (st.near ? "nearby " + st.near + ": " : "") + String(st.headline).slice(0, 80) + (st.source ? " (" + st.source + ")" : "") + (st.access === "free" ? " - opens free" : " - link not verified") });
     }
     const nbad = nitems.filter((i) => !i.ok);
-    qa.checks.push({ name: "Quirky local stories (every active place)", ok: nbad.length === 0, items: nitems, detail: nitems.length === 0 ? "no active places" : nbad.length ? nbad.map((i) => i.label).join("; ") + ": no story today, or the story does not name the city" : nitems.length + " places, all have a story" });
+    qa.checks.push({ name: "Quirky local stories (every active place)", ok: nbad.length === 0, items: nitems, detail: nitems.length === 0 ? "no active places" : nbad.length ? nbad.map((i) => i.label).join("; ") + ": no story today (not even from a nearby town), or the story does not name the city" : nitems.length + " places, all have a story" });
     if (nbad.length) { qa.ok = false; qa.failures.push("Local stories: no story for " + nbad.map((i) => i.label).join("; ")); }
   }
   return {

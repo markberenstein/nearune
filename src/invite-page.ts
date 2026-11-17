@@ -42,8 +42,9 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
 .name{font-size:2.1rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
 .sub{color:var(--muted);font-size:1.02rem;margin:0 0 26px}
 .get{font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
-.badge{display:inline-block;line-height:0}
-.badge img{height:56px;width:auto}
+.badges{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.badge,.badge2{display:inline-block;line-height:0}
+.badge img,.badge2 img{height:48px;width:auto}
 .web{display:inline-block;margin-top:20px;color:var(--muted);font-size:.9rem;text-decoration:underline}
 .code{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}
 .code b{display:block;color:var(--ink);font-size:1.15rem;margin-top:2px;word-break:break-all}
@@ -55,7 +56,10 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
   <h1 class="name">Nearune</h1>
   <p class="sub">${who} invited you</p>
   <p class="get">Download the app</p>
-  <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
+  <div class="badges">
+    <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
+    <a class="badge2" href="https://play.google.com/store/apps/details?id=com.nearune.app" aria-label="Get Nearune on Google Play"><img src="/google-play-badge.svg" alt="Get it on Google Play"></a>
+  </div>
   <p class="sub" style="margin:14px 0 0;font-size:.9rem">After it installs, open Nearune and it takes you straight to ${who === "Someone" ? "your invite" : who + "'s invite"}.</p>
   <div><a class="web" href="${dest}">No iPhone? Continue in your browser</a></div>
   ${opts.roomId ? '<div class="code">Room code<b>' + esc(opts.roomId) + "</b></div>" : ""}
@@ -79,8 +83,8 @@ try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capaci
       try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: d, step: step, platform: "web" }) }).catch(function () {}); } catch (e) {}
     };
     send("open"); send("invite_opened");
-    var b = document.querySelector("a.badge");
-    if (b) b.addEventListener("click", function () {
+    var bs = document.querySelectorAll("a.badge, a.badge2");
+    for (var bi = 0; bi < bs.length; bi++) bs[bi].addEventListener("click", function () {
       send("invite_to_store");
       // Hold this invite so the app opens straight to it after install.
       try { fetch("/api/deferred-invite", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ dest: DEST }) }).catch(function () {}); } catch (e) {}

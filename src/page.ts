@@ -1924,18 +1924,52 @@ const RAW = String.raw`<!doctype html>
     personVoiceCache[authorKey] = result;
     return result;
   }
-  function speak(text, lang, authorKey) {
-    if (!canSpeak(lang) || !text) return;
+  // iPhones mute the built-in speech voice when the ring/silent switch is
+  // on, while a playing <audio> element is not muted. Playing a short,
+  // looping silent clip (started inside the tap) moves the phone into
+  // "media playback", so the speech voice is heard even on silent. It
+  // stops as soon as the speech ends.
+  var silentKeepAlive = null;
+  function silentWavUrl() {
+    var n = 4000, buf = new ArrayBuffer(44 + n), v = new DataView(buf), i;
+    function str(o, t) { for (var k = 0; k < t.length; k++) v.setUint8(o + k, t.charCodeAt(k)); }
+    str(0, "RIFF"); v.setUint32(4, 36 + n, true); str(8, "WAVE"); str(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    str(36, "data"); v.setUint32(40, n, true);
+    for (i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+  function startSilentKeepAlive() {
     try {
-      window.speechSynthesis.cancel(); // stop anything already playing first
+      if (!silentKeepAlive) { silentKeepAlive = new Audio(silentWavUrl()); silentKeepAlive.loop = true; }
+      var p = silentKeepAlive.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  }
+  function stopSilentKeepAlive() {
+    try { if (silentKeepAlive) silentKeepAlive.pause(); } catch (e) {}
+  }
+  function speak(text, lang, authorKey) {
+    if (!canSpeak(lang) || !text) { stopSilentKeepAlive(); return; }
+    try {
+      var ss = window.speechSynthesis;
+      // Only cancel when something is actually playing: on iOS, speak()
+      // right after a needless cancel() is sometimes silently dropped.
+      if (ss.speaking || ss.pending) ss.cancel();
       var u = new SpeechSynthesisUtterance(text);
+      u.onend = stopSilentKeepAlive;
+      u.onerror = stopSilentKeepAlive;
       // Until someone records a voice sample, always use the device's own
       // default voice for the language. A hand-picked "gendered" voice from the
       // name heuristic above could land on iOS novelty voices (Fred, Albert)
       // that sound harsh, so personVoice() is intentionally not used here.
       u.lang = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
-      window.speechSynthesis.speak(u);
-    } catch (e) {}
+      if (ss.paused) ss.resume();
+      ss.speak(u);
+      // Safety net in case onend never fires.
+      setTimeout(stopSilentKeepAlive, Math.min(120000, 4000 + text.length * 120));
+    } catch (e) { stopSilentKeepAlive(); }
   }
   function personHasVoice(key) {
     var p = state.people && state.people[key];
@@ -2077,6 +2111,8 @@ const RAW = String.raw`<!doctype html>
         e.preventDefault();
         e.stopPropagation();
         var unlockedAudio = null;
+        // Phone voice: start the silent clip inside the tap (see speak()).
+        if (!hasClone) startSilentKeepAlive();
         if (hasClone) {
           // Fire a play() attempt synchronously, right in the tap handler,
           // on an element with no audio loaded yet — this is purely to
@@ -2103,9 +2139,10 @@ const RAW = String.raw`<!doctype html>
     var label = hasClone
       ? (authorKey === viewerKey ? t("Listen in your voice") : tTemplate("Listen in {name}'s voice", { name: personName(authorKey) }))
       : t("Listen");
+    // Just the speaker icon; the words stay as its accessible label.
     var btn = speakButton(text, lang || "en", label, authorKey);
     if (!btn) return null;
-    return h("div", { class: "listen-inline" }, [btn, h("span", { text: label })]);
+    return h("div", { class: "listen-inline" }, [btn]);
   }
   function translateBlock(text, target, alt, authorKey, listenSameLang) {
     if (!text || !target || target === alt) {

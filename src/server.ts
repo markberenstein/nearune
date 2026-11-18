@@ -1823,9 +1823,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const who = body && body.who;
       const dataUrl = body && body.dataUrl;
       if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
-      const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]+);base64,(.+)$/);
+      // Browsers report recordings with codec details, like
+      // "data:audio/webm;codecs=opus;base64,..." — allow those, and keep
+      // just the container type.
+      const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]*)(?:;[^;,]*)*;base64,([\s\S]+)$/);
       if (!match) return json({ error: "invalid" }, { status: 400 });
-      const mimeType = match[1];
+      const mimeType = match[1] || "application/octet-stream";
       let bytes: Uint8Array;
       try {
         bytes = Buffer.from(match[2], "base64");

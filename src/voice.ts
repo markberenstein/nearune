@@ -19,7 +19,7 @@ export async function cloneVoice(sampleBytes: Uint8Array, mimeType: string, labe
   const key = Bun.env.ELEVENLABS_API_KEY;
   if (!key) return { ok: false, error: "no_key" };
   try {
-    const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : mimeType.includes("wav") ? "wav" : "webm";
+    const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("m4a") ? "m4a" : mimeType.includes("mpeg") || mimeType.includes("mp3") ? "mp3" : mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : mimeType.includes("wav") ? "wav" : "webm";
     const form = new FormData();
     form.append("name", label);
     form.append("files", new Blob([sampleBytes], { type: mimeType }), "sample." + ext);

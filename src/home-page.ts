@@ -231,7 +231,11 @@ export function buildHomePage(): string {
         tile.style.background = roomSky(b.w);
         var todo = todoCount(b.s, sme);
         tile.appendChild(todo ? todoBadge(todo) : el("span", { class: "dot live" }));
-        tile.appendChild(el("div", { class: "who", text: String(sp.name || "").split(" ")[0] + (sp.location ? " · " + String(sp.location).split(",")[0] : "") }));
+        // While they're on a trip, show where they are now, with ✈️ (the
+        // sky, weather and time on the tile already follow the trip).
+        var away = travelOn(sp) && sp.travelLocation;
+        var where = away ? "✈️ " + String(sp.travelLocation).split(",")[0] : (sp.location ? String(sp.location).split(",")[0] : "");
+        tile.appendChild(el("div", { class: "who", text: String(sp.name || "").split(" ")[0] + (where ? " · " + where : "") }));
         tile.appendChild(el("div", { class: "time", text: localTime(travelOn(sp) && sp.travelTz ? sp.travelTz : sp.tz) }));
         var wtemp = b.w.unit === "F" ? b.w.tempF + "°F" : b.w.tempC + "°C";
         tile.appendChild(el("div", { class: "wx", text: (b.w.theme.label || "") + " · " + wtemp }));

@@ -12,7 +12,7 @@ import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip, trackRef } from "./music";
 import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
-import { elevenLabsUsage, voiceSelfTest, parseVoiceSample } from "./voice";
+import { elevenLabsUsage, voiceSelfTest, parseVoiceSample, voiceWritePermissionTest } from "./voice";
 import { claudeUsageSummary } from "./usage";
 
 // Railway project cost, via Railway's GraphQL API. Needs RAILWAY_API_TOKEN (an account token). Returns null when unset or on any failure.
@@ -227,8 +227,12 @@ export async function computeStats(full = true) {
     ritems.push({ label: "Too-short recording", ok: !tiny.ok && tiny.error === "too_short", note: tiny.ok ? "wrongly accepted" : "rejected: " + tiny.error });
     const junk = parseVoiceSample("not a recording");
     ritems.push({ label: "Garbage upload", ok: !junk.ok, note: junk.ok ? "wrongly accepted" : "rejected: " + junk.error });
+    // And ElevenLabs will actually let us create the voice.
+    let perm: { ok: boolean; detail: string };
+    try { perm = await voiceWritePermissionTest(); } catch (e: any) { perm = { ok: false, detail: String(e?.message || e).slice(0, 120) }; }
+    ritems.push({ label: "ElevenLabs key can create voices", ok: perm.ok, note: perm.detail });
     const rbad = ritems.filter((i) => !i.ok);
-    qa.checks.push({ name: "Voice recording (save path)", ok: rbad.length === 0, items: ritems, detail: rbad.length ? rbad.map((i) => i.label + ": " + i.note).join("; ") : formats.length + " recording formats accept; short and garbage uploads rejected" });
+    qa.checks.push({ name: "Voice recording (save path)", ok: rbad.length === 0, items: ritems, detail: rbad.length ? rbad.map((i) => i.label + ": " + i.note).join("; ") : formats.length + " recording formats accept; short and garbage uploads rejected; key can create voices" });
     if (rbad.length) { qa.ok = false; qa.failures.push("Voice recording: " + rbad.map((i) => i.label + ": " + i.note).join("; ")); }
   }
   // Quirky local story: every place with an active couple must come back with a story today.

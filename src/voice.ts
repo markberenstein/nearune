@@ -152,6 +152,24 @@ let lastSynthError = "";
 // Health check for the twice-daily QA: speaks one short word in a real cloned
 // voice and reports exactly why it failed if it did. (A few characters, so it
 // costs next to nothing.)
+// Can the API key create voices? Asks ElevenLabs to delete a voice id that
+// doesn't exist: a key without voice-write permission gets refused (401),
+// a working key just gets "not found". Creates nothing, uses no voice slot.
+export async function voiceWritePermissionTest(): Promise<{ ok: boolean; detail: string }> {
+  const key = Bun.env.ELEVENLABS_API_KEY;
+  if (!key) return { ok: false, detail: "no ElevenLabs key set" };
+  try {
+    const res = await fetch(ELEVENLABS_BASE + "/voices/nearuneqaprobe0000000000", { method: "DELETE", headers: { "xi-api-key": key } });
+    let d: any = null;
+    try { d = await res.json(); } catch {}
+    const msg = (d && d.detail && (d.detail.message || d.detail.status)) || "";
+    if (res.status === 401 || res.status === 403) return { ok: false, detail: "key can't create voices: " + (msg || "HTTP " + res.status) };
+    return { ok: true, detail: "key has voice-write permission (probe got HTTP " + res.status + ")" };
+  } catch (e: any) {
+    return { ok: false, detail: "couldn't reach ElevenLabs: " + String(e?.message || e).slice(0, 80) };
+  }
+}
+
 export async function voiceSelfTest(voiceId: string | null): Promise<{ ok: boolean; detail: string }> {
   const key = Bun.env.ELEVENLABS_API_KEY;
   if (!key) return { ok: false, detail: "ELEVENLABS_API_KEY is not set" };

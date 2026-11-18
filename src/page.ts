@@ -261,6 +261,8 @@ const RAW = String.raw`<!doctype html>
   .answer-text { font-size: 0.98rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
   .translate-inline { display: block; margin-top: 6px; font-size: 0.88rem; font-style: italic; color: var(--ink-soft); border-left: 2px solid var(--line); padding-left: 8px; }
   .translate-inline-row { display: flex; align-items: baseline; gap: 6px; }
+  .listen-inline { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.85rem; color: var(--ink-soft); }
+  body.weather-active .listen-inline { color: inherit; opacity: 0.85; }
   .speak-btn { background: none; border: none; color: inherit; opacity: 0.6; cursor: pointer; padding: 0; line-height: 1; font-size: 0.92rem; flex: none; }
   .speak-btn:hover { opacity: 1; }
   .speak-btn:disabled { opacity: 0.3; cursor: default; }
@@ -2091,8 +2093,25 @@ const RAW = String.raw`<!doctype html>
     }, [document.createTextNode("🔊")]);
   }
 
-  function translateBlock(text, target, alt, authorKey) {
-    if (!text || !target || target === alt) return h("div", { class: "translate-inline", hidden: "true" });
+  // Answers and replies in a room where both people share a language get no
+  // translation line, so no 🔊 either. listenBlock gives them one: it plays
+  // the writer's own recorded voice, or the phone's built-in voice until
+  // they record one.
+  function listenBlock(text, lang, authorKey) {
+    if (!text || !authorKey) return null;
+    var hasClone = personHasVoice(authorKey);
+    var label = hasClone
+      ? (authorKey === viewerKey ? t("Listen in your voice") : tTemplate("Listen in {name}'s voice", { name: personName(authorKey) }))
+      : t("Listen");
+    var btn = speakButton(text, lang || "en", label, authorKey);
+    if (!btn) return null;
+    return h("div", { class: "listen-inline" }, [btn, h("span", { text: label })]);
+  }
+  function translateBlock(text, target, alt, authorKey, listenSameLang) {
+    if (!text || !target || target === alt) {
+      var lb = listenSameLang ? listenBlock(text, alt || target, authorKey) : null;
+      return lb || h("div", { class: "translate-inline", hidden: "true" });
+    }
     var key = target + "|" + (alt || "") + "::" + text;
     scheduleTranslate(text, target, alt);
     var val = translationCache[key];
@@ -2708,7 +2727,7 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
-      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who, true));
       if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
       wrap.appendChild(cDiv);
     });
@@ -2987,7 +3006,7 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
-      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who, true));
       if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
       wrap.appendChild(cDiv);
     });
@@ -4849,7 +4868,7 @@ const RAW = String.raw`<!doctype html>
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ who: key, dataUrl: reader.result }),
       })
-        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, status: res.status, body: body || {} }; }); })
         .then(function (result) {
           voiceRecordState.uploading = false;
           if (result.ok && !(result.body && result.body.error)) nrTrack("voice_recorded");
@@ -4861,7 +4880,9 @@ const RAW = String.raw`<!doctype html>
               ? t("That's a lot of recordings for one day — try again tomorrow.")
               : verr === "too_large"
               ? t("That recording is too long — about 30 seconds is plenty.")
-              : t("Couldn't save that voice sample — try recording again somewhere quieter.");
+              : result.status >= 500
+              ? t("Voice saving isn't working on our end right now. Please try again later.")
+              : t("Couldn't read that recording — please try again.");
             try { fetch(RP + "/api/client-error", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: "voice", msg: "voice-sample failed: " + (verr || "unknown") + " type=" + (blob && blob.type) + " size=" + (blob && blob.size), who: key }) }).catch(function () {}); } catch (e) {}
             suppressPollUntil = 0;
             renderApp();
@@ -5059,7 +5080,7 @@ const RAW = String.raw`<!doctype html>
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ who: key, dataUrl: dataUrl, caption: caption || "" }),
       })
-        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, status: res.status, body: body || {} }; }); })
         .then(function (result) {
           photoUploadState.uploading = false;
           photoCaptionDraft = null;
@@ -5360,7 +5381,7 @@ const RAW = String.raw`<!doctype html>
           bubble.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You've blocked {name}.", { name: personName(key) }) }));
         } else {
           bubble.appendChild(h("p", { class: "answer-text", text: entry[key].text }));
-          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key));
+          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key, true));
           if (key !== viewerKey) bubble.appendChild(reportLink("answer"));
         }
         reveal.appendChild(bubble);
@@ -5373,7 +5394,7 @@ const RAW = String.raw`<!doctype html>
       } else {
         var mineWrap = h("div", { class: "own-answer-visible" });
         mineWrap.appendChild(h("p", { class: "answer-text", text: mine }));
-        mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey), viewerKey));
+        mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey), viewerKey, true));
         var editBtn2 = h("button", { class: "edit-btn", text: t("Edit your answer") });
         editBtn2.addEventListener("click", function () { startEdit(today); });
         mineWrap.appendChild(editBtn2);
@@ -5453,7 +5474,7 @@ const RAW = String.raw`<!doctype html>
               line.appendChild(ebtn);
             }
             entryDiv.appendChild(line);
-            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey), pKey));
+            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey), pKey, true));
           });
           entryDiv.appendChild(commentsBlock(key));
           list.appendChild(entryDiv);

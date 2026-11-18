@@ -77,6 +77,17 @@ export function localPhotoPath(roomId: string, who: PersonKey): string {
   return roomId ? `./local-photo-${roomId}-${who}.jpg` : `./local-photo-${who}.jpg`;
 }
 
+// A shared video (one per person, like the photo). The photo slot keeps a
+// still frame from it for the thumbnail.
+export function videoKey(roomId: string, who: PersonKey): string {
+  roomId = canonRoom(roomId);
+  return roomId ? `rooms/${roomId}/videos/${who}` : `videos/${who}`;
+}
+export function localVideoPath(roomId: string, who: PersonKey): string {
+  roomId = canonRoom(roomId);
+  return roomId ? `./local-video-${roomId}-${who}` : `./local-video-${who}`;
+}
+
 export const useS3 = !!(Bun.env.S3_BUCKET && Bun.env.S3_ACCESS_KEY_ID);
 
 export const s3 = useS3
@@ -234,6 +245,10 @@ export async function deleteRoom(roomId: string): Promise<void> {
     try {
       if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
       else await Bun.file(localPhotoPath(roomId, who)).delete();
+    } catch {}
+    try {
+      if (useS3 && s3) await s3.file(videoKey(roomId, who)).delete();
+      else await Bun.file(localVideoPath(roomId, who)).delete();
     } catch {}
   }
   try {

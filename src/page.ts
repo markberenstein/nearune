@@ -508,6 +508,16 @@ const RAW = String.raw`<!doctype html>
   .photo-zoom-overlay .photo-zoom-wrap .shared-photo { width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; background: transparent; }
   .photo-zoom-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px; width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 20px; z-index: 2; cursor: pointer; }
   .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
+  .video-thumb-wrap { position: relative; display: inline-block; flex: none; line-height: 0; cursor: pointer; }
+  .video-thumb-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 32px; height: 32px; border-radius: 16px; background: rgba(0,0,0,0.55); color: #fff; font-size: 14px; line-height: 32px; text-align: center; pointer-events: none; }
+  .video-wrap { background: #000; }
+  .link-row { margin: 8px 0 12px; }
+  .link-open { display: inline-block; margin-top: 4px; font-weight: 600; word-break: break-all; color: inherit; text-decoration: underline; }
+  .video-wrap .shared-video { background: #000; }
+  .video-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 32px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 26px; cursor: pointer; }
+  .video-mute { position: absolute; right: 10px; bottom: 18px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 18px; cursor: pointer; }
+  .video-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: rgba(255,255,255,0.25); cursor: pointer; }
+  .video-bar-fill { height: 100%; width: 0; background: #fff; }
   [hidden] { display: none !important; }
 
   /* ===== Live-sky look (Nov 2026 redesign) =====
@@ -1347,7 +1357,7 @@ const RAW = String.raw`<!doctype html>
   var photoCaptionDraft = null;
   var pendingPhotoFile = null;
   var pendingPhotoUrl = "";
-  var photoUploadState = { uploading: false, error: "" };
+  var photoUploadState = { uploading: false, error: "", progress: -1, video: false };
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -4364,6 +4374,7 @@ const RAW = String.raw`<!doctype html>
       addPart(app, "music", musicLineBlock);
       addPart(app, "movies", moviesLineBlock);
       addPart(app, "photo", photoCardBlock);
+      addPart(app, "links", linkCardBlock);
     } else if (activeTab === "never") {
       addPart(app, "nhie", nhieSection);
     } else {
@@ -5193,29 +5204,281 @@ const RAW = String.raw`<!doctype html>
   // viewport note up top), so this mirrors the puzzle's handler. Pinching, or
   // double-tapping, lifts the photo into a full-screen overlay where you can
   // pan; the close button or zooming back out returns it inline.
+  // Shares a video in the photo slot. Checks length (60s) and size (60MB),
+  // takes 3 still frames (start, middle, end) for the thumbnail and the
+  // safety check, then uploads with a progress readout.
+  var VIDEO_MAX_SECONDS = 60;
+  var VIDEO_MAX_BYTES = 60 * 1024 * 1024;
+  function videoFrames(file, done) {
+    var url = "";
+    try { url = URL.createObjectURL(file); } catch (e) { done(null, "unreadable"); return; }
+    var v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.preload = "auto";
+    var frames = [], times = [], idx = 0, finished = false;
+    var timer = setTimeout(function () { finish(frames.length ? null : "unreadable"); }, 15000);
+    function finish(err) {
+      if (finished) return; finished = true; clearTimeout(timer);
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      if (err) done(null, err); else done({ frames: frames, duration: v.duration || 0 }, "");
+    }
+    function grab() {
+      try {
+        var w = v.videoWidth, hh = v.videoHeight;
+        if (!w || !hh) { finish("unreadable"); return; }
+        var scale = Math.min(1, 1280 / Math.max(w, hh));
+        var c = document.createElement("canvas");
+        c.width = Math.round(w * scale); c.height = Math.round(hh * scale);
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        c.toBlob(function (b) {
+          if (b) frames.push(b);
+          idx++;
+          if (idx < times.length) v.currentTime = times[idx]; else finish(frames.length ? "" : "unreadable");
+        }, "image/jpeg", 0.82);
+      } catch (e) { finish("unreadable"); }
+    }
+    v.addEventListener("seeked", grab);
+    v.addEventListener("error", function () { finish("unreadable"); });
+    v.addEventListener("loadedmetadata", function () {
+      var d = v.duration;
+      if (!isFinite(d) || d <= 0) d = 1;
+      if (d > VIDEO_MAX_SECONDS + 1) { finish("too_long"); return; }
+      times = [Math.min(0.5, d / 4), d / 2, Math.max(0, d - 0.5)];
+      v.currentTime = times[0];
+    });
+    v.src = url;
+    try { v.load(); } catch (e) {}
+  }
+  function uploadVideo(key, file, caption) {
+    photoUploadState.error = "";
+    if (file.size > VIDEO_MAX_BYTES) {
+      photoUploadState.error = t("That video is too big. Please share one under a minute long.");
+      renderApp();
+      return;
+    }
+    photoUploadState.uploading = true;
+    photoUploadState.video = true;
+    photoUploadState.progress = 0;
+    renderApp();
+    videoFrames(file, function (res, err) {
+      if (!res) {
+        photoUploadState.uploading = false;
+        photoUploadState.error = err === "too_long"
+          ? t("That video is longer than a minute. Please trim it or choose a shorter one.")
+          : t("Couldn't open that video. Please try a different one.");
+        renderApp();
+        return;
+      }
+      var fd = new FormData();
+      fd.append("who", key);
+      fd.append("caption", caption || "");
+      fd.append("video", file, file.name || "video");
+      for (var i = 0; i < res.frames.length; i++) fd.append("frame", res.frames[i], "frame" + i + ".jpg");
+      suppressPollUntil = Date.now() + 120000;
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", RP + "/api/video-upload");
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+          var pct = Math.round((e.loaded / e.total) * 100);
+          if (pct !== photoUploadState.progress) {
+            photoUploadState.progress = pct;
+            var st = document.getElementById("video-upload-status");
+            if (st) st.textContent = tTemplate("Sharing your video… {n}%", { n: pct });
+          }
+        }
+      };
+      xhr.onload = function () {
+        var body = {};
+        try { body = JSON.parse(xhr.responseText) || {}; } catch (e) {}
+        photoUploadState.uploading = false;
+        photoUploadState.video = false;
+        photoUploadState.progress = -1;
+        photoCaptionDraft = null;
+        if (xhr.status < 200 || xhr.status >= 300 || body.error) {
+          photoUploadState.error = body.error === "inappropriate"
+            ? t("That video or comment can't be shared here. Please choose something else.")
+            : body.error === "too_large"
+            ? t("That video is too big. Please share one under a minute long.")
+            : body.error === "moderation_unavailable"
+            ? t("Couldn't check that video right now — please try again in a minute.")
+            : t("Couldn't share that video — try again.");
+          suppressPollUntil = 0;
+          renderApp();
+          return;
+        }
+        state = body;
+        online = true;
+        suppressPollUntil = Date.now() + 3000;
+        renderApp();
+      };
+      xhr.onerror = function () {
+        photoUploadState.uploading = false;
+        photoUploadState.video = false;
+        photoUploadState.progress = -1;
+        photoUploadState.error = t("Upload failed — check your connection and try again.");
+        suppressPollUntil = 0;
+        renderApp();
+      };
+      xhr.send(fd);
+    });
+  }
+  // A shared video with simple custom controls (tap to play or pause, a
+  // mute button, a progress bar you can tap to jump). No native controls,
+  // so two-finger pinch-to-zoom isn't swallowed by them (house standard).
+  // The page redraws every few seconds (new answers, weather). Reusing the
+  // same video element across redraws keeps a playing video playing (the
+  // element is moved into the new layout instead of being rebuilt).
+  var liveVideoWraps = {};
+  function zoomableVideo(src, poster, alt) {
+    if (liveVideoWraps[src]) return liveVideoWraps[src];
+    for (var oldSrc in liveVideoWraps) {
+      if (oldSrc.split("&v=")[0] === src.split("&v=")[0]) delete liveVideoWraps[oldSrc];
+    }
+    var wrap = h("div", { class: "photo-zoom-wrap video-wrap" });
+    liveVideoWraps[src] = wrap;
+    var v = h("video", { class: "shared-photo shared-video zoomable", src: src, poster: poster, preload: "metadata", "aria-label": alt });
+    v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
+    var playBtn = h("button", { class: "video-play", type: "button", "aria-label": t("Play"), text: "▶" });
+    var muteBtn = h("button", { class: "video-mute", type: "button", "aria-label": t("Sound on or off"), text: "🔊" });
+    var bar = h("div", { class: "video-bar" });
+    var fill = h("div", { class: "video-bar-fill" });
+    bar.appendChild(fill);
+    function toggle() {
+      if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause();
+    }
+    v.addEventListener("click", toggle);
+    playBtn.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
+    v.addEventListener("play", function () { playBtn.hidden = true; });
+    v.addEventListener("pause", function () { playBtn.hidden = false; });
+    v.addEventListener("ended", function () { playBtn.hidden = false; });
+    v.addEventListener("timeupdate", function () { if (v.duration) fill.style.width = (100 * v.currentTime / v.duration) + "%"; });
+    muteBtn.addEventListener("click", function (e) { e.stopPropagation(); v.muted = !v.muted; muteBtn.textContent = v.muted ? "🔇" : "🔊"; });
+    bar.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var r = bar.getBoundingClientRect();
+      if (v.duration && r.width) v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * v.duration;
+    });
+    wrap.appendChild(v);
+    wrap.appendChild(playBtn);
+    wrap.appendChild(muteBtn);
+    wrap.appendChild(bar);
+    return wrap;
+  }
   function zoomablePhoto(src, alt) {
     var wrap = h("div", { class: "photo-zoom-wrap" });
     wrap.appendChild(h("img", { class: "shared-photo zoomable", src: src, alt: alt }));
     return wrap;
   }
   function photoRow(personKey, label, photoAt, caption, expanded, onToggle, canReport) {
+    var isVideo = !!(state.people && state.people[personKey] && state.people[personKey].photoKind === "video");
     var box = h("div", {});
     var row = h("div", { class: "photo-row" });
-    var img = h("img", { class: "photo-thumb zoomable", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label });
+    var thumbSrc = RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt);
+    var img = h("img", { class: "photo-thumb zoomable", src: thumbSrc, alt: label });
     img.addEventListener("click", onToggle);
-    row.appendChild(img);
+    if (isVideo) {
+      var tw = h("span", { class: "video-thumb-wrap" }, [img, h("span", { class: "video-thumb-play", "aria-hidden": "true", text: "▶" })]);
+      tw.addEventListener("click", function (e) { if (e.target !== img) onToggle(); });
+      row.appendChild(tw);
+    } else {
+      row.appendChild(img);
+    }
     var meta = h("div", { class: "photo-meta" });
-    meta.appendChild(h("div", { class: "photo-who", text: "📷 " + label }));
+    meta.appendChild(h("div", { class: "photo-who", text: (isVideo ? "🎬 " : "📷 ") + label }));
     if (caption) {
       meta.appendChild(h("p", { class: "photo-caption", text: caption }));
       meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey, true));
     }
-    meta.appendChild(h("p", { class: "photo-hint", text: expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it") }));
+    meta.appendChild(h("p", { class: "photo-hint", text: isVideo
+      ? (expanded ? t("Tap the small picture to close the video") : t("Tap to watch the video"))
+      : (expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it")) }));
     if (canReport) meta.appendChild(reportLink("photo"));
     row.appendChild(meta);
     box.appendChild(row);
-    if (expanded) box.appendChild(zoomablePhoto(RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), label));
+    if (expanded) {
+      if (isVideo) box.appendChild(zoomableVideo(RP + "/api/video?who=" + personKey + "&v=" + encodeURIComponent(photoAt + "." + (state.people[personKey].videoV || 0)), thumbSrc, label));
+      else box.appendChild(zoomablePhoto(thumbSrc, label));
+    }
     return box;
+  }
+  // Share a link (an article, a song, a listing) with an optional comment.
+  // One per person, replaced each time. Off in "Make a friend" rooms.
+  var linkDraft = { url: "", note: "", error: "", busy: false };
+  function linkRow(personKey, label, canReport) {
+    var p = state.people && state.people[personKey];
+    if (!p || !p.linkUrl) return null;
+    var host = "";
+    try { host = new URL(p.linkUrl).hostname.replace(/^www\./, ""); } catch (e) { host = p.linkUrl; }
+    var box = h("div", { class: "link-row" });
+    box.appendChild(h("div", { class: "photo-who", text: "🔗 " + label }));
+    box.appendChild(h("a", { class: "link-open", href: p.linkUrl, target: "_blank", rel: "noopener noreferrer", text: host + " ↗" }));
+    if (p.linkNote) {
+      box.appendChild(h("p", { class: "photo-caption", text: p.linkNote }));
+      box.appendChild(translateBlock(p.linkNote, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey, true));
+    }
+    if (canReport) box.appendChild(reportLink("link"));
+    return box;
+  }
+  function linkCardBlock() {
+    if (!viewerKey) return null;
+    if (state && state.origin === "friend") return null;
+    var key = viewerKey, otherKey = otherKeyOf(key), partnerName = personName(otherKey);
+    var mine = state.people && state.people[key];
+    var theirs = state.people && state.people[otherKey];
+    var wrap = h("div", { class: "voice-card" });
+    wrap.appendChild(h("div", { class: "voice-card-title", text: "🔗 " + tTemplate("Links with {name}", { name: partnerName }) }));
+    if (theirs && theirs.linkUrl && isBlocked()) {
+      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("You've blocked {name}.", { name: partnerName }) }));
+    } else if (theirs && theirs.linkUrl) {
+      wrap.appendChild(linkRow(otherKey, partnerName, true));
+    } else {
+      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a link yet.", { name: partnerName }) }));
+    }
+    if (mine && mine.linkUrl) wrap.appendChild(linkRow(key, t("Your link"), false));
+    if (linkDraft.error) wrap.appendChild(h("p", { class: "voice-card-error", text: linkDraft.error }));
+    var urlIn = document.createElement("input");
+    urlIn.type = "url"; urlIn.inputMode = "url"; urlIn.autocapitalize = "off"; urlIn.className = "photo-comment";
+    urlIn.placeholder = t("Paste a link"); urlIn.maxLength = 600; urlIn.value = linkDraft.url;
+    urlIn.addEventListener("input", function () { linkDraft.url = urlIn.value; });
+    var noteIn = document.createElement("input");
+    noteIn.type = "text"; noteIn.className = "photo-comment"; noteIn.maxLength = 200;
+    noteIn.placeholder = t("Add a comment (optional)"); noteIn.value = linkDraft.note;
+    noteIn.addEventListener("input", function () { linkDraft.note = noteIn.value; });
+    wrap.appendChild(urlIn);
+    wrap.appendChild(noteIn);
+    var row = h("div", { class: "voice-card-actions" });
+    var send = h("button", { class: "mini-btn primary", type: "button", text: linkDraft.busy ? t("Sharing…") : t("Share link") });
+    send.disabled = linkDraft.busy;
+    send.addEventListener("click", function () {
+      if (!linkDraft.url.trim()) { linkDraft.error = t("Paste a link first."); renderApp(); return; }
+      linkDraft.busy = true; linkDraft.error = ""; renderApp();
+      suppressPollUntil = Date.now() + 15000;
+      fetch(RP + "/api/link-share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: key, url: linkDraft.url, note: linkDraft.note }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (b) {
+          linkDraft.busy = false;
+          if (b && !b.error && b.people) { state = b; linkDraft.url = ""; linkDraft.note = ""; suppressPollUntil = Date.now() + 3000; }
+          else {
+            suppressPollUntil = 0;
+            linkDraft.error = b && b.error === "bad_link" ? t("That doesn't look like a web link. Please check it and try again.")
+              : b && b.error === "inappropriate" ? t("That link or comment can't be shared here.")
+              : b && b.error === "moderation_unavailable" ? t("Couldn't check that link right now — please try again in a minute.")
+              : t("Couldn't share that link — try again.");
+          }
+          renderApp();
+        })
+        .catch(function () { linkDraft.busy = false; suppressPollUntil = 0; linkDraft.error = t("Upload failed — check your connection and try again."); renderApp(); });
+    });
+    row.appendChild(send);
+    if (mine && mine.linkUrl) {
+      var rm = h("button", { class: "mini-btn ghost", type: "button", text: t("Remove mine") });
+      rm.addEventListener("click", function () {
+        fetch(RP + "/api/link-delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: key }) })
+          .then(function (r) { return r.json(); }).then(function (b) { if (b && b.people) state = b; renderApp(); }).catch(function () {});
+      });
+      row.appendChild(rm);
+    }
+    wrap.appendChild(row);
+    return wrap;
   }
   function photoCardBlock() {
     if (!viewerKey) return null;
@@ -5227,13 +5490,13 @@ const RAW = String.raw`<!doctype html>
     var myPhotoAt = state.people && state.people[key] && state.people[key].photoAt;
     var partnerPhotoAt = state.people && state.people[otherKey] && state.people[otherKey].photoAt;
     var wrap = h("div", { class: "voice-card" });
-    wrap.appendChild(h("div", { class: "voice-card-title", text: "📷 " + tTemplate("Photos with {name}", { name: partnerName }) }));
+    wrap.appendChild(h("div", { class: "voice-card-title", text: "📷 " + tTemplate("Photos & videos with {name}", { name: partnerName }) }));
     if (partnerPhotoAt && isBlocked()) {
       wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("You've blocked {name}.", { name: partnerName }) }));
     } else if (partnerPhotoAt) {
       wrap.appendChild(photoRow(otherKey, partnerName, partnerPhotoAt, state.people[otherKey].photoCaption || "", photoExpanded, function () { photoExpanded = !photoExpanded; renderApp(); }, true));
     } else {
-      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo yet.", { name: partnerName }) }));
+      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo or video yet.", { name: partnerName }) }));
     }
     // If your partner signed up with (or was invited by) an Instagram
     // handle, link to it — a plain https link, opens in the browser/app.
@@ -5249,7 +5512,7 @@ const RAW = String.raw`<!doctype html>
       wrap.appendChild(h("p", { class: "voice-card-error", text: photoUploadState.error }));
     }
     if (myPhotoAt) {
-      wrap.appendChild(photoRow(key, t("Your photo"), myPhotoAt, state.people[key].photoCaption || "", myPhotoExpanded, function () { myPhotoExpanded = !myPhotoExpanded; renderApp(); }, false));
+      wrap.appendChild(photoRow(key, (state.people[key].photoKind === "video" ? t("Your video") : t("Your photo")), myPhotoAt, state.people[key].photoCaption || "", myPhotoExpanded, function () { myPhotoExpanded = !myPhotoExpanded; renderApp(); }, false));
     }
     var commentInput = document.createElement("input");
     commentInput.type = "text";
@@ -5261,7 +5524,7 @@ const RAW = String.raw`<!doctype html>
     wrap.appendChild(commentInput);
     var fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = "image/*";
+    fileInput.accept = "image/*,video/*";
     fileInput.style.display = "none";
     fileInput.addEventListener("change", function () {
       var file = fileInput.files && fileInput.files[0];
@@ -5274,27 +5537,35 @@ const RAW = String.raw`<!doctype html>
       renderApp();
     });
     var btnRow = h("div", { class: "voice-card-actions" });
+    var pendingIsVideo = !!(pendingPhotoFile && /^video\//i.test(pendingPhotoFile.type || ""));
     if (pendingPhotoFile && pendingPhotoUrl) {
-      var prev = h("img", { src: pendingPhotoUrl, alt: "" });
+      var prev;
+      if (pendingIsVideo) {
+        prev = h("video", { src: pendingPhotoUrl, muted: "", autoplay: "", loop: "", playsinline: "" });
+        prev.muted = true; prev.playsInline = true;
+      } else {
+        prev = h("img", { src: pendingPhotoUrl, alt: "" });
+      }
       prev.style.cssText = "display:block;max-width:100%;max-height:220px;border-radius:12px;margin:10px 0;";
       wrap.insertBefore(prev, commentInput);
     }
     var pickBtn = h("button", {
       class: pendingPhotoFile ? "mini-btn ghost" : "mini-btn primary",
       type: "button",
-      text: pendingPhotoFile ? t("Choose a different photo") : (myPhotoAt ? t("Share a new photo") : t("Share a photo")),
+      text: pendingPhotoFile ? t("Choose a different one") : (myPhotoAt ? t("Share a new photo or video") : t("Share a photo or video")),
     });
     pickBtn.disabled = photoUploadState.uploading;
     pickBtn.addEventListener("click", function () { fileInput.click(); });
     if (pendingPhotoFile) {
-      var sendBtn = h("button", { class: "mini-btn primary", type: "button", text: t("Send photo") });
+      var sendBtn = h("button", { class: "mini-btn primary", type: "button", text: pendingIsVideo ? t("Send video") : t("Send photo") });
       sendBtn.disabled = photoUploadState.uploading;
       sendBtn.addEventListener("click", function () {
         var f = pendingPhotoFile;
         pendingPhotoFile = null;
         if (pendingPhotoUrl) { try { URL.revokeObjectURL(pendingPhotoUrl); } catch (e) {} }
         pendingPhotoUrl = "";
-        uploadPhoto(key, f, commentInput.value);
+        if (/^video\//i.test(f.type || "")) uploadVideo(key, f, commentInput.value);
+        else uploadPhoto(key, f, commentInput.value);
       });
       btnRow.appendChild(sendBtn);
       var cancelBtn = h("button", { class: "mini-btn ghost", type: "button", text: t("Cancel") });
@@ -5327,7 +5598,9 @@ const RAW = String.raw`<!doctype html>
     btnRow.appendChild(fileInput);
     wrap.appendChild(btnRow);
     if (photoUploadState.uploading) {
-      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Sharing your photo…") }));
+      wrap.appendChild(photoUploadState.video
+        ? h("p", { class: "voice-card-status-text", id: "video-upload-status", text: photoUploadState.progress > 0 ? tTemplate("Sharing your video… {n}%", { n: photoUploadState.progress }) : t("Preparing your video…") })
+        : h("p", { class: "voice-card-status-text", text: t("Sharing your photo…") }));
     }
     return wrap;
   }

@@ -15,6 +15,8 @@ import {
   localPuzzlePath,
   photoKey,
   localPhotoPath,
+  videoKey,
+  localVideoPath,
   useS3,
   s3,
   ensurePuzzleMigrated,
@@ -1870,7 +1872,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     // same resize-client-side-then-base64-POST approach as /api/voice-sample
     // and /api/puzzle-batch above.
     // Photo sharing is off in "Make a friend" rooms (strangers).
-    if (req.method === "POST" && (restPath === "/api/photo-upload" || restPath === "/api/photo-caption")) {
+    if (req.method === "POST" && (restPath === "/api/photo-upload" || restPath === "/api/photo-caption" || restPath === "/api/video-upload")) {
       if ((await loadState(roomId)).origin === "friend") return json({ error: "photos_disabled" }, { status: 403 });
     }
 
@@ -1910,8 +1912,128 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         s.people[who]!.photoAt = new Date().toISOString();
         const cap = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
         if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
+        delete s.people[who]!.photoKind;
+        delete s.people[who]!.videoType;
       });
+      deleteSharedVideo(roomId, who).catch(() => {});
       return json(forClient(state));
+    }
+
+    // Share a video instead of a photo (same one-per-person slot). Sent as a
+    // form: the video file, plus up to 3 still frames the phone took from it
+    // (start, middle, end). Every frame and the comment are checked by the
+    // same moderation as photos; the first frame becomes the thumbnail.
+    if (req.method === "POST" && restPath === "/api/video-upload") {
+      if (!rateLimit("photo-upload:" + roomId, 30, HOUR)) {
+        return json({ error: "rate_limited" }, { status: 429 });
+      }
+      let form: FormData;
+      try { form = await req.formData(); } catch { return json({ error: "invalid" }, { status: 400 }); }
+      const who = String(form.get("who") || "");
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      const video = form.get("video");
+      if (!video || typeof video === "string") return json({ error: "invalid" }, { status: 400 });
+      const vType = String((video as File).type || "video/mp4").split(";")[0];
+      if (!/^video\/[a-z0-9.+-]+$/i.test(vType)) return json({ error: "invalid" }, { status: 400 });
+      if ((video as File).size < 1000) return json({ error: "invalid" }, { status: 400 });
+      if ((video as File).size > 60 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      const frames: Uint8Array[] = [];
+      for (const f of form.getAll("frame")) {
+        if (f && typeof f !== "string" && (f as File).size > 200 && (f as File).size < 4 * 1024 * 1024) frames.push(new Uint8Array(await (f as File).arrayBuffer()));
+      }
+      if (!frames.length) return json({ error: "invalid" }, { status: 400 });
+      const capText = String(form.get("caption") || "").trim().slice(0, 200);
+      for (let i = 0; i < Math.min(frames.length, 3); i++) {
+        const verdict = await moderateContent({ image: frames[i], text: i === 0 ? capText : "" });
+        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      }
+      const vBytes = new Uint8Array(await (video as File).arrayBuffer());
+      if (useS3 && s3) {
+        await s3.file(videoKey(roomId, who)).write(vBytes, { type: vType });
+        await s3.file(photoKey(roomId, who)).write(frames[0], { type: "image/jpeg" });
+      } else {
+        await Bun.write(localVideoPath(roomId, who), vBytes);
+        await Bun.write(localPhotoPath(roomId, who), frames[0]);
+      }
+      const state = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
+        s.people[who]!.photoAt = new Date().toISOString();
+        s.people[who]!.photoKind = "video";
+        s.people[who]!.videoType = vType;
+        delete s.people[who]!.videoV;
+        if (capText) s.people[who]!.photoCaption = capText; else delete s.people[who]!.photoCaption;
+      });
+      // Convert in the background so the sender doesn't wait; the original
+      // plays meanwhile on phones that support it.
+      const sharedAt = state.people && state.people[who] ? state.people[who]!.photoAt || "" : "";
+      convertSharedVideo(roomId, who, sharedAt, vBytes).catch((e) => console.log("[video] convert failed: " + (e?.message || e)));
+      return json(forClient(state));
+    }
+
+    // Share a link (one per person, replaced each time) with an optional
+    // comment. Off in "Make a friend" rooms, like photos. The link and the
+    // comment go through the same text moderation as photo comments.
+    if (req.method === "POST" && (restPath === "/api/link-share" || restPath === "/api/link-delete")) {
+      const body = await readJson(req);
+      if (!body) return json({ error: "bad_json" }, { status: 400 });
+      const who = body.who;
+      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
+      if (restPath === "/api/link-delete") {
+        const st = await saveState(roomId, (s) => {
+          if (s.people && s.people[who]) { delete s.people[who]!.linkUrl; delete s.people[who]!.linkNote; delete s.people[who]!.linkAt; }
+        });
+        return json(forClient(st));
+      }
+      if ((await loadState(roomId)).origin === "friend") return json({ error: "links_disabled" }, { status: 403 });
+      if (!rateLimit("link-share:" + roomId, 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      let raw = typeof body.url === "string" ? body.url.trim() : "";
+      if (raw && !/^[a-z][a-z0-9+.-]*:/i.test(raw)) raw = "https://" + raw;
+      let u: URL;
+      try { u = new URL(raw); } catch { return json({ error: "bad_link" }, { status: 400 }); }
+      if ((u.protocol !== "https:" && u.protocol !== "http:") || !u.hostname.includes(".") || raw.length > 600) return json({ error: "bad_link" }, { status: 400 });
+      const note = typeof body.note === "string" ? body.note.trim().slice(0, 200) : "";
+      const verdict = await moderateContent({ text: (note ? note + "\n" : "") + "Link: " + u.toString() });
+      if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
+      if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
+      const st = await saveState(roomId, (s) => {
+        if (!s.people) s.people = {};
+        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
+        s.people[who]!.linkUrl = u.toString();
+        s.people[who]!.linkAt = new Date().toISOString();
+        if (note) s.people[who]!.linkNote = note; else delete s.people[who]!.linkNote;
+      });
+      return json(forClient(st));
+    }
+
+    // Streams a shared video. Phones fetch video in pieces (byte ranges),
+    // and iPhones won't play a video whose server ignores those requests.
+    if (req.method === "GET" && restPath === "/api/video") {
+      const who = url.searchParams.get("who") || "";
+      if (!isPerson(who)) return new Response("Not found", { status: 404 });
+      try {
+        const st = await loadState(roomId);
+        const vType = (st.people && st.people[who] && st.people[who]!.videoType) || "video/mp4";
+        const file: any = useS3 && s3 ? s3.file(videoKey(roomId, who)) : Bun.file(localVideoPath(roomId, who));
+        if (!(await file.exists())) return new Response("Not found", { status: 404 });
+        const size: number = useS3 && s3 ? (await file.stat()).size : file.size;
+        const baseHeaders: Record<string, string> = { "content-type": vType, "accept-ranges": "bytes", "cache-control": "private, max-age=31536000, immutable" };
+        const range = req.headers.get("range");
+        const m = range && range.match(/^bytes=(\d*)-(\d*)$/);
+        if (m && (m[1] || m[2])) {
+          let start = m[1] ? parseInt(m[1], 10) : Math.max(0, size - parseInt(m[2], 10));
+          let end = m[1] && m[2] ? parseInt(m[2], 10) : size - 1;
+          if (!m[1]) end = size - 1;
+          end = Math.min(end, size - 1);
+          if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size } });
+          const chunk = await file.slice(start, end + 1).arrayBuffer();
+          return new Response(chunk, { status: 206, headers: { ...baseHeaders, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
+        }
+        return new Response(file.stream ? file.stream() : await file.arrayBuffer(), { headers: { ...baseHeaders, "content-length": String(size) } });
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
     }
 
     // Edit the comment under an already-shared photo.
@@ -1942,8 +2064,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const who = body && body.who;
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; }
+        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; delete s.people[who]!.photoKind; delete s.people[who]!.videoType; }
       });
+      deleteSharedVideo(roomId, who).catch(() => {});
       try {
         if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
         else await Bun.file(localPhotoPath(roomId, who)).delete();
@@ -2360,3 +2483,59 @@ setInterval(() => lastBadgeSent.clear(), 6 * 60 * 60 * 1000);
 
 startQaSchedule();
 startStatsSchedule();
+
+
+// Removes a person's shared video (when they share a photo instead, or
+// remove what they shared).
+async function deleteSharedVideo(roomId: string, who: PersonKey): Promise<void> {
+  try {
+    if (useS3 && s3) await s3.file(videoKey(roomId, who)).delete();
+    else await Bun.file(localVideoPath(roomId, who)).delete();
+  } catch {}
+}
+
+
+// Converts a shared video to H.264 + AAC in an MP4 (at most 1280px on the
+// long side), the one format every iPhone and Android plays. iPhones often
+// record HEVC, which many Android phones can't play. Runs ffmpeg (installed
+// on Railway via RAILPACK_DEPLOY_APT_PACKAGES=ffmpeg). Swaps the stored file
+// only if the person hasn't shared something else in the meantime.
+async function convertSharedVideo(roomId: string, who: PersonKey, sharedAt: string, bytes: Uint8Array): Promise<void> {
+  const ff = Bun.which("ffmpeg");
+  if (!ff) { console.log("[video] ffmpeg not installed: video kept as uploaded"); return; }
+  const tag = (roomId || "legacy") + "-" + who + "-" + Date.now();
+  const inPath = "/tmp/nr-video-in-" + tag;
+  const outPath = "/tmp/nr-video-out-" + tag + ".mp4";
+  const started = Date.now();
+  try {
+    await Bun.write(inPath, bytes);
+    const proc = Bun.spawn([ff, "-y", "-loglevel", "error", "-i", inPath, "-t", "61",
+      "-vf", "scale='min(1280,iw)':'min(1280,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", outPath], { stdout: "ignore", stderr: "pipe" });
+    const killer = setTimeout(() => { try { proc.kill(); } catch {} }, 240000);
+    const code = await proc.exited;
+    clearTimeout(killer);
+    if (code !== 0) {
+      let err = "";
+      try { err = (await new Response(proc.stderr).text()).slice(0, 300); } catch {}
+      console.log("[video] ffmpeg exit " + code + ": " + err);
+      return;
+    }
+    const out = new Uint8Array(await Bun.file(outPath).arrayBuffer());
+    if (out.length < 1000) { console.log("[video] converted file empty"); return; }
+    const now = await loadState(roomId);
+    const p = now.people && now.people[who];
+    if (!p || p.photoKind !== "video" || p.photoAt !== sharedAt) return; // replaced meanwhile
+    if (useS3 && s3) await s3.file(videoKey(roomId, who)).write(out, { type: "video/mp4" });
+    else await Bun.write(localVideoPath(roomId, who), out);
+    await saveState(roomId, (s) => {
+      const q = s.people && s.people[who];
+      if (q && q.photoKind === "video" && q.photoAt === sharedAt) { q.videoType = "video/mp4"; q.videoV = Date.now(); }
+    });
+    console.log("[video] converted room=" + (roomId || "legacy") + " who=" + who + " " + Math.round(bytes.length / 1024) + "KB -> " + Math.round(out.length / 1024) + "KB in " + Math.round((Date.now() - started) / 1000) + "s");
+  } finally {
+    try { await Bun.file(inPath).delete(); } catch {}
+    try { await Bun.file(outPath).delete(); } catch {}
+  }
+}

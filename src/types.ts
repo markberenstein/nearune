@@ -67,6 +67,19 @@ export type PersonProfile = {
   photoAt?: string;
   // Optional short comment the sharer wrote under their photo.
   photoCaption?: string;
+  // Set when the shared item is a video (stored at storage.ts's videoKey;
+  // the photo slot then holds its still frame, used as the thumbnail).
+  photoKind?: "video";
+  videoType?: string;
+  // Bumped when the server finishes converting the video to a format
+  // every phone plays (H.264 MP4); part of the video URL so phones fetch
+  // the converted file.
+  videoV?: number;
+  // A shared link (one per person, replaced each time), with an optional
+  // comment. Shown on the Local Feel tab.
+  linkUrl?: string;
+  linkNote?: string;
+  linkAt?: string;
   travelLocation?: string;
   travelTz?: string;
   travelFrom?: string;

@@ -241,6 +241,15 @@ export async function computeStats(full = true) {
     qa.checks.push({ name: "Voice recording (save path)", ok: rbad.length === 0, items: ritems, detail: rbad.length ? rbad.map((i) => i.label + ": " + i.note).join("; ") : formats.length + " recording formats accept; short and garbage uploads rejected; key can create voices" });
     if (rbad.length) { qa.ok = false; qa.failures.push("Voice recording: " + rbad.map((i) => i.label + ": " + i.note).join("; ")); }
   }
+  // Video conversion needs ffmpeg on the server (RAILPACK_DEPLOY_APT_PACKAGES=ffmpeg).
+  if (qa && Array.isArray(qa.checks)) {
+    const ff = Bun.which("ffmpeg");
+    let ver = "";
+    if (ff) { try { const pr = Bun.spawnSync([ff, "-version"]); ver = new TextDecoder().decode(pr.stdout).split("\n")[0].slice(0, 60); } catch {} }
+    const ok = !!ff && !!ver;
+    qa.checks.push({ name: "Video conversion (ffmpeg)", ok, items: [{ label: "ffmpeg installed", ok, note: ok ? ver : "missing: shared videos stay as uploaded (HEVC may not play on Android)" }], detail: ok ? ver : "ffmpeg missing" });
+    if (!ok) { qa.ok = false; qa.failures.push("Video conversion: ffmpeg missing"); }
+  }
   // Quirky local story: every place with an active couple must come back with a story today.
   // Skipped in the first minutes after a restart: the stories are fetched from
   // Google News, which throttles the burst of lookups (the 12:00/00:00 runs cover it).

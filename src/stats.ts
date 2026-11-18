@@ -1,8 +1,12 @@
 import { topLocalStory, storyFits } from "./localnews";
 // Admin snapshot: room counts, city-level user locations (no names), and
-// ElevenLabs usage. Logged as one "[stats] {json}" line at 12:00 and 00:00
-// Pacific (and shortly after boot); a scheduled task reads the latest line
-// from the logs and refreshes the admin artifact.
+// ElevenLabs usage. Logged as one "[stats] {json}" line every hour on the hour
+// Pacific (and shortly after boot); scheduled tasks read the latest line from
+// the logs. The full run (QA, music, voice, local news, WeatherKit, usage
+// checks) happens at 12:00 and 00:00 and after boot. The other hourly runs
+// recount rooms and people and carry the checks over from the last full run,
+// so every line has the same keys; "full" says which kind it is and "fullAt"
+// when the carried-over checks ran.
 import { listRoomIds, loadState, writeSideFile } from "./storage";
 import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip, trackRef } from "./music";
@@ -58,7 +62,10 @@ function furthestStep(st: any, ppl: any[], answeredDays: number): string {
   return "created room only";
 }
 
-export async function computeStats() {
+// Last full snapshot, so the light hourly runs can carry its checks over.
+let lastFull: any = null;
+
+export async function computeStats(full = true) {
   const ids = await listRoomIds();
   let rooms = 0, active = 0, people = 0, answered = 0, bothWeek = 0;
   // Rooms where both people answered on at least one of the last 7 days
@@ -110,6 +117,24 @@ export async function computeStats() {
       const who = { name: String(p.name || "(no name)").slice(0, 40), partner: o ? String(o.name || "(no name)").slice(0, 40) : "(waiting for partner)", partnerLoc: o ? String(o.location || "").slice(0, 60) : "" };
       if (e) { e.n++; e.people.push(who); } else byCity.set(key, { city: c.city, country: c.country, region: c.region || "", tz: c.tz || "", lat: +c.lat.toFixed(2), lon: +c.lon.toFixed(2), n: 1, people: [who] });
     }
+  }
+  if (!full && lastFull) {
+    // Light hourly run: fresh counts, checks carried over from the last full run.
+    const prevWk = new Map<string, any>();
+    for (const c of lastFull.cities || []) if (c && c.wk) prevWk.set(Number(c.lat).toFixed(1) + "," + Number(c.lon).toFixed(1), c.wk);
+    for (const c of byCity.values()) { const w = prevWk.get(c.lat.toFixed(1) + "," + c.lon.toFixed(1)); if (w) c.wk = w; }
+    return {
+      at: new Date().toISOString(),
+      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList,
+      cities: [...byCity.values()].sort((a, b) => b.n - a.n),
+      qa: lastFull.qa,
+      weatherkit: lastFull.weatherkit,
+      claude: lastFull.claude,
+      railway: lastFull.railway,
+      elevenlabs: lastFull.elevenlabs,
+      full: false,
+      fullAt: lastFull.at,
+    };
   }
   const u = await elevenLabsUsage();
   // Music player health: for each country our people are in (max 6), is the
@@ -193,8 +218,9 @@ export async function computeStats() {
     qa.checks.push({ name: "Quirky local stories (every active place)", ok: nbad.length === 0, items: nitems, detail: nitems.length === 0 ? "no active places" : nbad.length ? nbad.map((i) => i.label).join("; ") + ": no story today (not even from a nearby town), or the story does not name the city" : nitems.length + " places, all have a story" });
     if (nbad.length) { qa.ok = false; qa.failures.push("Local stories: no story for " + nbad.map((i) => i.label).join("; ")); }
   }
-  return {
-    at: new Date().toISOString(),
+  const at = new Date().toISOString();
+  lastFull = {
+    at,
     rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
@@ -202,16 +228,20 @@ export async function computeStats() {
     claude: await claudeUsageSummary().catch(() => null),
     railway: await railwayUsage(),
     elevenlabs: u ? { used: u.used, limit: u.limit, resetsAt: u.resetsAt, voices: u.voices, voiceLimit: u.voiceLimit } : null,
+    full: true,
+    fullAt: at,
   };
+  return lastFull;
 }
 
 // Runs the snapshot, logs it, and saves it as admin-stats.json for the admin
-// Home page. Concurrent calls share one run.
+// Home page. Concurrent calls share one run. full=false is the light hourly
+// run (falls back to a full run if none has happened since boot).
 let running: Promise<any> | null = null;
-export function refreshStats(): Promise<any> {
+export function refreshStats(full = true): Promise<any> {
   if (!running) {
     running = (async () => {
-      const d = await computeStats();
+      const d = await computeStats(full);
       const j = JSON.stringify(d);
       console.log("[stats] " + j);
       try { await writeSideFile("admin-stats.json", j); } catch (e: any) { console.log("[stats] save failed " + (e?.message || e)); }
@@ -221,8 +251,8 @@ export function refreshStats(): Promise<any> {
   return running;
 }
 
-export async function logStats() {
-  try { await refreshStats(); }
+export async function logStats(full = true) {
+  try { await refreshStats(full); }
   catch (e: any) { console.log("[stats] ERROR " + (e?.message || e)); }
 }
 
@@ -235,9 +265,9 @@ export function startStatsSchedule(): void {
   const tick = () => {
     const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
     const [h, m] = parts.split(":").map(Number);
-    if ((h === 0 || h === 12) && m === 0) {
+    if (m === 0) {
       const slot = ptSlot();
-      if (slot !== last) { last = slot; logStats(); }
+      if (slot !== last) { last = slot; logStats(h === 0 || h === 12); }
     }
   };
   setTimeout(logStats, 60_000);

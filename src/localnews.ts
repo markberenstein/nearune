@@ -326,8 +326,8 @@ export function storyFits(story: { headline: string; source: string; near?: stri
 // as "City, ST" (US) or "City, Country". Asked of Claude once per place and
 // saved, since nearby towns don't change.
 async function nearbyPlaces(place: string): Promise<string[]> {
-  // "v2:" = the 5-town list; older saved 3-town lists are asked again once.
-  const cacheKey = "v2:" + place;
+  // "v3:" = the 3-4 town list (older saved lists are asked again once).
+  const cacheKey = "v3:" + place;
   const hit = nearbyCache.get(cacheKey);
   if (hit) return hit;
   const key = Bun.env.ANTHROPIC_API_KEY;
@@ -340,7 +340,7 @@ async function nearbyPlaces(place: string): Promise<string[]> {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 120,
         system:
-          "You list nearby towns for a local news search. Given a place, reply with a JSON array of 4 to 5 real towns or cities within about 40 miles (65 km) of it " +
+          "You list nearby towns for a local news search. Given a place, reply with a JSON array of 3 to 4 real towns or cities within about 40 miles (65 km) of it " +
           "that have their own local news coverage, closest or biggest first. Never repeat the place itself. Format each as \"City, ST\" for the US (two-letter state) " +
           "or \"City, Country\" elsewhere. Reply with only the JSON array.",
         messages: [{ role: "user", content: place }],
@@ -355,11 +355,45 @@ async function nearbyPlaces(place: string): Promise<string[]> {
     const self = place.split(",")[0].trim().toLowerCase();
     const list = (Array.isArray(arr) ? arr : [])
       .filter((x: any) => typeof x === "string" && x.includes(",") && x.length < 60 && x.split(",")[0].trim().toLowerCase() !== self)
-      .slice(0, 5);
+      .slice(0, 4);
     nearbyCache.set(cacheKey, list);
     console.log("[localnews] nearby for " + place + ": " + (list.join("; ") || "none"));
     return list;
   } catch { return []; }
+}
+
+// The closest big city to a place (a metro with plenty of local news), the
+// last stop when neither the town nor its neighbors have a story. Empty when
+// the place is itself a big city. Asked of Claude once per place and saved.
+async function nearestBigCity(place: string): Promise<string> {
+  const cacheKey = "big1:" + place;
+  const hit = nearbyCache.get(cacheKey);
+  if (hit) return hit[0] || "";
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key) return "";
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 30,
+        system:
+          "Given a place, name the closest big city to it: a major metro area with several local news outlets (for example Dayton, OH for Piqua, OH, or San Francisco, CA for San Mateo, CA). " +
+          "Format as \"City, ST\" for the US (two-letter state) or \"City, Country\" elsewhere. If the place is itself a big city, reply NONE. Reply with only the city or NONE.",
+        messages: [{ role: "user", content: place }],
+      }),
+    });
+    if (!res.ok) return "";
+    const data: any = await res.json();
+    recordClaude("news", data);
+    const text = String(data?.content?.[0]?.text || "").trim().replace(/^"|"$/g, "");
+    const self = place.split(",")[0].trim().toLowerCase();
+    const big = /^none$/i.test(text) || !text.includes(",") || text.length > 60 || text.split(",")[0].trim().toLowerCase() === self ? "" : text;
+    nearbyCache.set(cacheKey, big ? [big] : []);
+    console.log("[localnews] nearest big city for " + place + ": " + (big || "none (is one)"));
+    return big;
+  } catch { return ""; }
 }
 
 // Excluded so a story merely mentioning "event" or "festival" in passing
@@ -471,6 +505,36 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
         if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }
         value = { ...cand, access, near: n, nearV: 2 };
         tierNo = tiers.length + 1 + ni;
+        break;
+      }
+    }
+  }
+  // Last stop: the closest big city (Dayton for Piqua). A big city always
+  // has news, so after the strict quirky bar, a lighter pleasant story is
+  // allowed too. Shown as "from Dayton", like the nearby towns.
+  if (!value) {
+    const big = await nearestBigCity(q);
+    if (big && Bun.env.ANTHROPIC_API_KEY) {
+      const bCity = big.split(",")[0].trim();
+      const bRegion = big.split(",").slice(1).join(" ").trim();
+      const bName = bRegion ? '"' + bCity + '" ' + bRegion : '"' + bCity + '"';
+      const bigTiers: { query: string; strict: boolean }[] = [
+        { query: bName + " (viral OR quirky OR bizarre OR hilarious OR weirdest OR \"caught on camera\" OR \"on the loose\" OR \"world record\") " + EXCLUDE_TERMS + " -festival -tickets -sale -opening -grand -event -events when:30d", strict: true },
+        { query: bName + " (quirky OR unusual OR funny OR heartwarming OR adorable OR \"first-ever\") " + EXCLUDE_TERMS + " -tickets -sale -event -events when:30d", strict: false },
+      ];
+      for (let bi = 0; bi < bigTiers.length && !value; bi++) {
+        let pool = (await fetchCandidates(bigTiers[bi].query))
+          .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, big, false));
+        for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
+          const pick = await pickQuirkiest(big, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), bigTiers[bi].strict);
+          if (pick === null) break;
+          const cand = pool[pick];
+          const access = await checkArticleAccess(cand.url);
+          if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }
+          value = { ...cand, access, near: big, nearV: 2 };
+          tierNo = 90 + bi;
+          break;
+        }
       }
     }
   }

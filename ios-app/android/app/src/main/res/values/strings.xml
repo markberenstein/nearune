@@ -4,4 +4,7 @@
     <string name="title_activity_main">Nearune</string>
     <string name="package_name">com.nearune.app</string>
     <string name="custom_url_scheme">com.nearune.app</string>
+    <!-- Meta app "Nearune" (same as the iPhone app) -->
+    <string name="facebook_app_id">1809588766751726</string>
+    <string name="facebook_client_token">c229f5f48d6673c55380a09df1ccac23</string>
 </resources>

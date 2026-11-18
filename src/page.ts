@@ -6859,7 +6859,7 @@ export function buildPrivacyPage() {
       <li><strong>Hosting (Railway):</strong> the service runs on Railway's cloud infrastructure, where room data is stored.</li>
       <li><strong>Notifications (Apple Push Notification service):</strong> a device token is used to deliver reminders if you turn them on.</li>
       <li><strong>Website analytics (Google Analytics):</strong> only on our download pages (nearune.ai/get and nearune.ai/military), Google Analytics records the visit, device and browser type, approximate location, and the link that brought you there, so we can see which ads and searches help people find Nearune. It isn't used inside rooms or the app, and never sees your answers, photos or voice.</li>
-      <li><strong>Ad measurement (Meta):</strong> the iPhone app uses Meta's software kit to tell Meta that Nearune was installed and opened (and when an in-app tip is made), along with basic device details such as phone model and iOS version, so we can see which of our ads lead to installs. It doesn't use your phone's advertising ID, and it never sends your name, email, answers, photos or voice.</li>
+      <li><strong>Ad measurement (Meta):</strong> the Nearune app (iPhone and Android) uses Meta's software kit to tell Meta that Nearune was installed and opened (and when an in-app tip is made), along with basic device details such as phone model and iOS version, so we can see which of our ads lead to installs. It doesn't use your phone's advertising ID, and it never sends your name, email, answers, photos or voice.</li>
     </ul>
 
     <h2>Reporting and blocking</h2>

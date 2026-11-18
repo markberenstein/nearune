@@ -1958,8 +1958,19 @@ const RAW = String.raw`<!doctype html>
       // right after a needless cancel() is sometimes silently dropped.
       if (ss.speaking || ss.pending) ss.cancel();
       var u = new SpeechSynthesisUtterance(text);
-      u.onend = stopSilentKeepAlive;
-      u.onerror = stopSilentKeepAlive;
+      var diag = { started: false, ended: false, err: "" };
+      u.onstart = function () { diag.started = true; };
+      u.onend = function () { diag.ended = true; stopSilentKeepAlive(); };
+      u.onerror = function (ev) { diag.err = (ev && ev.error) || "error"; stopSilentKeepAlive(); };
+      // Tell the server log whether the phone voice actually spoke, so a
+      // silent speaker shows up in Railway instead of going unnoticed.
+      setTimeout(function () {
+        try {
+          var vs = [];
+          try { vs = ss.getVoices() || []; } catch (e2) {}
+          fetch(RP + "/api/client-error", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: "speech", who: viewerKey || "", msg: "phone voice: started=" + diag.started + " err=" + diag.err + " voices=" + vs.length + " lang=" + u.lang + " speaking=" + ss.speaking + " pending=" + ss.pending }) }).catch(function () {});
+        } catch (e3) {}
+      }, 3000);
       // Until someone records a voice sample, always use the device's own
       // default voice for the language. A hand-picked "gendered" voice from the
       // name heuristic above could land on iOS novelty voices (Fred, Albert)
@@ -2134,8 +2145,8 @@ const RAW = String.raw`<!doctype html>
   // the writer's own recorded voice, or the phone's built-in voice until
   // they record one.
   function listenBlock(text, lang, authorKey) {
-    if (!text || !authorKey) return null;
-    var hasClone = personHasVoice(authorKey);
+    if (!text) return null;
+    var hasClone = !!authorKey && personHasVoice(authorKey);
     var label = hasClone
       ? (authorKey === viewerKey ? t("Listen in your voice") : tTemplate("Listen in {name}'s voice", { name: personName(authorKey) }))
       : t("Listen");
@@ -2145,8 +2156,11 @@ const RAW = String.raw`<!doctype html>
     return h("div", { class: "listen-inline" }, [btn]);
   }
   function translateBlock(text, target, alt, authorKey, listenSameLang) {
+    // Every spot that gets a 🔊 on its translation line in a two-language
+    // room gets the same 🔊 in a one-language room (pass false to opt out).
+    if (listenSameLang === undefined) listenSameLang = true;
     if (!text || !target || target === alt) {
-      var lb = listenSameLang ? listenBlock(text, alt || target, authorKey) : null;
+      var lb = listenSameLang ? listenBlock(text, alt || target || "en", authorKey) : null;
       return lb || h("div", { class: "translate-inline", hidden: "true" });
     }
     var key = target + "|" + (alt || "") + "::" + text;
@@ -2156,7 +2170,7 @@ const RAW = String.raw`<!doctype html>
     if (val === undefined) {
       wrap.appendChild(document.createTextNode("Translating…"));
     } else if (!val) {
-      var lb2 = listenSameLang ? listenBlock(text, alt || target, authorKey) : null;
+      var lb2 = listenSameLang ? listenBlock(text, alt || target || "en", authorKey) : null;
       if (lb2) return lb2;
       wrap.setAttribute("hidden", "true");
     } else {

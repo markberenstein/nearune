@@ -2119,6 +2119,8 @@ const RAW = String.raw`<!doctype html>
     if (val === undefined) {
       wrap.appendChild(document.createTextNode("Translating…"));
     } else if (!val) {
+      var lb2 = listenSameLang ? listenBlock(text, alt || target, authorKey) : null;
+      if (lb2) return lb2;
       wrap.setAttribute("hidden", "true");
     } else {
       var row = h("div", { class: "translate-inline-row" });
@@ -2181,7 +2183,10 @@ const RAW = String.raw`<!doctype html>
     return val ? text + " (" + val + ")" : text;
   }
   function uiTranslateBlock(text, authorKey) {
-    return translateBlock(text, otherUiLang(), "en", authorKey);
+    // The daily question and Never Have I Ever line read in the partner's
+    // voice: a 🔊 shows even when both people share a language (the phone's
+    // voice until the partner records one).
+    return translateBlock(text, otherUiLang(), "en", authorKey, !!authorKey);
   }
   function tTemplate(template, vars) {
     // Translation services translate the WORDS inside {name}-style tokens
@@ -2598,13 +2603,13 @@ const RAW = String.raw`<!doctype html>
         : tTemplate("Today's guess: “{guess}” — not quite. Try again tomorrow.", { guess: state.puzzleLastGuessText });
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
       if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
-        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy));
+        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy, true));
       }
       return wrap;
     }
     if (state.puzzleQuestion && state.puzzleSetBy) {
       wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
-      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
+      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, true));
     }
     var input = document.createElement("input");
     input.type = "text"; input.maxLength = 120;
@@ -2902,7 +2907,7 @@ const RAW = String.raw`<!doctype html>
       if (fullyRevealed) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate(state.puzzleSolved ? "Solved — it was “{answer}.” ✧" : "Fully revealed — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
-          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
+          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, true));
         }
         if (puzzleQueueRemaining() > 0) {
           var nextBtn = h("button", { class: "puzzle-upload-btn", text: t("Next picture →") });
@@ -5153,7 +5158,7 @@ const RAW = String.raw`<!doctype html>
     meta.appendChild(h("div", { class: "photo-who", text: "📷 " + label }));
     if (caption) {
       meta.appendChild(h("p", { class: "photo-caption", text: caption }));
-      meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey));
+      meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey, true));
     }
     meta.appendChild(h("p", { class: "photo-hint", text: expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it") }));
     if (canReport) meta.appendChild(reportLink("photo"));

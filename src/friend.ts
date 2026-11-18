@@ -36,7 +36,10 @@ const KEY = "friend-queue.json";
 const HOUR = 60 * 60 * 1000;
 const LONG_WAIT = 24 * HOUR; // after this the waiting person is told we are still looking
 const QUEUE_MAX_AGE = 30 * 24 * HOUR; // a waiting entry is only dropped after 30 days
-const ACTIVE_WINDOW = 2 * HOUR; // only pair people who checked in recently
+// Pair with anyone who asked in the last 3 days (was 2 hours, which almost
+// never overlapped with only a few new people a day). The waiter is told by
+// push notification, or sees the match the next time they open the app.
+const ACTIVE_WINDOW = 72 * HOUR;
 const MATCH_KEEP = 72 * HOUR;
 
 let data: Data | null = null;
@@ -98,6 +101,52 @@ async function handToAdmin(d: Data): Promise<void> {
 
 export type JoinResult = { status: "waiting"; ticket: string } | { status: "matched"; roomId: string; token: string; who: "mark" | "nikita"; ready: boolean; signedUp: number };
 
+// Best waiting partner for `device`: asked within ACTIVE_WINDOW, not blocked,
+// not met before. Prefers waiters we can notify right away, then whoever
+// checked in most recently. Returns the queue index or -1.
+function pickPartner(d: Data, device: string, now: number): number {
+  const blocked = (a: string, b: string) => (d.blocks[a] || []).includes(b) || (d.blocks[b] || []).includes(a);
+  const met = (a: string, b: string) => ((d.met || {})[a] || []).includes(b);
+  const score = (x: Waiter) => (x.push ? 1e15 : 0) + x.seen;
+  let idx = -1;
+  d.queue.forEach((w, i) => {
+    if (w.device === device || now - w.seen >= ACTIVE_WINDOW || blocked(w.device, device) || met(w.device, device)) return;
+    if (idx < 0 || score(w) > score(d.queue[idx])) idx = i;
+  });
+  return idx;
+}
+
+// Creates the friend room for a waiter (side "nikita") and a joiner (side
+// "mark"), records the waiter's match and alerts them. Caller removes the
+// waiter from the queue first and saves afterwards.
+async function makeMatch(d: Data, waiter: Waiter, device: string, profile: FriendProfile | undefined, now: number): Promise<{ roomId: string; tokJoiner: string }> {
+  d.met = d.met || {};
+  for (const [a, b] of [[waiter.device, device], [device, waiter.device]]) { const l = d.met[a] || (d.met[a] = []); if (!l.includes(b)) l.push(b); if (l.length > 200) l.splice(0, l.length - 200); }
+  const roomId = await createRoom("", "friend-match");
+  const tokWaiter = rand12();
+  const tokJoiner = rand12();
+  const at = new Date().toISOString();
+  // Whoever gave their name, city and language is signed up right away;
+  // anyone who didn't (an older app) joins through the "You're invited"
+  // form instead. Neither is the host, so there's no race over who's first.
+  await saveState(roomId, (s) => {
+    s.origin = "friend";
+    s.relationship = "friend";
+    s.friendDevices = { nikita: waiter.device, mark: device };
+    const inv: any = {};
+    const ppl: any = s.people || {};
+    if (waiter.profile) ppl.nikita = { ...waiter.profile, confirmed: true };
+    else inv.nikita = { token: tokWaiter, at, link: true };
+    if (profile) ppl.mark = { ...profile, confirmed: true };
+    else inv.mark = { token: tokJoiner, at, link: true };
+    s.people = ppl;
+    s.pendingInvite = inv;
+  });
+  d.matches[waiter.ticket] = { roomId, token: tokWaiter, at: now, who: "nikita", ready: !!waiter.profile };
+  notifyMatch(waiter.push);
+  return { roomId, tokJoiner };
+}
+
 export function friendJoin(device: string, profile?: FriendProfile): Promise<JoinResult> {
   return locked(async () => {
     const d = await load();
@@ -110,9 +159,7 @@ export function friendJoin(device: string, profile?: FriendProfile): Promise<Joi
       await save();
       return { status: "waiting", ticket: mine.ticket } as JoinResult;
     }
-    const blocked = (a: string, b: string) => (d.blocks[a] || []).includes(b) || (d.blocks[b] || []).includes(a);
-    const met = (a: string, b: string) => ((d.met || {})[a] || []).includes(b);
-    const idx = d.queue.findIndex((w) => w.device !== device && now - w.seen < ACTIVE_WINDOW && !blocked(w.device, device) && !met(w.device, device));
+    const idx = pickPartner(d, device, now);
     if (idx < 0) {
       const ticket = rand12() + rand12();
       d.queue.push({ ticket, device, at: now, seen: now, ...(profile ? { profile } : {}) });
@@ -123,31 +170,8 @@ export function friendJoin(device: string, profile?: FriendProfile): Promise<Joi
       return { status: "waiting", ticket } as JoinResult;
     }
     const waiter = d.queue.splice(idx, 1)[0];
-    d.met = d.met || {};
-    for (const [a, b] of [[waiter.device, device], [device, waiter.device]]) { const l = d.met[a] || (d.met[a] = []); if (!l.includes(b)) l.push(b); if (l.length > 200) l.splice(0, l.length - 200); }
-    const roomId = await createRoom("", "friend-match");
-    const tokWaiter = rand12();
-    const tokJoiner = rand12();
-    const at = new Date().toISOString();
-    // Whoever gave their name, city and language is signed up right away;
-    // anyone who didn't (an older app) joins through the "You're invited"
-    // form instead. Neither is the host, so there's no race over who's first.
-    await saveState(roomId, (s) => {
-      s.origin = "friend";
-      s.relationship = "friend";
-      s.friendDevices = { nikita: waiter.device, mark: device };
-      const inv: any = {};
-      const ppl: any = s.people || {};
-      if (waiter.profile) ppl.nikita = { ...waiter.profile, confirmed: true };
-      else inv.nikita = { token: tokWaiter, at, link: true };
-      if (profile) ppl.mark = { ...profile, confirmed: true };
-      else inv.mark = { token: tokJoiner, at, link: true };
-      s.people = ppl;
-      s.pendingInvite = inv;
-    });
-    d.matches[waiter.ticket] = { roomId, token: tokWaiter, at: now, who: "nikita", ready: !!waiter.profile };
+    const { roomId, tokJoiner } = await makeMatch(d, waiter, device, profile, now);
     await save();
-    notifyMatch(waiter.push);
     return { status: "matched", roomId, token: tokJoiner, who: "mark", ready: !!profile, signedUp: (waiter.profile ? 1 : 0) + (profile ? 1 : 0) } as JoinResult;
   });
 }
@@ -162,9 +186,21 @@ export function friendStatus(ticket: string): Promise<StatusResult> {
     if (m) return { status: "matched", roomId: m.roomId, token: m.token, who: m.who, ready: !!m.ready } as StatusResult;
     const w = d.queue.find((x) => x.ticket === ticket);
     if (!w) return { status: "none" } as StatusResult;
-    w.seen = Date.now();
+    const now = Date.now();
+    w.seen = now;
+    // Someone else may have asked while this person was away: pair them now.
+    const others = d.queue.filter((x) => x !== w);
+    const pi = pickPartner({ ...d, queue: others }, w.device, now);
+    if (pi >= 0) {
+      const partner = others[pi];
+      d.queue = d.queue.filter((x) => x !== w && x !== partner);
+      const { roomId, tokJoiner } = await makeMatch(d, partner, w.device, w.profile, now);
+      d.matches[w.ticket] = { roomId, token: tokJoiner, at: now, who: "mark", ready: !!w.profile };
+      await save();
+      return { status: "matched", roomId, token: tokJoiner, who: "mark", ready: !!w.profile } as StatusResult;
+    }
     await save();
-    return { status: "waiting", long: Date.now() - w.at > LONG_WAIT } as StatusResult;
+    return { status: "waiting", long: now - w.at > LONG_WAIT } as StatusResult;
   });
 }
 

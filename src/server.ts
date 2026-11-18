@@ -27,8 +27,8 @@ import {
   roomSlug,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
-import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample } from "./voice";
-import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
+import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample, defaultVoiceId } from "./voice";
+import { aiGuessMatches, moderateContent, guessPlaceFromImage, voiceGenderForName } from "./ai";
 import { regionAbbr } from "./usstates";
 import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
 import { currentWeather } from "./weather";
@@ -1986,14 +1986,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const who = body && body.who;
       const text = typeof (body && body.text) === "string" ? body.text.slice(0, 2000).trim() : "";
-      if (!isPerson(who) || !text) return json({ error: "invalid" }, { status: 400 });
+      if (!text) return json({ error: "invalid" }, { status: 400 });
       const current = await loadState(roomId);
-      const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
-      if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
+      const person = isPerson(who) && current.people ? current.people[who] : undefined;
+      // Their own recorded voice, or a stock voice until they record one.
+      let voiceId = person && person.voiceId;
+      const own = !!voiceId;
+      if (!voiceId) voiceId = await defaultVoiceId(person && person.name ? await voiceGenderForName(person.name) : "neutral");
       const audio = await synthesizeSpeech(text, voiceId);
       if (!audio) return json({ error: "synth_failed" }, { status: 502 });
       recordRoomUse(roomId, "voice_played");
-      return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
+      return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store", "x-nearune-voice": own ? "own" : "stock" } });
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-guess") {

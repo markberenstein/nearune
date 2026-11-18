@@ -12,7 +12,7 @@ import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip, trackRef } from "./music";
 import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
-import { elevenLabsUsage, voiceSelfTest, parseVoiceSample, voiceWritePermissionTest } from "./voice";
+import { elevenLabsUsage, voiceSelfTest, parseVoiceSample, voiceWritePermissionTest, defaultVoiceId } from "./voice";
 import { claudeUsageSummary } from "./usage";
 
 // Railway project cost, via Railway's GraphQL API. Needs RAILWAY_API_TOKEN (an account token). Returns null when unset or on any failure.
@@ -197,6 +197,12 @@ export async function computeStats(full = true) {
       try { r = await voiceSelfTest(v ? v.id : null); } catch (e: any) { r = { ok: false, detail: String(e?.message || e).slice(0, 120) }; }
       vitems.push({ label: v ? "Room " + v.room + " - " + v.who : "ElevenLabs account", ok: r.ok, note: r.detail });
     }
+    // The stock voice everyone hears until they record their own.
+    try {
+      const sid = await defaultVoiceId("female");
+      const sr = await voiceSelfTest(sid);
+      vitems.push({ label: "Stock voice (before someone records)", ok: sr.ok, note: sr.detail.replace("cloned voice", "stock voice") });
+    } catch (e: any) { vitems.push({ label: "Stock voice (before someone records)", ok: false, note: String(e?.message || e).slice(0, 120) }); }
     const vbad = vitems.filter((i) => !i.ok);
     qa.checks.push({ name: "Voice playback (cloned voices)", ok: vbad.length === 0, items: vitems, detail: vbad.length ? vbad.map((i) => i.label + ": " + i.note).join("; ") : "all tested voices spoke" });
     if (vbad.length) { qa.ok = false; qa.failures.push("Voice playback: " + vbad.map((i) => i.label + ": " + i.note).join("; ")); }

@@ -142,3 +142,40 @@ export async function guessPlaceFromImage(image: Uint8Array): Promise<string | n
     return null;
   }
 }
+
+
+// Picks which stock voice (male or female) reads for someone who hasn't
+// recorded their own yet, from their first name only. Cached per name, so
+// each name costs one tiny call ever (per server start). Anything unclear
+// comes back "neutral".
+const nameVoiceCache = new Map<string, "male" | "female" | "neutral">();
+export async function voiceGenderForName(name: string): Promise<"male" | "female" | "neutral"> {
+  const first = String(name || "").trim().split(/\s+/)[0].slice(0, 40);
+  if (!first) return "neutral";
+  const k = first.toLowerCase();
+  const hit = nameVoiceCache.get(k);
+  if (hit) return hit;
+  const key = Bun.env.ANTHROPIC_API_KEY;
+  if (!key) return "neutral";
+  let out: "male" | "female" | "neutral" = "neutral";
+  try {
+    const res = await fetch(ANTHROPIC_BASE, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 3,
+        system: "An app reads messages aloud with a stock text-to-speech voice until the writer records their own voice. Given only a first name, answer with one word: male, female, or neutral (when the name is commonly used for both, or you can't tell). Answer only that word.",
+        messages: [{ role: "user", content: first }],
+      }),
+    });
+    if (res.ok) {
+      const data: any = await res.json();
+      recordClaude("voice", data);
+      const t = String((data && data.content && data.content[0] && data.content[0].text) || "").trim().toLowerCase();
+      out = t.startsWith("female") ? "female" : t.startsWith("male") ? "male" : "neutral";
+      nameVoiceCache.set(k, out);
+    }
+  } catch {}
+  return out;
+}

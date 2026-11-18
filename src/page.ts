@@ -2080,14 +2080,17 @@ const RAW = String.raw`<!doctype html>
   // delayed playback still succeeds.
   function speakAs(text, lang, authorKey, unlockedAudio) {
     if (!text) return;
-    if (authorKey && personHasVoice(authorKey)) {
+    // Always the server voice: the writer's recorded voice, or a stock voice
+    // until they record one. The phone's own speech voice is only a last
+    // resort (it makes no sound inside the iPhone app).
+    if (true) {
       try { if (activeCloneAudio && activeCloneAudio !== unlockedAudio) activeCloneAudio.pause(); } catch (e) {}
       var audio = unlockedAudio || new Audio();
       activeCloneAudio = audio;
       fetch(RP + "/api/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ who: authorKey, text: text }),
+        body: JSON.stringify({ who: authorKey || "", text: text }),
       })
         .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
         .then(function (blob) {
@@ -2111,8 +2114,7 @@ const RAW = String.raw`<!doctype html>
     speak(text, lang, authorKey);
   }
   function speakButton(text, lang, label, authorKey) {
-    var hasClone = !!authorKey && personHasVoice(authorKey);
-    if (!text || (!canSpeak(lang) && !hasClone)) return null;
+    if (!text) return null;
     return h("button", {
       class: "speak-btn",
       type: "button",
@@ -2122,9 +2124,7 @@ const RAW = String.raw`<!doctype html>
         e.preventDefault();
         e.stopPropagation();
         var unlockedAudio = null;
-        // Phone voice: start the silent clip inside the tap (see speak()).
-        if (!hasClone) startSilentKeepAlive();
-        if (hasClone) {
+        {
           // Fire a play() attempt synchronously, right in the tap handler,
           // on an element with no audio loaded yet — this is purely to
           // register the gesture with iOS; there's nothing to actually
@@ -4518,8 +4518,7 @@ const RAW = String.raw`<!doctype html>
     // Headlines come from English-language news; show the reader's own
     // language underneath, same as exchanged answers do.
     var ul = otherUiLang();
-    if (!ul) return line;
-    return h("div", {}, [line, translateBlock(story.headline, ul, "en", soloMode() ? null : otherKeyOf(viewerKey))]);
+    return h("div", {}, [line, translateBlock(story.headline, ul || "en", "en", soloMode() ? null : otherKeyOf(viewerKey))]);
   }
   // SANDBOX EXPERIMENT: same "other person's" rule as currentPartnerNews(),
   // for the top-songs/top-movies charts.

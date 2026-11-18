@@ -170,6 +170,40 @@ export async function voiceWritePermissionTest(): Promise<{ ok: boolean; detail:
   }
 }
 
+// Stock ElevenLabs voices, used for anyone who hasn't recorded their own.
+// The iPhone app can't play the phone's built-in speech voice (it runs but
+// makes no sound there), so everything is spoken by the server and played
+// as normal audio. Picks from the account's premade voices by gender;
+// ELEVENLABS_DEFAULT_MALE / _FEMALE / _NEUTRAL in Railway override the pick.
+let premadeCache: { at: number; voices: { id: string; name: string; gender: string }[] } | null = null;
+async function premadeVoices(): Promise<{ id: string; name: string; gender: string }[]> {
+  if (premadeCache && Date.now() - premadeCache.at < 6 * 3600 * 1000) return premadeCache.voices;
+  const key = Bun.env.ELEVENLABS_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetch(ELEVENLABS_BASE + "/voices", { headers: { "xi-api-key": key } });
+    if (!res.ok) { console.log("[voice] list voices -> HTTP " + res.status); return premadeCache ? premadeCache.voices : []; }
+    const d: any = await res.json();
+    const voices = ((d && d.voices) || [])
+      .filter((v: any) => v && v.voice_id && v.category === "premade")
+      .map((v: any) => ({ id: String(v.voice_id), name: String(v.name || ""), gender: String((v.labels && v.labels.gender) || "").toLowerCase() }));
+    premadeCache = { at: Date.now(), voices };
+    return voices;
+  } catch {
+    return premadeCache ? premadeCache.voices : [];
+  }
+}
+// Well-known premade voices, used only if the account's list can't be read.
+const FALLBACK_VOICES: Record<string, string> = { male: "pNInz6obpgDQGcFmaJgB", female: "21m00Tcm4TlvDq8ikWAM", neutral: "21m00Tcm4TlvDq8ikWAM" };
+export async function defaultVoiceId(gender: "male" | "female" | "neutral"): Promise<string> {
+  const env = gender === "male" ? Bun.env.ELEVENLABS_DEFAULT_MALE : gender === "female" ? Bun.env.ELEVENLABS_DEFAULT_FEMALE : Bun.env.ELEVENLABS_DEFAULT_NEUTRAL;
+  if (env && env.trim()) return env.trim();
+  const list = await premadeVoices();
+  const want = gender === "neutral" ? "female" : gender;
+  const match = list.find((v) => v.gender === want) || list[0];
+  return match ? match.id : FALLBACK_VOICES[gender];
+}
+
 export async function voiceSelfTest(voiceId: string | null): Promise<{ ok: boolean; detail: string }> {
   const key = Bun.env.ELEVENLABS_API_KEY;
   if (!key) return { ok: false, detail: "ELEVENLABS_API_KEY is not set" };

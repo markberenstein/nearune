@@ -12,7 +12,7 @@ import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip, trackRef } from "./music";
 import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
-import { elevenLabsUsage, voiceSelfTest } from "./voice";
+import { elevenLabsUsage, voiceSelfTest, parseVoiceSample } from "./voice";
 import { claudeUsageSummary } from "./usage";
 
 // Railway project cost, via Railway's GraphQL API. Needs RAILWAY_API_TOKEN (an account token). Returns null when unset or on any failure.
@@ -200,6 +200,36 @@ export async function computeStats(full = true) {
     const vbad = vitems.filter((i) => !i.ok);
     qa.checks.push({ name: "Voice playback (cloned voices)", ok: vbad.length === 0, items: vitems, detail: vbad.length ? vbad.map((i) => i.label + ": " + i.note).join("; ") : "all tested voices spoke" });
     if (vbad.length) { qa.ok = false; qa.failures.push("Voice playback: " + vbad.map((i) => i.label + ": " + i.note).join("; ")); }
+  }
+  // Voice recording (save path): runs a stand-in recording in each format
+  // phones and browsers send through the same checks /api/voice-sample uses.
+  // Stops before ElevenLabs, so it costs nothing and uses no voice slot.
+  if (qa && Array.isArray(qa.checks)) {
+    const fake = Buffer.alloc(24000, 7).toString("base64");
+    const formats: [string, string, string][] = [
+      ["Chrome / Android recording", "audio/webm;codecs=opus", "webm"],
+      ["Plain webm", "audio/webm", "webm"],
+      ["iPhone Safari recording", "audio/mp4;codecs=mp4a.40.2", "mp4"],
+      ["iPhone Safari (no codec)", "audio/mp4", "mp4"],
+      ["Voice Memos file (.m4a)", "audio/x-m4a", "m4a"],
+      ["MP3 file", "audio/mpeg", "mp3"],
+      ["File with no type", "", "webm"],
+    ];
+    const ritems: { label: string; ok: boolean; note: string }[] = [];
+    for (const [label, type, ext] of formats) {
+      const r = parseVoiceSample("data:" + type + ";base64," + fake);
+      if (!r.ok) ritems.push({ label, ok: false, note: "rejected: " + r.error });
+      else if (r.ext !== ext) ritems.push({ label, ok: false, note: "accepted but sent to ElevenLabs as ." + r.ext + " (expected ." + ext + ")" });
+      else ritems.push({ label, ok: true, note: "accepted as ." + r.ext });
+    }
+    // And the guard rails still hold.
+    const tiny = parseVoiceSample("data:audio/webm;base64," + Buffer.alloc(500, 7).toString("base64"));
+    ritems.push({ label: "Too-short recording", ok: !tiny.ok && tiny.error === "too_short", note: tiny.ok ? "wrongly accepted" : "rejected: " + tiny.error });
+    const junk = parseVoiceSample("not a recording");
+    ritems.push({ label: "Garbage upload", ok: !junk.ok, note: junk.ok ? "wrongly accepted" : "rejected: " + junk.error });
+    const rbad = ritems.filter((i) => !i.ok);
+    qa.checks.push({ name: "Voice recording (save path)", ok: rbad.length === 0, items: ritems, detail: rbad.length ? rbad.map((i) => i.label + ": " + i.note).join("; ") : formats.length + " recording formats accept; short and garbage uploads rejected" });
+    if (rbad.length) { qa.ok = false; qa.failures.push("Voice recording: " + rbad.map((i) => i.label + ": " + i.note).join("; ")); }
   }
   // Quirky local story: every place with an active couple must come back with a story today.
   // Skipped in the first minutes after a restart: the stories are fetched from

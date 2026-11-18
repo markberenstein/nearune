@@ -8,6 +8,30 @@
 
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 
+// Checks an uploaded voice sample (a data URL from the app) and pulls out
+// its type and bytes. Shared by /api/voice-sample and the morning QA check,
+// so QA tests the exact code that saves real recordings, without calling
+// ElevenLabs. Browsers report recordings with codec details, like
+// "data:audio/webm;codecs=opus;base64,...": those are allowed, and only the
+// container type is kept.
+export type VoiceSampleParse = { ok: true; mimeType: string; bytes: Uint8Array; ext: string } | { ok: false; error: string };
+export function voiceFileExt(mimeType: string): string {
+  return mimeType.includes("webm") ? "webm" : mimeType.includes("m4a") ? "m4a" : mimeType.includes("mpeg") || mimeType.includes("mp3") ? "mp3" : mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : mimeType.includes("wav") ? "wav" : "webm";
+}
+export function parseVoiceSample(dataUrl: unknown): VoiceSampleParse {
+  if (typeof dataUrl !== "string") return { ok: false, error: "invalid" };
+  const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]*)(?:;[^;,]*)*;base64,([\s\S]+)$/);
+  if (!match) return { ok: false, error: "invalid" };
+  const mimeType = match[1] || "application/octet-stream";
+  let bytes: Uint8Array;
+  try { bytes = Buffer.from(match[2], "base64"); } catch { return { ok: false, error: "invalid" }; }
+  // A clean ~20-60s sample is plenty for Instant Voice Cloning; 10MB only
+  // guards against an oversized upload.
+  if (bytes.length < 2000) return { ok: false, error: "too_short" };
+  if (bytes.length > 10 * 1024 * 1024) return { ok: false, error: "too_large" };
+  return { ok: true, mimeType, bytes, ext: voiceFileExt(mimeType) };
+}
+
 export type CloneResult = { ok: true; voiceId: string } | { ok: false; error: string };
 
 // Clones a voice from a short sample recording. ElevenLabs' Instant Voice
@@ -19,7 +43,7 @@ export async function cloneVoice(sampleBytes: Uint8Array, mimeType: string, labe
   const key = Bun.env.ELEVENLABS_API_KEY;
   if (!key) return { ok: false, error: "no_key" };
   try {
-    const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("m4a") ? "m4a" : mimeType.includes("mpeg") || mimeType.includes("mp3") ? "mp3" : mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : mimeType.includes("wav") ? "wav" : "webm";
+    const ext = voiceFileExt(mimeType);
     const form = new FormData();
     form.append("name", label);
     form.append("files", new Blob([sampleBytes], { type: mimeType }), "sample." + ext);

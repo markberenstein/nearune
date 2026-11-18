@@ -27,7 +27,7 @@ import {
   roomSlug,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
-import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
+import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
 import { regionAbbr } from "./usstates";
 import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
@@ -1823,23 +1823,11 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const who = body && body.who;
       const dataUrl = body && body.dataUrl;
       if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
-      // Browsers report recordings with codec details, like
-      // "data:audio/webm;codecs=opus;base64,..." — allow those, and keep
-      // just the container type.
-      const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]*)(?:;[^;,]*)*;base64,([\s\S]+)$/);
-      if (!match) return json({ error: "invalid" }, { status: 400 });
-      const mimeType = match[1] || "application/octet-stream";
-      let bytes: Uint8Array;
-      try {
-        bytes = Buffer.from(match[2], "base64");
-      } catch {
-        return json({ error: "invalid" }, { status: 400 });
-      }
-      // A clean ~20-60s sample is plenty for Instant Voice Cloning — capping
-      // well above that (10MB) just guards against an oversized upload, not
-      // against a long recording that's actually fine.
-      if (bytes.length < 2000) return json({ error: "too_short" }, { status: 400 });
-      if (bytes.length > 10 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
+      // Same checks the morning QA runs (parseVoiceSample in voice.ts).
+      const sample = parseVoiceSample(dataUrl);
+      if (!sample.ok) return json({ error: sample.error }, { status: 400 });
+      const mimeType = sample.mimeType;
+      const bytes = sample.bytes;
       const existing = await loadState(roomId);
       const oldVoiceId = existing.people && existing.people[who] && existing.people[who]!.voiceId;
       const label = "nearune-" + (roomId || "legacy") + "-" + who;

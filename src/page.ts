@@ -5754,7 +5754,8 @@ const RAW = String.raw`<!doctype html>
   function travelBlock() {
     var my = state.people && state.people[viewerKey];
     if (!my) return null;
-    if (skyMode() && !skyMoreOpen && !travelFormOpen && !travelActive(my, dateKey(new Date()))) return null;
+    // Live-sky look: "Traveling?" always shows; military time sits behind
+    // the ⋯ button (unless it's already on).
     var today = dateKey(new Date());
     var wrap = h("div", {});
     if (travelFormOpen) {
@@ -5820,6 +5821,7 @@ const RAW = String.raw`<!doctype html>
       row.appendChild(link);
       wrap.appendChild(row);
       var milOn = !!my.military;
+      if (skyMode() && !skyMoreOpen && !milOn) return wrap;
       var milRow2 = h("div", { class: "switch-row top-action-row" });
       var milLink = h("button", { class: "switch-link", text: milBusy ? t("Working…") : milOn ? t("🎖️ Military time is on — turn off") : t("🎖️ In the military? Show my clock in military time") });
       milLink.disabled = milBusy;

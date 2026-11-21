@@ -176,14 +176,14 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
           </form>`
         : `<span class="muted">—</span>`);
       return `<tr${r.roomId && r.people.length === 0 && !r.friend ? ' class="unset-row"' : ""}>
-        <td>${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
-        <td><span class="pill pill-${status}">${status}</span>${flags}</td>
-        <td>${created}</td>
-        <td>${people}</td>
-        <td class="where">${where}</td>
-        <td>${active}</td>
-        <td>${r.daysAnswered}</td>
-        <td>${r.pushCount}</td>
+        <td data-sort="${adminEsc((r.roomName || r.roomId || "").toLowerCase())}">${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
+        <td data-sort="${status === "active" ? 3 : status === "joined" ? 2 : 1}">${`<span class="pill pill-${status}">${status}</span>`}${flags}</td>
+        <td data-sort="${r.createdAt ? Date.parse(r.createdAt) || 0 : 0}">${created}</td>
+        <td data-sort="${adminEsc(r.people.map((p) => p.name).join(", ").toLowerCase())}">${people}</td>
+        <td class="where" data-sort="${adminEsc(r.people.map((p) => p.location || "").filter(Boolean).join(", ").toLowerCase())}">${where}</td>
+        <td data-sort="${r.lastActive ? Date.parse(r.lastActive) || 0 : 0}">${active}</td>
+        <td data-sort="${r.daysAnswered}">${r.daysAnswered}</td>
+        <td data-sort="${r.pushCount}">${r.pushCount}</td>
         <td>${action}</td>
       </tr>`;
     })
@@ -245,6 +245,9 @@ ${ADMIN_HEAD}
   table.nfun td:nth-child(4) { text-align:left; }
   tr.ngroup td { font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); padding-top:14px; text-align:left !important; }
   .del-btn:hover { background:#B3442F; color:#fff; border-color:#B3442F; }
+  th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+  th.sortable:hover { color:var(--ink); }
+  th.sortable .arrow { display:inline-block; width:1em; color:var(--accent); }
 ${ADMIN_THEME_CSS}
 </style>
 </head>
@@ -270,8 +273,8 @@ ${ADMIN_THEME_CSS}
       : "";
   })()}
   <div class="tblwrap"><table>
-    <thead><tr><th>Room</th><th>Status</th><th>Created</th><th>People</th><th>Where</th><th>Last active</th><th>Days answered</th><th>Push subs</th><th></th></tr></thead>
-    <tbody>${rows}</tbody>
+    <thead><tr><th class="sortable" data-type="text">Room</th><th class="sortable" data-type="num">Status</th><th class="sortable" data-type="num">Created</th><th class="sortable" data-type="text">People</th><th class="sortable" data-type="text">Where</th><th class="sortable" data-type="num">Last active</th><th class="sortable" data-type="num">Days answered</th><th class="sortable" data-type="num">Push subs</th><th></th></tr></thead>
+    <tbody id="rooms-body">${rows}</tbody>
   </table></div>
 </div>
 <script>
@@ -282,6 +285,46 @@ ${ADMIN_THEME_CSS}
     });
     var u = document.getElementById("updated");
     if (u) u.textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    // Tap a column header to sort the rooms by it; tap again to flip the
+    // order. Numbers and dates sort newest/biggest first on the first tap,
+    // text A to Z. The choice is remembered on this device.
+    (function () {
+      var body = document.getElementById("rooms-body");
+      if (!body) return;
+      var ths = document.querySelectorAll("th.sortable");
+      var cur = { col: -1, dir: 1 };
+      try { var saved = JSON.parse(localStorage.getItem("adminRoomSort") || "null"); if (saved) cur = saved; } catch (e) {}
+      function apply() {
+        var rows = Array.prototype.slice.call(body.querySelectorAll("tr"));
+        var th = ths[cur.col];
+        if (!th) return;
+        var colIdx = Array.prototype.indexOf.call(th.parentNode.children, th);
+        var num = th.getAttribute("data-type") === "num";
+        rows.sort(function (a, b) {
+          var x = a.children[colIdx] ? a.children[colIdx].getAttribute("data-sort") || "" : "";
+          var y = b.children[colIdx] ? b.children[colIdx].getAttribute("data-sort") || "" : "";
+          var c = num ? (Number(x) || 0) - (Number(y) || 0) : x.localeCompare(y);
+          return c * cur.dir;
+        });
+        for (var i = 0; i < rows.length; i++) body.appendChild(rows[i]);
+        for (var j = 0; j < ths.length; j++) {
+          var ar = ths[j].querySelector(".arrow");
+          if (!ar) { ar = document.createElement("span"); ar.className = "arrow"; ths[j].appendChild(ar); }
+          ar.textContent = j === cur.col ? (cur.dir > 0 ? " \u25b2" : " \u25bc") : "";
+        }
+      }
+      for (var k = 0; k < ths.length; k++) {
+        (function (k) {
+          ths[k].addEventListener("click", function () {
+            if (cur.col === k) cur.dir = -cur.dir;
+            else { cur.col = k; cur.dir = ths[k].getAttribute("data-type") === "num" ? -1 : 1; }
+            try { localStorage.setItem("adminRoomSort", JSON.stringify(cur)); } catch (e) {}
+            apply();
+          });
+        })(k);
+      }
+      if (cur.col >= 0) apply();
+    })();
     // Show creation times in this device's own time zone.
     var els = document.querySelectorAll(".local-time");
     for (var i = 0; i < els.length; i++) {

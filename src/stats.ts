@@ -162,16 +162,20 @@ export async function computeStats(full = true) {
   }
   let qa: any = null;
   try { const r = await runQa(); qa = { at: r.at, ok: r.ok, failures: r.failures, fixed: r.fixed, checks: r.checks }; } catch {}
-  // WeatherKit connection test per city (the same call the app makes for a
-  // person's background), max 20 cities.
+  // WeatherKit connection test for every city (the same call the app makes
+  // for a person's background). It used to stop at 20 cities, so places past
+  // the 20th showed no result. Runs 6 at a time to stay gentle on WeatherKit.
   if (weatherKitConfigured()) {
-    await Promise.all([...byCity.values()].slice(0, 20).map(async (c) => {
-      const t0 = Date.now();
-      try {
-        const w = await weatherKitCurrentWeather(c.lat, c.lon);
-        c.wk = { ok: !!w, ms: Date.now() - t0 };
-      } catch { c.wk = { ok: false, ms: Date.now() - t0 }; }
-    }));
+    const cityList = [...byCity.values()];
+    for (let i = 0; i < cityList.length; i += 6) {
+      await Promise.all(cityList.slice(i, i + 6).map(async (c) => {
+        const t0 = Date.now();
+        try {
+          const w = await weatherKitCurrentWeather(c.lat, c.lon);
+          c.wk = { ok: !!w, ms: Date.now() - t0 };
+        } catch { c.wk = { ok: false, ms: Date.now() - t0 }; }
+      }));
+    }
   }
   // WeatherKit connection test: one live call for a fixed point (San Mateo).
   const wk: { ok: boolean; configured: boolean; ms: number | null; detail: string } = { ok: false, configured: weatherKitConfigured(), ms: null, detail: "" };

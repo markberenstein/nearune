@@ -1,6 +1,6 @@
 // Nearune — push notifications. Two delivery paths behind one sendPush():
 // Web Push (VAPID) for browsers/home-screen installs, via the `web-push`
-// library, and native Apple Push Notification service for the iOS app
+// library, Firebase Cloud Messaging for the Android app, and native Apple Push Notification service for the iOS app
 // (Capacitor wrapper), via a hand-rolled APNs HTTP/2 provider request. The
 // rest of the app never touches either API directly — it just calls
 // sendPush() with whichever kind of subscription record a person has.
@@ -42,7 +42,30 @@ export const apnsConfigured = !!(APNS_KEY_ID && APNS_TEAM_ID && APNS_PRIVATE_KEY
 // True if either delivery path is set up — the two call sites in
 // server.ts use this to decide whether it's worth doing any push work at
 // all, since a given room may have people on either or both paths.
-export const anyPushConfigured = pushConfigured || apnsConfigured;
+// Firebase Cloud Messaging (Android app). Credentials are a Firebase service
+// account JSON, stored in Railway as FIREBASE_SERVICE_ACCOUNT — either the raw
+// JSON or the same JSON base64-encoded (easier to paste as one line).
+function loadFirebaseAccount(): { project_id: string; client_email: string; private_key: string; token_uri: string } | null {
+  let raw = (Bun.env.FIREBASE_SERVICE_ACCOUNT || "").trim();
+  if (!raw) return null;
+  try {
+    if (raw[0] !== "{") raw = Buffer.from(raw, "base64").toString("utf8");
+    const j = JSON.parse(raw);
+    if (!j.project_id || !j.client_email || !j.private_key) return null;
+    return {
+      project_id: j.project_id,
+      client_email: j.client_email,
+      private_key: String(j.private_key).replace(/\\n/g, "\n"),
+      token_uri: j.token_uri || "https://oauth2.googleapis.com/token",
+    };
+  } catch (e) {
+    console.error("[fcm] FIREBASE_SERVICE_ACCOUNT could not be parsed");
+    return null;
+  }
+}
+const FIREBASE = loadFirebaseAccount();
+export const fcmConfigured = !!FIREBASE;
+export const anyPushConfigured = pushConfigured || apnsConfigured || fcmConfigured;
 
 // APNs provider tokens are valid up to an hour; cache and refresh a bit
 // early rather than signing a fresh one on every single push.
@@ -194,6 +217,68 @@ async function sendApnsPush(deviceToken: string, payload: PushPayload): Promise<
   return { ok: second.ok, gone: second.gone };
 }
 
+// --- Firebase Cloud Messaging (HTTP v1) ----------------------------------
+let fcmTokenCache: { token: string; at: number } | null = null;
+async function fcmAccessToken(): Promise<string | null> {
+  if (!FIREBASE) return null;
+  const now = Date.now();
+  if (fcmTokenCache && now - fcmTokenCache.at < 50 * 60 * 1000) return fcmTokenCache.token;
+  const iat = Math.floor(now / 1000);
+  const assertion = jwt.sign(
+    { iss: FIREBASE.client_email, scope: "https://www.googleapis.com/auth/firebase.messaging", aud: FIREBASE.token_uri, iat, exp: iat + 3600 },
+    FIREBASE.private_key,
+    { algorithm: "RS256" }
+  );
+  const res = await fetch(FIREBASE.token_uri, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "grant_type=" + encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer") + "&assertion=" + encodeURIComponent(assertion),
+  });
+  if (!res.ok) {
+    console.error("[fcm] token request failed — status=" + res.status);
+    return null;
+  }
+  const j: any = await res.json();
+  if (!j.access_token) return null;
+  fcmTokenCache = { token: j.access_token, at: now };
+  return j.access_token;
+}
+
+async function sendFcmPush(deviceToken: string, payload: PushPayload): Promise<{ ok: boolean; gone: boolean }> {
+  if (!FIREBASE) return { ok: false, gone: false };
+  // Android has no app-icon number to sync, so a badge-only (silent) push has
+  // nothing to do — treat it as delivered.
+  if (payload.silent) return { ok: true, gone: false };
+  try {
+    const access = await fcmAccessToken();
+    if (!access) return { ok: false, gone: false };
+    const res = await fetch((Bun.env.FCM_BASE_URL || "https://fcm.googleapis.com") + "/v1/projects/" + FIREBASE.project_id + "/messages:send", {
+      method: "POST",
+      headers: { authorization: "Bearer " + access, "content-type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          token: deviceToken,
+          notification: { title: payload.title || "Nearune", body: payload.body || "" },
+          android: {
+            priority: "HIGH",
+            notification: { channel_id: "nearune", ...(payload.tag ? { tag: payload.tag.slice(0, 64) } : {}) },
+          },
+        },
+      }),
+    });
+    if (res.ok) return { ok: true, gone: false };
+    const text = await res.text();
+    // 404 UNREGISTERED = app uninstalled / token expired; 400 with an invalid
+    // token means the same thing for our purposes.
+    const gone = res.status === 404 || (res.status === 400 && /registration token|INVALID_ARGUMENT/i.test(text) && /token/i.test(text));
+    console.error("[fcm] rejected — status=" + res.status + " " + text.slice(0, 200));
+    return { ok: false, gone };
+  } catch (err: any) {
+    console.error("[fcm] request error — " + (err && err.message));
+    return { ok: false, gone: false };
+  }
+}
+
 // Sends one push. Returns { ok, gone } — gone=true means the subscription is
 // dead (e.g. the user uninstalled the app or revoked permission) and the
 // caller should drop it from state so we stop retrying it forever.
@@ -202,5 +287,6 @@ export async function sendPush(
   payload: PushPayload
 ): Promise<{ ok: boolean; gone: boolean }> {
   if (sub.kind === "apns") return sendApnsPush(sub.token, payload);
+  if (sub.kind === "fcm") return sendFcmPush(sub.token, payload);
   return sendWebPush(sub, payload);
 }

@@ -97,7 +97,7 @@ export function buildHomePage(): string {
   </div>
   <div class="grid" id="slots"></div>
   <p class="msg" id="msg"></p>
-  <span id="nrTip" class="tip-fab" style="display:none"><a href="#" id="nrTipLink">💛 Support Nearune</a></span><span id="nrSupport" class="tip-fab" style="display:none"><a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span>
+  <span id="nrTip" class="tip-fab" style="display:none"><a href="#" id="nrTipLink"><span class="tip-emoji">💛</span> Support Nearune</a></span><span id="nrSupport" class="tip-fab" style="display:none"><a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener"><span class="tip-emoji">☕</span> Support Nearune</a></span><script>(function(){try{var e=["💛","☕","🌻","🌙","✨","🎁","🍩","🌈","🧁","🌷","🍀","🎈","💐","⭐","🍪","🌸","🔥","🍓","🌊","🎶","🌟"];var d=new Date(),n=Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000),x=document.querySelectorAll(".tip-emoji");for(var k=0;k<x.length;k++)x[k].textContent=e[n%e.length];}catch(_){}})();</script>
   <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
 </div>
 <script>

@@ -158,6 +158,9 @@ export type State = {
   // invite link (capped at 3), and which link (token) that count is for.
   inviteNudgeCount?: number;
   inviteNudgeToken?: string;
+  // Permanent room number for the admin page (#1, #2, ...), given once the
+  // first person signs up and never changed (see numberRooms in server.ts).
+  roomNo?: number;
   // Safety tools (App Store requirement for user-shared content):
   // blocked[x] = true means person x has hidden their partner's content from
   // their own screen. reports is a server-side log for the app owner and is

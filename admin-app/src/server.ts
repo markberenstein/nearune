@@ -136,6 +136,7 @@ Bun.serve({
           summaries.push({
             roomId: id,
             roomName: state.roomName || undefined,
+            roomNo: (state as any).roomNo || undefined,
             createdAt: state.createdAt || null,
             people,
             via: state.createdVia || null,
@@ -167,7 +168,11 @@ Bun.serve({
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
         });
       }
-      return new Response(buildAdminPage(summaries, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
+      // The Rooms tab lists real rooms only: someone signed up, or a Make a
+      // friend room waiting on its match. Unfinished sign-ups are counted on
+      // the Home tab instead (and removed after 24 hours).
+      const realRooms = summaries.filter((r) => r.people.length > 0 || r.friend);
+      return new Response(buildAdminPage(realRooms, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }

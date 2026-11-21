@@ -77,9 +77,17 @@ export async function computeStats(full = true) {
   const locByCountry = new Map<string, string>();
   const newsLocs = new Set<string>();
   const byCity = new Map<string, { city: string; country: string; region?: string; tz?: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
+  // Sign-up funnel for the last 24 hours: people who opened the sign-up form
+  // vs. people who finished. Unfinished ones aren't rooms and aren't listed.
+  let signupsStarted = 0, signupsFinished = 0;
+  const dayAgo = Date.now() - 86400000;
   for (const id of ids) {
     let st: any;
     try { st = await loadState(id); } catch { continue; }
+    const signedUp = Object.values(st?.people || {}).some((p: any) => p && p.name);
+    const recent = !!(st?.createdAt && Date.parse(st.createdAt) >= dayAgo);
+    if (recent) { signupsStarted++; if (signedUp) signupsFinished++; }
+    if (!signedUp) continue;
     rooms++;
     try { if (Object.values(st?.answers || {}).some((day: any) => day && (day.mark || day.nikita))) answered++; } catch {}
     let both7 = false;
@@ -92,7 +100,7 @@ export async function computeStats(full = true) {
     try {
       const days = Object.entries(st?.answers || {}).filter(([, day]: any) => day && (day.mark || day.nikita)).map(([d]) => d).sort();
       roomList.push({
-        n: rooms,
+        n: st?.roomNo || 0,
         created: st?.createdAt || null,
         status: ppl.length === 2 && ppl.every((p: any) => p.confirmed) ? "active" : ppl.length < 2 ? "waiting for partner" : "partner not confirmed",
         answeredDays: days.length,
@@ -105,7 +113,7 @@ export async function computeStats(full = true) {
     } catch {}
     for (const k of ["mark", "nikita"]) {
       const p = st?.people?.[k]; if (!p) continue;
-      if (p.voiceId) voiceIds.push({ room: rooms, who: String(p.name || k).slice(0, 30), id: String(p.voiceId) });
+      if (p.voiceId) voiceIds.push({ room: st?.roomNo || rooms, who: String(p.name || k).slice(0, 30), id: String(p.voiceId) });
       const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
       const loc = String(p.location || "").trim();
       if (!loc) continue;
@@ -119,6 +127,7 @@ export async function computeStats(full = true) {
       if (e) { e.n++; e.people.push(who); } else byCity.set(key, { city: c.city, country: c.country, region: c.region || "", tz: c.tz || "", lat: +c.lat.toFixed(2), lon: +c.lon.toFixed(2), n: 1, people: [who] });
     }
   }
+  roomList.sort((a, b) => (a.n || 1e9) - (b.n || 1e9));
   if (!full && lastFull) {
     // Light hourly run: fresh counts, checks carried over from the last full run.
     const prevWk = new Map<string, any>();
@@ -126,7 +135,7 @@ export async function computeStats(full = true) {
     for (const c of byCity.values()) { const w = prevWk.get(c.lat.toFixed(1) + "," + c.lon.toFixed(1)); if (w) c.wk = w; }
     return {
       at: new Date().toISOString(),
-      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList,
+      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished },
       cities: [...byCity.values()].sort((a, b) => b.n - a.n),
       qa: lastFull.qa,
       weatherkit: lastFull.weatherkit,
@@ -271,7 +280,7 @@ export async function computeStats(full = true) {
   const at = new Date().toISOString();
   lastFull = {
     at,
-    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList,
+    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished },
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,

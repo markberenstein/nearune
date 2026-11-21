@@ -105,7 +105,10 @@ async function roomsCreatedToday(): Promise<number> {
       for (const id of await listRoomIds()) {
         if (!id) continue;
         const st = await loadState(id);
-        if (st.createdAt && pacificDay(new Date(st.createdAt)) === day) n++;
+        // Only rooms someone actually signed up in count toward the cap;
+        // a tap on "Invite your first Nearune partner" that went nowhere doesn't.
+        const signedUp = Object.values(st.people || {}).some((p: any) => p && p.name);
+        if (signedUp && st.createdAt && pacificDay(new Date(st.createdAt)) === day) n++;
       }
     } catch {}
     regToday.day = day;
@@ -326,6 +329,14 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return new Response(clip.bytes, { headers: { "content-type": clip.type, "cache-control": "public, max-age=3600", "accept-ranges": "none" } });
     }
 
+    // Approximate city from the visitor's internet connection, used only to
+    // fill in the sign-up form's city box ahead of time (they can change it).
+    // Nothing is stored. Looked up with ipapi.co; any failure returns empty.
+    if (req.method === "GET" && url.pathname === "/api/ip-city") {
+      if (!rateLimit("ip-city:" + clientIp(req, server), 20, HOUR)) return json({ label: "" });
+      return json({ label: await approxCity(clientIp(req, server)) });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/create-room") {
       // Caps how many fresh rooms one visitor can spin up — a real couple
       // needs one, ever.
@@ -366,9 +377,10 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
       const via = device + " " + kind + " " + lang;
       const id = await createRoom(useName, via, useName || undefined);
-      regToday.n++;
-      console.log("[room-created] " + id + " via " + via);
-      notifyRoomMilestone(regToday.n);
+      // Not counted as a room yet: it only becomes one (gets a number, shows
+      // on the admin page, counts toward the daily cap) once someone signs
+      // up in it. Abandoned ones are removed after 24 hours.
+      console.log("[room-created] " + id + " via " + via + " (waiting for sign-up)");
       return json({ roomId: id });
     }
 
@@ -1338,6 +1350,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           if (s.pendingConfirm) delete s.pendingConfirm[who];
           if (relationship && !s.relationship) s.relationship = relationship;
         });
+        roomSignedUp(roomId);
         return json({ ...forClient(stateH), _viaHandle: true });
       }
       // Two limits: how many confirm emails this visitor can trigger, and
@@ -1382,6 +1395,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         // confirm) never overwrites an already-chosen relationship.
         if (relationship && !s.relationship) s.relationship = relationship;
       });
+      roomSignedUp(roomId);
       const confirmUrl = publicOrigin + roomPrefix + "/api/confirm?who=" + who + "&token=" + token;
       // Sent in whichever language this person just picked on the
       // registration form (translateEmailStrings falls back to English,
@@ -1941,6 +1955,21 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const sharedAt = state.people && state.people[who] ? state.people[who]!.photoAt || "" : "";
       convertSharedVideo(roomId, who, sharedAt, vBytes).catch((e) => console.log("[video] convert failed: " + (e?.message || e)));
       return json(forClient(state));
+    }
+
+    // Who the room is for (partner, family, friend...), chosen on the invite
+    // card now that sign-up only asks for a name and city. Picks the daily
+    // question set. Can be changed until the invited person joins.
+    if (req.method === "POST" && restPath === "/api/relationship") {
+      const body = await readJson(req);
+      const rel = body && body.relationship;
+      if (!isPerson(body?.who) || !["significant_other", "family", "friend", "its_complicated"].includes(rel)) return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (cur.origin === "friend") return json({ error: "invalid" }, { status: 400 });
+      const bothIn = cur.people && cur.people.mark && cur.people.mark.confirmed && cur.people.nikita && cur.people.nikita.confirmed;
+      if (bothIn && cur.relationship) return json(forClient(cur));
+      const st = await saveState(roomId, (s) => { s.relationship = rel; });
+      return json(forClient(st));
     }
 
     // Share a link (one per person, replaced each time) with an optional
@@ -2608,4 +2637,68 @@ async function convertSharedVideo(roomId: string, who: PersonKey, sharedAt: stri
     try { await Bun.file(inPath).delete(); } catch {}
     try { await Bun.file(outPath).delete(); } catch {}
   }
+}
+
+
+// ---- Permanent room numbers ---------------------------------------------
+// Each room gets a number once someone signs up in it (#1, #2, ...), kept in
+// the room and never changed, so the admin page's "Room 12" always means the
+// same room. Rooms without one are numbered in the order they were made
+// (the original room first). Runs right after a sign-up and hourly.
+let numbering: Promise<void> = Promise.resolve();
+function numberRooms(): Promise<void> {
+  numbering = numbering.then(async () => {
+    try {
+      const rooms: { id: string; no?: number; created: number }[] = [];
+      for (const id of await listRoomIds()) {
+        let st: any;
+        try { st = await loadState(id); } catch { continue; }
+        if (!Object.values(st.people || {}).some((p: any) => p && p.name)) continue;
+        rooms.push({ id, no: st.roomNo, created: id === "" ? 0 : (st.createdAt ? Date.parse(st.createdAt) : 1) });
+      }
+      let next = rooms.reduce((m, r) => Math.max(m, r.no || 0), 0) + 1;
+      for (const r of rooms.filter((r) => !r.no).sort((a, b) => a.created - b.created || a.id.localeCompare(b.id))) {
+        const n = next++;
+        await saveState(r.id, (s) => { if (!s.roomNo) s.roomNo = n; });
+        console.log("[room-number] " + (r.id || "main") + " is room #" + n);
+      }
+    } catch (err) {
+      console.error("[room-number] failed", err);
+    }
+  });
+  return numbering;
+}
+setTimeout(numberRooms, 2 * 60 * 1000);
+setInterval(numberRooms, 60 * 60 * 1000);
+
+// A room just got its first sign-up: number it, and recount today's rooms
+// for the daily cap and the "N new rooms today" Slack note.
+function roomSignedUp(roomId: string): void {
+  numberRooms().catch(() => {});
+  regToday.day = "";
+  roomsCreatedToday().then((n) => notifyRoomMilestone(n)).catch(() => {});
+}
+
+// ---- Approximate city from the internet connection ----------------------
+const ipCityCache = new Map<string, { at: number; label: string }>();
+async function approxCity(ip: string): Promise<string> {
+  if (!ip || ip === "unknown" || /^(127\.|10\.|192\.168\.|::1)/.test(ip)) return "";
+  const hit = ipCityCache.get(ip);
+  if (hit && Date.now() - hit.at < 60 * 60 * 1000) return hit.label;
+  let label = "";
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 3000);
+    const res = await fetch("https://ipapi.co/" + encodeURIComponent(ip) + "/json/", { signal: ctl.signal, headers: { "user-agent": "nearune.ai" } });
+    clearTimeout(timer);
+    if (res.ok) {
+      const d: any = await res.json();
+      const city = String(d.city || "").trim();
+      if (city && !d.error) {
+        label = d.country_code === "US" && d.region_code ? city + ", " + d.region_code : city + (d.country_name ? ", " + d.country_name : "");
+      }
+    }
+  } catch {}
+  ipCityCache.set(ip, { at: Date.now(), label });
+  return label;
 }

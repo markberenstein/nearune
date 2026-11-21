@@ -3550,7 +3550,6 @@ const RAW = String.raw`<!doctype html>
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
     // only required when it's actually shown.
-    if (soloRegistration && !registerDraft.relationship) { funnelPing("reg_err_relationship"); regError = t("Pick how you two know each other."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -3637,53 +3636,41 @@ const RAW = String.raw`<!doctype html>
     }
     var card = h("div", { class: "card" }, [
       h("p", { class: "reg-title", text: soloRegistration ? t("Let's set up your Nearune") : tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) }),
-      h("p", { class: "reg-sub", text: soloRegistration ? t("A few quick details, then you can invite your partner.") : "" })
+      h("p", { class: "reg-sub", text: soloRegistration ? t("Just your name and city, then you can invite someone.") : "" })
     ]);
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(registerDraft);
     applyPhoneLanguage(registerDraft);
     funnelPing("reg_screen");
-    form.appendChild(h("div", { class: "reg-label", text: t("Where are you?") }));
-    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; if (v) funnelPing("reg_city"); suggestLanguageFromLocation(registerDraft, v); });
+    // Sign-up asks only for a name and a city. The city is filled in ahead of
+    // time from the phone's approximate location (their internet connection,
+    // no permission pop-up) and can be changed. Language is worked out from
+    // the city and the phone; who the room is for is asked on the invite
+    // card; military time is a setting in the room.
+    form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
+    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); }));
+    form.appendChild(h("div", { class: "reg-label", text: t("Your city") }));
+    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
-    form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); }));
-    form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
-    form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
-    var milRow = h("label", { style: "display:flex; align-items:center; gap:10px; margin:10px 2px 4px; cursor:pointer;" });
-    var milBox = document.createElement("input");
-    milBox.type = "checkbox";
-    milBox.style.cssText = "width:20px; height:20px; flex:0 0 auto; margin:0; accent-color: var(--accent, #a8552a);";
-    milBox.checked = !!registerDraft.military;
-    milBox.addEventListener("change", function () { registerDraft.military = milBox.checked; });
-    milRow.appendChild(milBox);
-    milRow.appendChild(h("span", { style: "font-size:0.95rem; line-height:1.3; text-align:left;", text: t("I'm in the military (show my time as 1930, not 7:30 PM)") }));
-    form.appendChild(milRow);
-    // Only the first person through sets this: it's shared by the room
-    // (questionPoolFor() uses it for both people's daily question).
-    if (soloRegistration) {
-      form.appendChild(h("div", { class: "reg-label", text: t("Your Nearune partner is your...") }));
-      var chips = h("div", { class: "reg-chips" });
-      RELATIONSHIPS.forEach(function (pair) {
-        var chip = h("button", { type: "button", class: "reg-chip" + (registerDraft.relationship === pair[0] ? " on" : ""), text: t(pair[1]) });
-        chip.addEventListener("click", function () { registerDraft.relationship = pair[0]; renderApp(); });
-        chips.appendChild(chip);
-      });
-      form.appendChild(chips);
+    if (!registerDraft.location && !registerDraft.ipCityTried) {
+      registerDraft.ipCityTried = true;
+      fetch("/api/ip-city").then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || !d.label || registerDraft.location || registerDraft.locationTouched) return;
+        registerDraft.location = d.label;
+        if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = d.label;
+        suggestLanguageFromLocation(registerDraft, d.label);
+      }).catch(function () {});
     }
-    // Optional room name — moved here from the old "Start a room" page now
-    // that the first tile creates the room in one tap. Only the first person,
-    // and only while the room has no name yet.
-    if (soloRegistration && !state.roomName) {
-      form.appendChild(h("div", { class: "reg-label", text: t("Room name (optional)") }));
-      var rn = textField(registerDraft.roomName, "Leave blank and we'll pick one", function (v) { registerDraft.roomName = v; });
-      rn.setAttribute("maxlength", "24");
-      rn.setAttribute("autocapitalize", "words");
-      rn.setAttribute("autocorrect", "off");
-      form.appendChild(rn);
+    if (registerDraft.showLanguage) {
+      form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
+      form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
+    } else {
+      var langLink = h("button", { type: "button", class: "reg-more", text: t("Language:") + " " + (registerDraft.language || "English") + " \u00b7 " + t("Change") });
+      langLink.addEventListener("click", function () { registerDraft.showLanguage = true; renderApp(); });
+      form.appendChild(langLink);
     }
     // Email is optional: only for getting the room back on a new phone.
     if (regShowEmail || registerDraft.email) {
@@ -3873,10 +3860,32 @@ const RAW = String.raw`<!doctype html>
     // partner's email, not a quick way to text them a link.
     var card = h("div", { class: "card" }, [
       h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
-      h("p", { class: "reg-sub", text: stillWaiting
+      h("p", { class: "reg-sub", text: state && state.origin !== "friend" && !state.relationship
+        ? t("First, who's this invite for? It picks your daily questions.")
+        : stillWaiting
         ? t("They haven't joined yet. Send it again by text or email.")
         : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })
     ]);
+    // Who the invite is for, asked here instead of on the sign-up form. It
+    // picks the daily question set, so it's chosen before the invite goes
+    // out (and before today's question shows).
+    if (state && state.origin !== "friend" && !state.relationship) {
+      card.appendChild(h("div", { class: "reg-label", style: "margin-top:14px;", text: t("Who are you inviting?") }));
+      var relChips = h("div", { class: "reg-chips" });
+      RELATIONSHIPS.forEach(function (pair) {
+        var chip = h("button", { type: "button", class: "reg-chip", text: t(pair[1]) });
+        chip.addEventListener("click", function () {
+          chip.disabled = true;
+          fetch(RP + "/api/relationship", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, relationship: pair[0] }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d && d.people) state = d; renderApp(); })
+            .catch(function () { chip.disabled = false; });
+        });
+        relChips.appendChild(chip);
+      });
+      card.appendChild(relChips);
+      return card;
+    }
     if (!lastInviteUrl && !regBusy && !inviteAutoTried) {
       inviteAutoTried = true;
       setTimeout(submitInviteLink, 0);
@@ -4239,7 +4248,9 @@ const RAW = String.raw`<!doctype html>
     }
     // Today's question sits right under the invite, so there's an obvious
     // next step after sending it.
-    if (confirmed) app.appendChild(soloQuestionCard(otherKey));
+    // Today's question waits until they've said who the room is for (it
+    // picks the question set: partner, family or friend).
+    if (confirmed && (state.relationship || state.origin === "friend")) app.appendChild(soloQuestionCard(otherKey));
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {

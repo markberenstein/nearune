@@ -7,6 +7,7 @@ export type AdminRoomSummary = {
   roomId: string;
   // Display name the first partner typed (shown as the room title), if any.
   roomName?: string;
+  roomNo?: number;
   createdAt: string | null;
   people: { who?: string; name: string; confirmed: boolean; location?: string; tz?: string }[];
   // Device, app-or-web and language the room was created from (no IP kept).
@@ -98,7 +99,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
   const secretQS = "secret=" + encodeURIComponent(secret);
   const rows = rooms
     .map((r) => {
-      const label = r.roomId ? adminEsc(r.roomId) : "Original room";
+      const label = (r.roomNo ? "#" + r.roomNo + " \u00b7 " : "") + (r.roomId ? adminEsc(r.roomId) : "Original room");
       const created = r.createdAt ? "<span class=\"local-time\" data-ts=\"" + adminEsc(r.createdAt) + "\">" + adminEsc(new Date(r.createdAt).toLocaleString("en-US")) + " UTC</span>" : "<span class=\"muted\">unknown</span>";
       const people =
         r.people.length === 0
@@ -176,7 +177,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
           </form>`
         : `<span class="muted">—</span>`);
       return `<tr${r.roomId && r.people.length === 0 && !r.friend ? ' class="unset-row"' : ""}>
-        <td data-sort="${adminEsc((r.roomName || r.roomId || "").toLowerCase())}">${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
+        <td data-sort="${r.roomNo || 0}">${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
         <td data-sort="${status === "active" ? 3 : status === "joined" ? 2 : 1}">${`<span class="pill pill-${status}">${status}</span>`}${flags}</td>
         <td data-sort="${r.createdAt ? Date.parse(r.createdAt) || 0 : 0}">${created}</td>
         <td data-sort="${adminEsc(r.people.map((p) => p.name).join(", ").toLowerCase())}">${people}</td>
@@ -273,7 +274,7 @@ ${ADMIN_THEME_CSS}
       : "";
   })()}
   <div class="tblwrap"><table>
-    <thead><tr><th class="sortable" data-type="text">Room</th><th class="sortable" data-type="num">Status</th><th class="sortable" data-type="num">Created</th><th class="sortable" data-type="text">People</th><th class="sortable" data-type="text">Where</th><th class="sortable" data-type="num">Last active</th><th class="sortable" data-type="num">Days answered</th><th class="sortable" data-type="num">Push subs</th><th></th></tr></thead>
+    <thead><tr><th class="sortable" data-type="num">Room</th><th class="sortable" data-type="num">Status</th><th class="sortable" data-type="num">Created</th><th class="sortable" data-type="text">People</th><th class="sortable" data-type="text">Where</th><th class="sortable" data-type="num">Last active</th><th class="sortable" data-type="num">Days answered</th><th class="sortable" data-type="num">Push subs</th><th></th></tr></thead>
     <tbody id="rooms-body">${rows}</tbody>
   </table></div>
 </div>

@@ -406,6 +406,11 @@ const EXCLUDE_TERMS =
   "-flood -disaster -storm -outage -layoffs -bankruptcy -indicted -trial " +
   "-fossil -fossils -archaeolog* -archeolog* -dinosaur -excavat* -unearthed -ancient -skeleton -bones -remains -discovery -discovered -scientists -researchers -paleontolog*";
 
+// Google ignores search words past about 32, so the nearby-town and
+// big-city searches use this short list (BAD_HEADLINE and Claude screen the
+// rest) instead of the long EXCLUDE_TERMS.
+const SHORT_EXCLUDE = "-killed -dead -death -shooting -crash -fire -arrest -police";
+
 // Top local story for a free-text location, biased toward genuinely odd
 // or funny stories using today's single rotating TONE theme (see
 // THEMES/todaysTheme above) rather than an event category — a tone word
@@ -493,7 +498,7 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
       const n = near[ni];
       const nCity = n.split(",")[0].trim();
       const nRegion = n.split(",").slice(1).join(" ").trim();
-      const nq = (nRegion ? '"' + nCity + '" ' + nRegion : '"' + nCity + '"') + " (viral OR quirky OR bizarre OR hilarious OR weirdest OR \"caught on camera\" OR \"on the loose\" OR \"world record\") " + EXCLUDE_TERMS + " -festival -tickets -sale -opening -grand -event -events when:30d";
+      const nq = (nRegion ? '"' + nCity + '" ' + nRegion : '"' + nCity + '"') + " (viral OR quirky OR bizarre OR hilarious OR weirdest OR \"caught on camera\" OR \"on the loose\" OR \"world record\") " + SHORT_EXCLUDE + " -festival -event when:30d";
       let pool = (await fetchCandidates(nq))
         .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, n, true));
       for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
@@ -518,16 +523,24 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
       const bCity = big.split(",")[0].trim();
       const bRegion = big.split(",").slice(1).join(" ").trim();
       const bName = bRegion ? '"' + bCity + '" ' + bRegion : '"' + bCity + '"';
+      // Google ignores search words past about 32, so these queries stay
+      // short (a few key exclusions; BAD_HEADLINE and Claude screen the
+      // rest). The last one is simply the city's recent news, from which
+      // Claude picks the lightest, most pleasant story, so a big city
+      // always yields something.
       const bigTiers: { query: string; strict: boolean }[] = [
-        { query: bName + " (viral OR quirky OR bizarre OR hilarious OR weirdest OR \"caught on camera\" OR \"on the loose\" OR \"world record\") " + EXCLUDE_TERMS + " -festival -tickets -sale -opening -grand -event -events when:30d", strict: true },
-        { query: bName + " (quirky OR unusual OR funny OR heartwarming OR adorable OR \"first-ever\") " + EXCLUDE_TERMS + " -tickets -sale -event -events when:30d", strict: false },
+        { query: bName + " (viral OR quirky OR bizarre OR hilarious OR weirdest OR \"world record\") " + SHORT_EXCLUDE + " when:30d", strict: true },
+        { query: bName + " (quirky OR unusual OR funny OR heartwarming OR adorable OR \"first-ever\") " + SHORT_EXCLUDE + " when:30d", strict: false },
+        { query: bName + " " + SHORT_EXCLUDE + " when:7d", strict: false },
       ];
       for (let bi = 0; bi < bigTiers.length && !value; bi++) {
-        let pool = (await fetchCandidates(bigTiers[bi].query))
+        const raw = await fetchCandidates(bigTiers[bi].query);
+        let pool = raw
           .filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, big, false));
+        console.log("[localnews] " + q + " big city " + big + " step " + (bi + 1) + ": " + raw.length + " found, " + pool.length + " usable");
         for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
           const pick = await pickQuirkiest(big, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), bigTiers[bi].strict);
-          if (pick === null) break;
+          if (pick === null) { console.log("[localnews] " + q + " big city step " + (bi + 1) + ": Claude found none light enough"); break; }
           const cand = pool[pick];
           const access = await checkArticleAccess(cand.url);
           if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }

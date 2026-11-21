@@ -119,6 +119,8 @@ const FUNNEL_STEPS = new Set([
   "reg_screen", "reg_city", "reg_name", "reg_email", "reg_clicked",
   "reg_err_city", "reg_err_name", "reg_err_relationship", "reg_err_server",
   "confirm_screen", "invite_screen",
+  // The invite actually went out: link copied or shared, or email sent.
+  "invite_shared", "invite_emailed",
 ]);
 
 const PORT = Number(Bun.env.PORT) || 3000;
@@ -265,7 +267,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const sState = await loadState(sRoom);
       let sWho = "";
       for (const k of ["mark", "nikita"] as const) {
-        if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken) sWho = k;
+        if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken && inviteLive(sState.pendingInvite[k]!)) sWho = k;
       }
       const dest = "/r/" + sRoom + "/" + (sWho ? "?invite=" + sWho + "&token=" + sToken : "");
       // The inviter's first name is shown on the landing page and in the link
@@ -311,7 +313,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (jst.origin !== "friend") {
         for (const k of ["mark", "nikita"] as const) {
           const inv = jst.pendingInvite && jst.pendingInvite[k];
-          if (inv && inv.token && !(jst.people && jst.people[k] && jst.people[k]!.confirmed)) return json({ dest: "/j/" + jc + "/" + inv.token });
+          if (inv && inv.token && inviteLive(inv) && !(jst.people && jst.people[k] && jst.people[k]!.confirmed)) return json({ dest: "/j/" + jc + "/" + inv.token });
         }
       }
       return json({ dest: "/r/" + jc + "/" });
@@ -757,43 +759,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           const state = await loadState(id);
           if (!state.pushSubs) continue;
           const today = todayKeyFor(state);
-          // "Still waiting" nudges for someone whose invited partner hasn't
-          // joined: at most three, spaced out, each worded differently and
-          // led by what they get, not by what's missing. Only people who
-          // turned notifications on can receive them. Not for Make a friend
-          // rooms (the match arrives on its own).
-          const DAY_MS = 24 * 60 * 60 * 1000;
-          const NUDGES = [
-            { after: 1 * DAY_MS, title: "Your Nearune is almost ready", body: "One text from you and your first question opens for the two of you. Your invite link is waiting." },
-            { after: 3 * DAY_MS, title: "Your partner is one tap away", body: "Send your link again. It takes ten seconds, and a daily question is better with two." },
-            { after: 7 * DAY_MS, title: "Your room is still open", body: "Whenever you're ready, share your invite and start the daily question together." },
-          ];
-          for (const other of ["mark", "nikita"] as PersonKey[]) {
-            if (state.origin === "friend") break;
-            const inv = state.pendingInvite && state.pendingInvite[other];
-            const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
-            const inviterSub = state.pushSubs[inviterKey];
-            if (!inv || !inviterSub) continue;
-            if (state.people && state.people[other] && state.people[other]!.confirmed) continue;
-            const sentCount = state.inviteNudgeCount || (state.inviteNudgeAt ? 1 : 0);
-            if (sentCount >= NUDGES.length) continue;
-            const lastNudge = state.inviteNudgeAt ? Date.parse(state.inviteNudgeAt) : 0;
-            const startAt = Date.parse(inv.at);
-            if (!startAt || Date.now() - startAt < NUDGES[sentCount].after || Date.now() - lastNudge < 2 * DAY_MS) continue;
-            const nres = await sendPush(inviterSub, {
-              title: NUDGES[sentCount].title,
-              body: NUDGES[sentCount].body,
-              tag: "invite-nudge",
-            });
-            if (nres.ok) {
-              sent++;
-              console.log("[invite-nudge] room=" + (id || "main") + " #" + (sentCount + 1));
-              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = sentCount + 1; });
-            }
-            if (nres.gone) {
-              await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
-            }
-          }
           if (state.pushLastMorningKey === today) continue;
           const count = unansweredCount(state, today);
           if (count > 0) {
@@ -1519,15 +1484,20 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       // 12 hex chars keeps the shareable link short; invites are rate-limited.
       // A resend keeps the same token, so the link in an earlier email or
       // message never stops working just because a newer one was sent.
+      // An invite link works for 3 days from when it was made (INVITE_TTL_MS);
+      // re-sending it doesn't restart the clock, and an expired one is
+      // replaced with a fresh link here.
       const priorInvite = cur.pendingInvite && cur.pendingInvite[other];
-      const token = priorInvite && priorInvite.token ? priorInvite.token : crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      const priorLive = !!(priorInvite && priorInvite.token && Date.now() - Date.parse(priorInvite.at) < INVITE_TTL_MS);
+      const token = priorLive ? priorInvite!.token : crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      const madeAt = priorLive ? priorInvite!.at : new Date().toISOString();
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
         s.pendingInvite[other] = handle
-          ? { token, at: new Date().toISOString(), instagram: handle }
+          ? { token, at: madeAt, instagram: handle }
           : viaLink
-            ? { token, at: new Date().toISOString(), link: true }
-            : { token, at: new Date().toISOString() };
+            ? { token, at: madeAt, link: true }
+            : { token, at: madeAt };
       });
       const inviteUrl = roomId
         ? publicOrigin + "/j/" + roomId + "/" + token
@@ -1582,6 +1552,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (cur.pendingInvite && cur.pendingInvite[k] && cur.pendingInvite[k]!.token === token) who = k;
       });
       if (!who) return json({ error: "invalid_token" }, { status: 400 });
+      if (!inviteLive(cur.pendingInvite![who]!)) return json({ error: "invite_expired" }, { status: 410 });
       const resolvedTz = await resolveTimezoneFromLocation(location);
       const tz = resolvedTz || browserTz;
       const state = await saveState(roomId, (s) => {
@@ -2346,14 +2317,101 @@ ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed",
 // the admin list. Once a day, remove ones that are over 7 days old with no
 // people, no answers and no puzzle. Rooms with any registered person, and the
 // original room, are never touched.
+// ---- Invite links: 3 days, with reminders on days 1, 2 and 3 ------------
+// A partner invite link works for 3 days from when it was made. While it's
+// waiting, the person who sent it (if they have notifications on) gets up to
+// three reminders: after 1 day, 2 days, and on the last day before it
+// expires. Then the link is deleted; the next time the inviter opens their
+// room the app makes them a fresh link. Reminders only go out between 9 AM
+// and 9 PM the inviter's time. Not for Make a friend rooms (those close on
+// their own after 24 hours). Checked hourly.
+const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+function inviteLive(inv: { at: string }): boolean {
+  const t = Date.parse(inv.at);
+  return !isFinite(t) || Date.now() - t < INVITE_TTL_MS;
+}
+// Two sets of reminders. If the app saw the invite go out (link shared or
+// copied, or emailed), they're written to someone who DID send it and is
+// waiting on the person they invited. If it never went out, they're about
+// sending it for the first time. Day 3 says how many hours are left.
+type InviteNudge = { title: (h: number) => string; body: (h: number) => string };
+const INVITE_NUDGE_AFTER = [24 * 60 * 60 * 1000, 48 * 60 * 60 * 1000, 60 * 60 * 60 * 1000];
+const hrs = (h: number) => h + (h === 1 ? " hour" : " hours");
+const INVITE_NUDGES_SENT: InviteNudge[] = [
+  { title: () => "They haven't joined yet", body: () => "You sent your Nearune invite yesterday. A quick nudge from you might help. Tap to send them the link again." },
+  { title: () => "Still waiting for them to join", body: () => "It's been 2 days since you sent your invite. Send them a friendly reminder with your link." },
+  { title: (h) => "Your invite expires in " + hrs(h), body: () => "The person you invited hasn't joined yet. Send them one last reminder so they don't miss it." },
+];
+const INVITE_NUDGES_UNSENT: InviteNudge[] = [
+  { title: () => "Your invite is ready to send", body: () => "Your room is set up. Send the link to the person you want to share it with, and your first question opens for you both." },
+  { title: () => "Who's joining your Nearune?", body: () => "Your invite link hasn't gone out yet. Send it with one tap so the person you want can join your room." },
+  { title: (h) => "Your invite link expires in " + hrs(h), body: () => "Send it now so they can still join. After that, open Nearune for a fresh link." },
+];
+function localHour(tz: string | undefined): number {
+  try { return Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: tz || "America/Los_Angeles" }).format(new Date())); } catch { return 12; }
+}
+async function inviteSweep(): Promise<void> {
+  try {
+    const now = Date.now();
+    for (const id of await listRoomIds()) {
+      let st: any;
+      try { st = await loadState(id); } catch { continue; }
+      if (st.origin === "friend" || st.closed || !st.pendingInvite) continue;
+      for (const other of ["mark", "nikita"] as PersonKey[]) {
+        const inv = st.pendingInvite[other];
+        if (!inv || !inv.token) continue;
+        if (st.people && st.people[other] && st.people[other].confirmed) continue;
+        const age = now - Date.parse(inv.at);
+        if (!isFinite(age)) continue;
+        if (age >= INVITE_TTL_MS) {
+          await saveState(id, (s) => {
+            const cur = s.pendingInvite && s.pendingInvite[other];
+            if (cur && cur.token === inv.token) delete s.pendingInvite![other];
+          });
+          console.log("[invite-expired] room=" + (id || "main") + " link made " + inv.at);
+          continue;
+        }
+        const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
+        const sub = st.pushSubs && st.pushSubs[inviterKey];
+        if (!sub) continue;
+        const count = st.inviteNudgeToken === inv.token ? (st.inviteNudgeCount || 0) : 0;
+        if (count >= INVITE_NUDGE_AFTER.length || age < INVITE_NUDGE_AFTER[count]) continue;
+        const inviter = st.people && st.people[inviterKey];
+        const h = localHour(inviter && inviter.tz);
+        if (h < 9 || h >= 21) continue;
+        const hoursLeft = Math.max(1, Math.ceil((INVITE_TTL_MS - age) / (60 * 60 * 1000)));
+        const f = st.funnel || {};
+        const wasSent = !!(f.invite_shared || f.invite_emailed || inv.instagram || !inv.link);
+        const nudge = (wasSent ? INVITE_NUDGES_SENT : INVITE_NUDGES_UNSENT)[count];
+        const res = await sendPush(sub, { title: nudge.title(hoursLeft), body: nudge.body(hoursLeft), tag: "invite-nudge" } as any);
+        if (res.ok) {
+          console.log("[invite-nudge] room=" + (id || "main") + " #" + (count + 1));
+          await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = count + 1; s.inviteNudgeToken = inv.token; });
+        }
+        if (res.gone) await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+      }
+    }
+  } catch (err) {
+    console.error("[invite-sweep] failed", err);
+  }
+}
+setTimeout(inviteSweep, 4 * 60 * 1000);
+setInterval(inviteSweep, 60 * 60 * 1000);
+
+// Rooms nobody ever signed up in (someone tapped "Invite your first Nearune
+// partner" and left the form) are removed 24 hours after the last sign-up
+// activity in them. Nothing was entered, so nothing is lost; if the person
+// comes back later the app simply makes them a new room. Checked hourly.
 async function purgeEmptyRooms(): Promise<void> {
   try {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     let removed = 0;
     for (const id of await listRoomIds()) {
       if (!id) continue;
       const st = await loadState(id);
-      if (!st.createdAt || new Date(st.createdAt).getTime() > cutoff) continue;
+      if (!st.createdAt) continue;
+      const times = [new Date(st.createdAt).getTime()].concat(Object.values((st as any).funnel || {}).map((v: any) => new Date(String(v)).getTime()).filter((n: number) => isFinite(n)));
+      if (Math.max(...times) > cutoff) continue;
       const people = Object.values(st.people || {}).filter(Boolean).length;
       const pending = Object.keys(st.pendingInvite || {}).length + Object.keys(st.pendingConfirm || {}).length;
       if (people > 0 || pending > 0 || Object.keys(st.answers || {}).length > 0 || st.puzzleCurrentId) continue;
@@ -2427,7 +2485,7 @@ setInterval(sweepFriendNoShows, 60 * 60 * 1000);
 setTimeout(purgeStaleEmails, 6 * 60 * 1000);
 setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
 setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
-setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
+setInterval(purgeEmptyRooms, 60 * 60 * 1000);
 
 // ---- App-icon badge: always the true total, refreshed regularly ----------
 // The icon number is the sum of the phone owner's OWN to-dos across all

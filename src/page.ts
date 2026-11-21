@@ -3484,7 +3484,7 @@ const RAW = String.raw`<!doctype html>
       }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           regBusy = false;
-          if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : res.data && res.data.error === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("That invite link isn't valid."); renderApp(); return; }
+          if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : res.data && res.data.error === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : res.data && res.data.error === "invite_expired" ? t("This invite link has expired (links last 3 days). Ask them to send you a new one.") : t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
           nrTrack("signed_up");
@@ -3740,7 +3740,7 @@ const RAW = String.raw`<!doctype html>
         }
         state = res.data;
         showInviteForm = false;
-        if (res.data._emailSent !== false) { showEmailInvite = false; inviteEmailDraft = ""; }
+        if (res.data._emailSent !== false) { showEmailInvite = false; inviteEmailDraft = ""; funnelPing("invite_emailed"); }
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
         renderApp();
       })
@@ -3828,6 +3828,7 @@ const RAW = String.raw`<!doctype html>
   function inviteWasShared() { try { return !!localStorage.getItem(inviteSharedKey()); } catch (e) { return false; } }
   function markInviteShared() {
     var first = !inviteWasShared();
+    funnelPing("invite_shared");
     try { localStorage.setItem(inviteSharedKey(), String(Date.now())); } catch (e) {}
     if (first) setTimeout(renderApp, 1200);
   }
@@ -3884,6 +3885,7 @@ const RAW = String.raw`<!doctype html>
       var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
       main.style.marginTop = "12px";
       card.appendChild(main);
+      card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:6px;", text: t("Your invite link works for 3 days.") }));
       var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email it") });
       emailBtn.addEventListener("click", function () { showEmailInvite = !showEmailInvite; regError = ""; renderApp(); });
       card.appendChild(h("div", { style: "display:flex;gap:8px;justify-content:center;margin-top:10px;" }, [

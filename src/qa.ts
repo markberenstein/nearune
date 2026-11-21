@@ -4,7 +4,8 @@
 // tokens + every weather sky), clocks (every room's people have a valid
 // timezone, backfilling when possible) and continuity (rooms load, the day
 // key is sane, the legacy-room alias resolves).
-import { WEATHER_THEMES } from "./weather";
+import { allSkiesForQa, skyTextColors, underScrim, contrastRatio } from "./weather";
+import { buildHomePage } from "./home-page";
 import { listRoomIds, loadState, saveState, canonRoom } from "./storage";
 import { resolveTimezoneFromLocation } from "./geo";
 import { todayKeyPT, todayKeyFor } from "./util";
@@ -77,20 +78,39 @@ export async function runQa(): Promise<Report> {
   } catch (e: any) { failures.push("contrast on-sky text: " + (e?.message || e)); }
 
   const tokenChecks = contrast;
-  // 2) Every weather sky: the better of dark/pale ink must clear 4.5:1 at BOTH
-  // ends of the gradient (this is the same rule the client uses to pick ink).
+  // 2) Every sky the app can show (day, night, dawn, dusk for each weather).
+  // The live-sky look always uses WHITE text, written straight onto the sky
+  // on the home tiles and in the room (countdown, past days, links), so the
+  // check is white (and the softer near-white #E8ECF8) on every color of
+  // the sky, after the sky's navy scrim. (The old check let dark text count,
+  // but the redesign never uses dark text on the sky, so light skies passed
+  // QA while white text on them was unreadable.)
   try {
-    for (const [bucket, pair] of Object.entries(WEATHER_THEMES)) {
-      for (const which of ["day", "night"] as const) {
-        const sky = pair[which].sky;
-        const best = Math.max(
-          Math.min(ratio("#2B211B", sky[0]), ratio("#2B211B", sky[1])),
-          Math.min(ratio("#F2EFE9", sky[0]), ratio("#F2EFE9", sky[1])),
-        );
-        contrast++;
-        skyItems.push({ label: bucket + " (" + which + ")", ok: best >= 4.5, note: best.toFixed(1) + ":1 (needs 4.5:1)" });
-        if (best < 4.5) failures.push(`contrast sky ${bucket}-${which}: best ink ${best.toFixed(1)}:1 (needs 4.5:1)`);
-      }
+    for (const s of allSkiesForQa()) {
+      const a = s.theme.scrim || 0;
+      const bgs = skyTextColors(s.theme, s.twilight).map((c) => underScrim(c, a));
+      const white = Math.min(...bgs.map((b) => contrastRatio("#FFFFFF", b)));
+      const soft = Math.min(...bgs.map((b) => contrastRatio("#E8ECF8", b)));
+      const ok = white >= 4.5 && soft >= 4.5;
+      contrast++;
+      skyItems.push({ label: s.label, ok, note: "white " + white.toFixed(1) + ":1, soft text " + soft.toFixed(1) + ":1 (needs 4.5:1)" + (a ? ", wash " + Math.round(a * 100) + "%" : "") });
+      if (!ok) failures.push(`contrast sky ${s.label}: white ${white.toFixed(1)}:1, soft ${soft.toFixed(1)}:1 (needs 4.5:1)`);
+    }
+  } catch (e: any) { failures.push("contrast skies: " + (e?.message || e)); }
+  // 2b) Both pages actually lay the wash over the sky, and the home footer
+  // isn't faded on the sky.
+  try {
+    const room = buildPageHtml("", "qa");
+    const home = buildHomePage();
+    const checksHome: [string, boolean][] = [
+      ["room sky applies the wash", /w\.theme\.scrim/.test(room)],
+      ["home tiles apply the wash", /w\.theme\.scrim/.test(home)],
+      ["home footer full strength on the sky", /body\.home-sky-active \.foot \{ ?opacity: ?1/.test(home)],
+    ];
+    for (const [label, ok] of checksHome) {
+      contrast++;
+      skyItems.push({ label, ok, note: ok ? "yes" : "missing" });
+      if (!ok) failures.push("contrast skies: " + label + " missing");
     }
   } catch (e: any) { failures.push("contrast skies: " + (e?.message || e)); }
 

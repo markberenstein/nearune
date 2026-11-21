@@ -66,6 +66,11 @@ export function buildHomePage(): string {
   .msg { text-align:center; font-size:0.85rem; color:var(--danger); margin:14px 0 0; min-height:1em; }
   .foot { text-align:center; margin-top:26px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
+  /* On the live sky, softer text is near-white and the footer is full
+     strength (it was 70% faded, unreadable on a light sky). */
+  body.home-sky-active { --ink-soft:#E8ECF8; }
+  body.home-sky-active .foot { opacity:1; }
+  body.home-sky-active .foot a { color:#FFFFFF; }
   .sheet-bg { position:fixed; inset:0; background:rgba(4,8,24,0.60); display:flex; align-items:flex-end; justify-content:center; z-index:10; }
   .sheet { background:var(--surface); width:100%; max-width:460px; border-radius:24px 24px 0 0; padding:26px 22px calc(26px + env(safe-area-inset-bottom)); text-align:center; }
   .sheet h2 { margin:0 0 18px; font-size:1.25rem; font-weight:800; }
@@ -86,7 +91,7 @@ export function buildHomePage(): string {
   </div>
   <div class="grid" id="slots"></div>
   <p class="msg" id="msg"></p>
-  <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrTip" style="display:none"> · <a href="#" id="nrTipLink">💛 Support Nearune</a></span><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
+  <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrTip" style="display:none"> · <a href="#" id="nrTipLink" style="font-size:1.75em">💛 Support Nearune</a></span><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener" style="font-size:1.75em">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
 </div>
 <script>
 (function () {
@@ -189,8 +194,14 @@ export function buildHomePage(): string {
     if (!w || !w.theme || !w.theme.sky) return "";
     var sky = w.theme.sky, glow = w.theme.glow || sky[1];
     var phase = w.phase || (w.isDay ? "day" : "night");
-    if (phase === "dawn" || phase === "dusk") return "linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 60%, " + glow + " 100%)";
-    return "radial-gradient(ellipse 120% 70% at 50% -10%, " + glow + "55, transparent 65%), linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
+    // Navy wash over light skies so the white text on them is readable
+    // (w.theme.scrim, worked out per sky in weather.ts and checked by QA).
+    // Light at the top so the sky still reads as day, full strength from
+    // 40% down where the name, time and weather sit.
+    var sc = Number(w.theme.scrim) || 0;
+    var scrim = sc > 0 ? "linear-gradient(180deg, rgba(10,16,42," + (sc * 0.25).toFixed(2) + ") 0%, rgba(10,16,42," + sc + ") 40%, rgba(10,16,42," + sc + ") 100%), " : "";
+    if (phase === "dawn" || phase === "dusk") return scrim + "linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 60%, " + glow + " 100%)";
+    return scrim + "radial-gradient(ellipse 120% 70% at 50% -10%, " + glow + "55, transparent 65%), linear-gradient(170deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
   }
   // Same rule as the room's clock: a trip counts only between its start
   // and end dates (an old trip's time zone must not stick).
@@ -736,6 +747,7 @@ export function buildHomePage(): string {
     var sky = document.getElementById("home-sky");
     if (!sky || !mine) return;
     sky.style.background = roomSky(mine).replace(/170deg/g, "180deg");
+    document.body.classList.add("home-sky-active");
     var ph = mine.phase || (mine.isDay ? "day" : "night");
     document.body.classList.toggle("home-stars", ph === "night" || ph === "dusk");
   }

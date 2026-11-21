@@ -6467,12 +6467,16 @@ const RAW = String.raw`<!doctype html>
     // city) put the glow on the horizon at the bottom; day and night keep
     // it as a soft light from above.
     var phase = w.phase || (w.isDay ? "day" : "night");
+    // A light sky gets a navy wash so white text stays readable on it
+    // (w.theme.scrim, worked out per sky in weather.ts and checked by QA).
+    var sc = Number(w.theme.scrim) || 0;
+    var scrimLayer = sc > 0 ? "linear-gradient(rgba(10,16,42," + sc + "), rgba(10,16,42," + sc + ")), " : "";
     if (phase === "dawn" || phase === "dusk") {
-      el.style.background =
+      el.style.background = scrimLayer +
         "radial-gradient(ellipse 120% 45% at 50% 108%, " + glow + "CC, transparent 70%), " +
         "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 62%, " + glow + " 100%)";
     } else {
-      el.style.background =
+      el.style.background = scrimLayer +
         "radial-gradient(ellipse 140% 70% at 50% -10%, " + glow + "59, transparent 65%), " +
         "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
     }

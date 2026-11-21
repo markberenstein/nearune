@@ -5,7 +5,7 @@
 import { roomExists } from "./storage";
 import { screenText } from "./moderation";
 import { startStatsSchedule, refreshStats } from "./stats";
-import { isPerson, type PersonKey } from "./types";
+import { isPerson, type PersonKey, type State } from "./types";
 import {
   loadState,
   saveState,
@@ -2430,25 +2430,37 @@ setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
 setInterval(purgeEmptyRooms, 24 * 60 * 60 * 1000);
 
 // ---- App-icon badge: always the true total, refreshed regularly ----------
-// A device can be in several rooms; the icon number is the sum of "people who
-// still need to answer today" across all of them. Scanned from storage (a
-// short cache keeps a burst of pushes from re-reading every room).
+// The icon number is the sum of the phone owner's OWN to-dos across all
+// their rooms, the same things as the red badges on the home-screen tiles
+// (home-page.ts's todoCount): today's question not answered yet, their turn
+// at Never Have I Ever, and the puzzle waiting for a photo. It never counts
+// what the other person still has to do. Scanned from storage (a short cache
+// keeps a burst of pushes from re-reading every room).
+function ownTodos(st: State, me: PersonKey): number {
+  const other: PersonKey = me === "mark" ? "nikita" : "mark";
+  if (st.closed || !st.people || !st.people[me] || !st.people[other]) return 0;
+  let n = 0;
+  const day = todayKeyFor(st);
+  const a = st.answers && st.answers[day];
+  if (!(a && a[me] && a[me]!.text)) n++;
+  const votes = (st.nhie && st.nhie.votes) || {};
+  if (votes[other] && !votes[me]) n++;
+  if (st.origin !== "friend" && !st.puzzleCurrentId) n++;
+  return n;
+}
 let badgeScan: { at: number; byToken: Map<string, number> } | null = null;
 async function scanBadges(force = false): Promise<Map<string, number>> {
-  if (!force && badgeScan && Date.now() - badgeScan.at < 15000) return badgeScan.byToken;
+  if (!force && badgeScan && Date.now() - badgeScan.at < 3000) return badgeScan.byToken;
   const byToken = new Map<string, number>();
   const ids = await listRoomIds();
   for (const id of ids) {
     try {
       const st = await loadState(id);
       if (st.closed || !st.pushSubs) continue;
-      const n = unansweredCount(st, todayKeyFor(st));
-      const seen = new Set<string>();
       for (const who of ["mark", "nikita"] as PersonKey[]) {
         const sub: any = st.pushSubs[who];
-        if (!sub || sub.kind !== "apns" || !sub.token || seen.has(sub.token)) continue;
-        seen.add(sub.token);
-        byToken.set(sub.token, (byToken.get(sub.token) || 0) + n);
+        if (!sub || sub.kind !== "apns" || !sub.token) continue;
+        byToken.set(sub.token, (byToken.get(sub.token) || 0) + ownTodos(st, who));
       }
     } catch (e) {}
   }

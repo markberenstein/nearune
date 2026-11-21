@@ -39,7 +39,45 @@ function unitForCountry(countryCode: string): "F" | "C" {
   return FAHRENHEIT_COUNTRIES.has((countryCode || "").toUpperCase()) ? "F" : "C";
 }
 
-export type WeatherTheme = { key: string; label: string; sky: [string, string]; glow: string; icon: string };
+export type WeatherTheme = { key: string; label: string; sky: [string, string]; glow: string; icon: string; scrim?: number };
+
+// ---- Readability on the sky ----------------------------------------------
+// The app writes white text straight onto the partner's sky (home tiles,
+// the room's countdown, past days, links). Light skies (a clear or snowy
+// day) are too pale for white text, so each sky carries a "scrim": how
+// much dark navy (SCRIM_RGB) is laid over it so white text clears
+// SKY_TEXT_TARGET:1 everywhere on it. Dark skies get 0 and look unchanged.
+// Both pages apply it and the daily QA checks it (qa.ts).
+export const SCRIM_RGB: [number, number, number] = [10, 16, 42];
+export const SKY_TEXT_TARGET = 5.4; // white 5.4:1 leaves room for the softer text (4.5:1)
+function hexLum(hex: string): number {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+export function contrastRatio(a: string, b: string): number {
+  const x = hexLum(a), y = hexLum(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+// A color with the navy scrim laid over it at alpha a.
+export function underScrim(hex: string, a: number): string {
+  return "#" + [1, 3, 5].map((i, k) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - a) + SCRIM_RGB[k] * a).toString(16).padStart(2, "0")).join("");
+}
+// Mixes two colors (the glow over the sky).
+function mixHex(a: string, b: string, t: number): string {
+  return "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, "0")).join("");
+}
+// The colors text can land on for a theme: both sky stops, plus the glow
+// as it actually appears (a soft wash from above by day and night, the full
+// horizon color at dawn and dusk).
+export function skyTextColors(t: WeatherTheme, twilight: boolean): string[] {
+  return [t.sky[0], t.sky[1], twilight ? t.glow : mixHex(t.sky[0], t.glow, 0.35)];
+}
+export function scrimFor(colors: string[]): number {
+  for (let a = 0; a <= 0.9001; a += 0.05) {
+    if (colors.every((c) => contrastRatio("#FFFFFF", underScrim(c, a)) >= SKY_TEXT_TARGET)) return Math.round(a * 100) / 100;
+  }
+  return 0.9;
+}
 
 export type HourlyPoint = { hour: string; temp: number; humidity: number | null };
 
@@ -133,6 +171,24 @@ const THEMES: Record<string, { day: WeatherTheme; night: WeatherTheme }> = {
   },
 };
 
+// Every day and night sky carries its scrim (see scrimFor above).
+for (const pair of Object.values(THEMES)) {
+  pair.day.scrim = scrimFor(skyTextColors(pair.day, false));
+  pair.night.scrim = scrimFor(skyTextColors(pair.night, false));
+}
+// Every sky the app can show, for the daily QA: day and night for each
+// weather, plus dawn and dusk.
+export function allSkiesForQa(): { label: string; theme: WeatherTheme; twilight: boolean }[] {
+  const out: { label: string; theme: WeatherTheme; twilight: boolean }[] = [];
+  for (const [k, pair] of Object.entries(THEMES)) {
+    out.push({ label: k + " (day)", theme: pair.day, twilight: false });
+    out.push({ label: k + " (night)", theme: pair.night, twilight: false });
+    out.push({ label: k + " (dawn)", theme: themeForPhase(k, "dawn", pair.day), twilight: true });
+    out.push({ label: k + " (dusk)", theme: themeForPhase(k, "dusk", pair.night), twilight: true });
+  }
+  return out;
+}
+
 function bucketForCode(code: number): keyof typeof THEMES {
   if (code === 0) return "clear";
   if (code === 1 || code === 2 || code === 3) return "cloudy";
@@ -172,12 +228,14 @@ function themeForPhase(bucketKey: string, phase: "dawn" | "day" | "dusk" | "nigh
   if (phase !== "dawn" && phase !== "dusk") return base;
   const tw = (TWILIGHT[bucketKey] || TWILIGHT.cloudy)[phase];
   const bucket = THEMES[bucketKey] || THEMES.cloudy;
-  return Object.assign({}, base, {
+  const t: WeatherTheme = Object.assign({}, base, {
     key: bucketKey + "-" + phase,
     sky: [tw[0], tw[1]] as [string, string],
     glow: tw[2],
     icon: phase === "dawn" ? bucket.day.icon : bucket.night.icon,
   });
+  t.scrim = scrimFor(skyTextColors(t, true));
+  return t;
 }
 
 function themeForBucket(bucketKey: string, isDay: boolean): WeatherTheme {

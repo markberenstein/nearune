@@ -3264,9 +3264,16 @@ const RAW = String.raw`<!doctype html>
   // mobile until they tap away), which left the dropdown looking stuck.
   var lastLangSelectEl = null;
   var lastLocInputEl = null;
-  var locCityError = "", locNoteEl = null;
-  function setLocNote(msg) {
+  // locCityError is the note under the city field. Only a note that means
+  // "this isn't a city" (just a state or country) stops Continue; the others
+  // ("Several places have that name", a spelling suggestion, "Finding your
+  // location…", "Couldn't get your location") are help only, so a person who
+  // typed a real city is never stuck. The server works out the exact place
+  // from what they typed when they sign up.
+  var locCityError = "", locCityBlocks = false, locNoteEl = null;
+  function setLocNote(msg, blocks) {
     locCityError = msg || "";
+    locCityBlocks = !!(msg && blocks);
     if (locNoteEl && document.body.contains(locNoteEl)) locNoteEl.textContent = locCityError;
   }
   function makeLocNote() {
@@ -3360,7 +3367,8 @@ const RAW = String.raw`<!doctype html>
             var exact = pls.some(function (pl) { return pl.label.toLowerCase() === locationText.trim().toLowerCase(); });
             var suggestedList = !!(info && info.suggested) && pls.length > 0 && !exact;
             var ambiguous = (pls.length >= 2 && !exact) || suggestedList;
-            setLocNote(suggestedList ? t("We couldn't find that spelling. Did you mean one of these? Pick yours from the list.") : info && info.city === false && !pls.length ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "");
+            var notCity = !!(info && info.city === false && !pls.length);
+            setLocNote(suggestedList ? t("We couldn't find that spelling. Did you mean one of these? Pick yours from the list.") : notCity ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "", notCity);
             showLocChoices(draft, ambiguous ? pls : []);
           }
           if (draft.languageTouched) return; // they picked one while we were waiting
@@ -3467,7 +3475,7 @@ const RAW = String.raw`<!doctype html>
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
       if (!acceptDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
-      if (locCityError) { regError = locCityError; renderApp(); return; }
+      if (locCityBlocks) { regError = locCityError; renderApp(); return; }
       if (!acceptDraft.name.trim()) { regError = "Enter your name."; renderApp(); return; }
       regBusy = true; regError = ""; renderApp();
       fetch(RP + "/api/accept-invite", {
@@ -3536,7 +3544,7 @@ const RAW = String.raw`<!doctype html>
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     funnelPing("reg_clicked");
     if (!registerDraft.location.trim()) { funnelPing("reg_err_city"); regError = t("Enter the city where you're based."); renderApp(); return; }
-    if (locCityError) { funnelPing("reg_err_city"); regError = locCityError; renderApp(); return; }
+    if (locCityBlocks) { funnelPing("reg_err_city"); regError = locCityError; renderApp(); return; }
     if (!name) { funnelPing("reg_err_name"); regError = t("Enter your name."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
@@ -6039,7 +6047,7 @@ const RAW = String.raw`<!doctype html>
     };
     travelError = "";
     travelFormOpen = true;
-    locCityError = "";
+    locCityError = ""; locCityBlocks = false;
     travelDraft.languageTouched = true;
     renderApp();
   }
@@ -6050,7 +6058,7 @@ const RAW = String.raw`<!doctype html>
   async function saveTravelForm() {
     var location = travelDraft.location.trim();
     if (!location) { travelError = t("Enter a city, or use Back home to clear it."); renderApp(); return; }
-    if (locCityError) { travelError = locCityError; renderApp(); return; }
+    if (locCityBlocks) { travelError = locCityError; renderApp(); return; }
     if (travelDraft.from && travelDraft.until && travelDraft.until < travelDraft.from) { travelError = t("The return date can't be before the start date."); renderApp(); return; }
     if (travelDraft.until && travelDraft.until < dateKey(new Date())) { travelError = t("The return date is already past."); renderApp(); return; }
     travelBusy = true; travelError = ""; renderApp();

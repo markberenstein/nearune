@@ -335,18 +335,46 @@ export function buildHomePage(): string {
   // "Start a room / Join a room" page. The other + tiles still open that
   // page, which is also where you join with a code.
   var creating = false;
+  // This device's room that was created but never signed up in. Reused
+  // when they tap "Invite your first Nearune partner" again, so backing out
+  // and coming back doesn't leave a trail of empty rooms.
+  var PENDING_ROOM_KEY = "nearunePendingRoom";
+  function pendingRoom() {
+    try {
+      var p = JSON.parse(localStorage.getItem(PENDING_ROOM_KEY) || "null");
+      if (p && p.id && Date.now() - p.at < 14 * 86400000) return p.id;
+    } catch (e) {}
+    return "";
+  }
   function createRoomNow(box) {
     if (creating) return;
     creating = true;
     var label = box.querySelector(".big");
     if (label) label.textContent = "Creating your room…";
-    var plat = "web";
-    try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
+    var pending = pendingRoom();
+    var reuse = pending
+      ? fetch("/r/" + encodeURIComponent(pending) + "/api/state")
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (st) {
+            // Still empty: nobody has signed up in it yet.
+            if (!st || st.closed) return "";
+            var ppl = Object.keys(st.people || {}).filter(function (k) { return st.people[k] && st.people[k].name; });
+            return ppl.length === 0 ? pending : "";
+          })
+          .catch(function () { return ""; })
+      : Promise.resolve("");
+    reuse.then(function (id) {
+      if (id) { location.href = "/r/" + id; return; }
+      createFreshRoom(label);
+    });
+  }
+  function createFreshRoom(label) {
     fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         if (res.ok && res.data && res.data.roomId) {
           nrTrack("room_created");
+          try { localStorage.setItem(PENDING_ROOM_KEY, JSON.stringify({ id: res.data.roomId, at: Date.now() })); } catch (e) {}
           location.href = "/r/" + res.data.roomId;
           return;
         }

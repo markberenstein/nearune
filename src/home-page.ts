@@ -71,6 +71,12 @@ export function buildHomePage(): string {
   body.home-sky-active { --ink-soft:#E8ECF8; }
   body.home-sky-active .foot { opacity:1; }
   body.home-sky-active .foot a { color:#FFFFFF; }
+  /* "Support Nearune": one button, one line, pinned to the bottom-right
+     corner (clear of the iPhone's home bar). The page gets extra room at
+     the bottom so it never covers the footer links. */
+  .tip-fab { position:fixed; right:max(16px, env(safe-area-inset-right)); bottom:calc(16px + env(safe-area-inset-bottom)); z-index:20; }
+  .tip-fab a { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; margin:0; padding:12px 18px; border-radius:999px; background:#FFFFFF; color:#151A33 !important; font-size:1rem; font-weight:800; text-decoration:none; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
+  body { padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
   .sheet-bg { position:fixed; inset:0; background:rgba(4,8,24,0.60); display:flex; align-items:flex-end; justify-content:center; z-index:10; }
   .sheet { background:var(--surface); width:100%; max-width:460px; border-radius:24px 24px 0 0; padding:26px 22px calc(26px + env(safe-area-inset-bottom)); text-align:center; }
   .sheet h2 { margin:0 0 18px; font-size:1.25rem; font-weight:800; }
@@ -91,7 +97,8 @@ export function buildHomePage(): string {
   </div>
   <div class="grid" id="slots"></div>
   <p class="msg" id="msg"></p>
-  <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrTip" style="display:none"> · <a href="#" id="nrTipLink" style="font-size:1.75em">💛 Support Nearune</a></span><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener" style="font-size:1.75em">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
+  <span id="nrTip" class="tip-fab" style="display:none"><a href="#" id="nrTipLink">💛 Support Nearune</a></span><span id="nrSupport" class="tip-fab" style="display:none"><a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span>
+  <p class="foot"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
 </div>
 <script>
 (function () {

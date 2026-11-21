@@ -85,6 +85,9 @@ export type PersonProfile = {
   travelFrom?: string;
   travelUntil?: string;
   travelShowEarly?: boolean;
+  // Language to use while the trip is on (from travelFrom to travelUntil).
+  // Empty = keep their home language. Cleared with "Back home".
+  travelLanguage?: string;
   // Ticked "I'm in the military": this person's clock is shown in 24-hour
   // military time (e.g. 1930) to everyone in the room.
   military?: boolean;

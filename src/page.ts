@@ -385,6 +385,8 @@ const RAW = String.raw`<!doctype html>
   .inv-actions { display: flex; flex-direction: column; gap: 8px; }
   .reg-cta { padding: 14px 22px !important; font-size: 1rem !important; margin-top: 8px; }
   .travel-until-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .travel-lang-hint { margin: 4px 0; }
+  .travel-lang-hint:empty { display: none; }
   .travel-until-label { font-size: 0.8rem; color: var(--ink-soft); white-space: nowrap; }
   .puzzle-setup-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .puzzle-choose-btn { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 9px 16px; font: inherit; font-size: 0.83rem; cursor: pointer; }
@@ -719,9 +721,18 @@ const RAW = String.raw`<!doctype html>
     // Safer to say "unknown" than to guess wrong.
     return null;
   }
+  // While a trip is on (its real start date to its return date), the
+  // language picked for the trip wins over the home language.
+  function travelLanguageNow(p) {
+    if (!p || !p.travelLocation || !p.travelLanguage) return "";
+    var today = dateKey(new Date());
+    if (p.travelUntil && p.travelUntil < today) return "";
+    if (p.travelFrom && p.travelFrom > today) return "";
+    return p.travelLanguage;
+  }
   function langCodeFor(key) {
     var p = state.people && state.people[key];
-    var code = p && normalizeLangCode(p.language);
+    var code = p && normalizeLangCode(travelLanguageNow(p) || p.language);
     if (code) return code;
     // The legacy room defaults its unregistered Nikita slot to Hindi (always
     // has). Any other room has no idea what language its people speak until
@@ -3370,6 +3381,11 @@ const RAW = String.raw`<!doctype html>
             var notCity = !!(info && info.city === false && !pls.length);
             setLocNote(suggestedList ? t("We couldn't find that spelling. Did you mean one of these? Pick yours from the list.") : notCity ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : ambiguous ? t("Several places have that name. Pick yours from the list.") : "", notCity);
             showLocChoices(draft, ambiguous ? pls : []);
+          }
+          if (draft.isTravel) {
+            draft.cityLanguage = (info && info.language && draft.location.trim() === locationText.trim()) ? info.language : "";
+            updateTravelLangHint();
+            return; // a trip never changes the language on its own; it only offers it
           }
           if (draft.languageTouched) return; // they picked one while we were waiting
           if (info && info.language && draft.location.trim() === locationText.trim()) {
@@ -6057,6 +6073,9 @@ const RAW = String.raw`<!doctype html>
       from: (my && my.travelFrom) || "",
       until: (my && my.travelUntil) || "",
       showEarly: my && my.travelLocation ? !!my.travelShowEarly : true,
+      language: (my && (my.travelLanguage || my.language)) || "English",
+      cityLanguage: "",
+      isTravel: true,
     };
     travelError = "";
     travelFormOpen = true;
@@ -6082,6 +6101,7 @@ const RAW = String.raw`<!doctype html>
         from: travelDraft.from,
         until: travelDraft.until,
         showEarly: !!(travelDraft.from && travelDraft.showEarly),
+        language: travelDraft.language || "",
       });
       travelFormOpen = false;
     } catch (e) { travelError = e && e.code === "region_unavailable" ? t("Nearune isn't available in that location.") : e && e.code === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("Something went wrong — try again."); }
@@ -6129,6 +6149,26 @@ const RAW = String.raw`<!doctype html>
   // ahead of time via the "Starts" date, and — once scheduled — optionally
   // shown to your partner a couple of days before it actually starts.
   var milBusy = false;
+  var travelLangHintEl = null;
+  function updateTravelLangHint() {
+    var el = travelLangHintEl;
+    if (!el || !document.body.contains(el)) return;
+    el.innerHTML = "";
+    var cl = travelDraft.cityLanguage;
+    if (cl && cl !== travelDraft.language) {
+      var b = h("button", { class: "mini-btn ghost", text: tTemplate("Use {lang} while traveling", { lang: cl }) });
+      b.addEventListener("click", function () {
+        travelDraft.language = cl;
+        if (lastLangSelectEl && document.body.contains(lastLangSelectEl)) lastLangSelectEl.value = cl;
+        updateTravelLangHint();
+      });
+      el.appendChild(b);
+    }
+    var me = state.people && state.people[viewerKey];
+    if (me && me.language && travelDraft.language && me.language !== travelDraft.language) {
+      el.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("Nearune switches back to {home} when you tap Back home or your return date passes.", { home: me.language }) }));
+    }
+  }
   function travelBlock() {
     var my = state.people && state.people[viewerKey];
     if (!my) return null;
@@ -6145,6 +6185,15 @@ const RAW = String.raw`<!doctype html>
       fields.appendChild(makeLocButton(travelDraft, true));
       fields.appendChild(makeLocNote());
       fields.appendChild(makeLocChoices());
+      // Language while traveling: starts as their own language; when the
+      // trip city speaks something else, a one-tap "Use French" shows.
+      fields.appendChild(h("div", { class: "travel-until-row" }, [
+        h("span", { class: "travel-until-label", text: t("Language while you're there") }),
+        languageSelectField(travelDraft.language, function (v) { travelDraft.language = v; updateTravelLangHint(); }),
+      ]));
+      travelLangHintEl = h("div", { class: "travel-lang-hint" });
+      fields.appendChild(travelLangHintEl);
+      updateTravelLangHint();
       var fromInput = document.createElement("input");
       fromInput.type = "date";
       fromInput.value = travelDraft.from;

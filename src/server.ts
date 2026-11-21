@@ -1208,6 +1208,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const from = asDateKey(body?.from);
       const until = asDateKey(body?.until);
       const showEarly = !!body?.showEarly;
+      const travelLanguage = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       // Resolved up front (needs a network call) rather than inside
       // saveState's mutator, which must stay synchronous — same geocoding
       // lookup registration uses (see geo.ts), so a travel city gets a
@@ -1221,6 +1222,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           delete s.people[who]!.travelFrom;
           delete s.people[who]!.travelUntil;
           delete s.people[who]!.travelShowEarly;
+          delete s.people[who]!.travelLanguage;
           return;
         }
         s.people[who]!.travelLocation = location;
@@ -1232,6 +1234,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         else delete s.people[who]!.travelUntil;
         if (from && showEarly) s.people[who]!.travelShowEarly = true;
         else delete s.people[who]!.travelShowEarly;
+        if (travelLanguage && travelLanguage !== s.people[who]!.language) s.people[who]!.travelLanguage = travelLanguage;
+        else delete s.people[who]!.travelLanguage;
       });
       return json(forClient(state));
     }

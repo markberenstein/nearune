@@ -4,7 +4,7 @@
 
 import { roomExists } from "./storage";
 import { screenText } from "./moderation";
-import { startStatsSchedule, refreshStats } from "./stats";
+import { startStatsSchedule } from "./stats";
 import { isPerson, type PersonKey } from "./types";
 import {
   loadState,
@@ -15,8 +15,6 @@ import {
   localPuzzlePath,
   photoKey,
   localPhotoPath,
-  videoKey,
-  localVideoPath,
   useS3,
   s3,
   ensurePuzzleMigrated,
@@ -24,13 +22,10 @@ import {
   lookupEmailIndex,
   removeFromEmailIndex,
   listRoomIds,
-  loadRoomAliases,
-  addRoomAlias,
-  roomSlug,
 } from "./storage";
 import { resolveTranslation, translateEmailStrings } from "./translate";
-import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample, defaultVoiceId } from "./voice";
-import { aiGuessMatches, moderateContent, guessPlaceFromImage, voiceGenderForName } from "./ai";
+import { cloneVoice, deleteVoice, synthesizeSpeech } from "./voice";
+import { aiGuessMatches, moderateContent, guessPlaceFromImage } from "./ai";
 import { regionAbbr } from "./usstates";
 import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
 import { currentWeather } from "./weather";
@@ -40,33 +35,22 @@ import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
 import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
 import { APP_STORE_BADGE_B64 } from "./badge";
-import { GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_BADGE_PNG_B64, GOOGLE_PLAY_URL } from "./play-badge";
-import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildChildSafetyPage, buildManifestJson, buildServiceWorkerJs } from "./page";
+import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildManifestJson, buildServiceWorkerJs } from "./page";
 import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
 import { buildHomePage } from "./home-page";
-import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, friendRequeue, type FriendProfile } from "./friend";
-import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep } from "./funnel";
+import { friendJoin, friendStatus, friendCancel, friendBlock } from "./friend";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
-// Deferred invites: network address -> invite destination, held in memory
-// for 48 hours (see /api/deferred-invite). Cleared on restart; never written.
-const deferredInvites = new Map<string, { dest: string; at: number }>();
-setInterval(() => { const cut = Date.now() - 48 * 60 * 60 * 1000; for (const [k, v] of deferredInvites) if (v.at < cut) deferredInvites.delete(k); }, 10 * 60 * 1000);
 
 // Vulgar / NSFW screen for text people write. Returns a Response to send back
 // when the text is rejected (friend rooms), otherwise null. Every hit is
 // recorded for the admin page.
-async function moderate(roomId: string, who: string, kind: string, text: string, confirmed = false): Promise<Response | null> {
+async function moderate(roomId: string, who: string, kind: string, text: string): Promise<Response | null> {
   const word = screenText(text);
   if (!word) return null;
-  // Rooms between people who know each other: warn first and let the writer
-  // edit. Nothing is saved or logged until they choose to post it anyway.
-  if (!confirmed && (await loadState(roomId)).origin !== "friend") {
-    return new Response(JSON.stringify({ error: "flagged_confirm" }), { status: 409, headers: { "content-type": "application/json" } });
-  }
   let friend = false;
   await saveState(roomId, (s) => {
     friend = s.origin === "friend";
@@ -115,12 +99,6 @@ async function roomsCreatedToday(): Promise<number> {
 }
 
 
-const FUNNEL_STEPS = new Set([
-  "reg_screen", "reg_city", "reg_name", "reg_email", "reg_clicked",
-  "reg_err_city", "reg_err_name", "reg_err_relationship", "reg_err_server",
-  "confirm_screen", "invite_screen",
-]);
-
 const PORT = Number(Bun.env.PORT) || 3000;
 
 function parseRoom(pathname: string): { roomId: string; restPath: string } {
@@ -133,31 +111,6 @@ function parseRoom(pathname: string): { roomId: string; restPath: string } {
 // invite / accept steps is written as one line with the room, step, status,
 // the error code, and the coarse device + language — never names, emails,
 // locations or other request content. Lets us see where a visitor stalled.
-// Room name typed by the first person on the setup screen (the home screen's
-// first tile creates the room with no name). Only applies while nobody has
-// signed up and the room has no name. Sets the title, and when the name
-// makes a usable code, a friendlier room code ("oursky", or "oursky47" if
-// taken) — the original id keeps working.
-async function applySignupRoomName(roomId: string, raw: unknown): Promise<"ok" | "blocked" | "skip"> {
-  const nm = typeof raw === "string" ? raw.trim().slice(0, 40) : "";
-  if (!nm || !roomId) return "skip";
-  const cur = await loadState(roomId);
-  if (cur.roomName || Object.values(cur.people || {}).some((p: any) => p && p.confirmed)) return "skip";
-  const verdict = await moderateContent({ text: nm });
-  console.log("[room-name] \"" + nm + "\" screening=" + verdict + " (setup)");
-  if (verdict === "blocked") return "blocked";
-  const stem = roomSlug(nm);
-  let code = "";
-  if (stem.length >= 4 && stem !== roomId) {
-    for (let i = 0; i < 12 && !code; i++) {
-      const cand = i === 0 ? stem : stem + String(10 + Math.floor(Math.random() * 90));
-      if (await addRoomAlias(cand, roomId)) code = cand;
-    }
-  }
-  await saveState(roomId, (s) => { if (!s.roomName) s.roomName = nm; if (code && !s.roomCode) s.roomCode = code; });
-  return "ok";
-}
-
 const SIGNUP_PATHS = new Set(["/api/create-room", "/api/register", "/api/invite", "/api/accept-invite", "/api/confirm", "/api/geo"]);
 function logSignupFailure(req: Request, pathname: string, res: Response): void {
   try {
@@ -176,80 +129,18 @@ function logSignupFailure(req: Request, pathname: string, res: Response): void {
   } catch {}
 }
 
-await loadRoomAliases();
-
 Bun.serve({
   port: PORT,
   idleTimeout: 60,
   async fetch(req, server) {
     const res = await handleRequest(req, server);
-    const path = new URL(req.url).pathname;
-    logSignupFailure(req, path, res);
-    // Private pages (rooms, invites, the app's own screens) must never be
-    // listed by search engines, even if a link to one is shared publicly.
-    if (NOINDEX_PATH.test(path)) {
-      try { res.headers.set("X-Robots-Tag", "noindex, nofollow"); } catch (e) {}
-    }
-    // Public pages: tell search engines which address is the main one, so
-    // /get/, /get?utm=... and the Railway domain all count as nearune.ai/get.
-    const publicPath = path.length > 1 ? path.replace(/\/+$/, "") : path;
-    if (res.status === 200 && SITEMAP_PATHS.includes(publicPath)) {
-      try { res.headers.set("Link", '<' + CANONICAL_ORIGIN + publicPath + '>; rel="canonical"'); } catch (e) {}
-    }
-    // Google Analytics only on the download pages ads point to — never inside
-    // rooms or the app (which loads nearune.ai), so answers are never seen.
-    if (res.status === 200 && ANALYTICS_PATHS.includes(publicPath)) {
-      try {
-        const html = await res.text();
-        const headers = new Headers(res.headers);
-        return new Response(html.replace(/<head>/i, "<head>" + GOOGLE_TAG), { status: 200, headers });
-      } catch (e) {}
-    }
+    logSignupFailure(req, new URL(req.url).pathname, res);
     return res;
   },
 });
 
-// Never Have I Ever pool for a room. Make-a-friend matches just met, so
-// they get the new-friends pool (no shared past, nothing romantic) even
-// if the room was made before the match code saved relationship on it.
-function roomRelationship(s: any): any {
-  if (s.origin === "friend") return "friend_match";
-  return s.relationship;
-}
-
-const NOINDEX_PATH = /^\/(r|j)\/|^\/(home|new|recover)\/?$|^\/api\/|^\/admin/;
-// Public pages listed for search engines.
-const CANONICAL_ORIGIN = "https://nearune.ai";
-const ANALYTICS_PATHS = ["/get", "/military"];
-const GOOGLE_TAG = '<script async src="https://www.googletagmanager.com/gtag/js?id=G-C8J788WTJR"></script>' +
-  "<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-C8J788WTJR');</script>";
-const SITEMAP_PATHS = ["/get","/military", "/support", "/privacy", "/terms", "/child-safety"];
-
 async function handleRequest(req: Request, server: any): Promise<Response> {
     const url = new URL(req.url);
-    if (req.method === "GET" && url.pathname === "/robots.txt") {
-      const origin0 = ((req.headers.get("x-forwarded-proto") || "").split(",")[0].trim() || url.protocol.replace(":", "")) + "://" + url.host;
-      const body = [
-        "User-agent: *",
-        // Rooms, invites and app screens are kept out of search with a
-        // noindex header instead of a Disallow line: a crawler has to load a
-        // page to see its noindex, and link-preview bots (WhatsApp, iMessage)
-        // must still be able to read invite pages.
-        "Disallow: /api/",
-        "Disallow: /admin",
-        "Allow: /",
-        "",
-        "Sitemap: " + origin0 + "/sitemap.xml",
-        "",
-      ].join("\n");
-      return new Response(body, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
-    }
-    if (req.method === "GET" && url.pathname === "/sitemap.xml") {
-      const origin0 = ((req.headers.get("x-forwarded-proto") || "").split(",")[0].trim() || url.protocol.replace(":", "")) + "://" + url.host;
-      const body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-        SITEMAP_PATHS.map((p) => "  <url><loc>" + origin0 + p + "</loc></url>").join("\n") + "\n</urlset>\n";
-      return new Response(body, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
-    }
     // Behind Railway's proxy req.url is plain http; links we hand out (invite,
     // confirm, etc.) must use the public https origin instead.
     const fwdProto = (req.headers.get("x-forwarded-proto") || "").split(",")[0].trim();
@@ -279,27 +170,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     const roomPrefix = roomId ? "/r/" + roomId : "";
     const HOUR = 60 * 60 * 1000;
 
-    // Deferred invite: someone opens an invite link in Safari, taps the App
-    // Store badge, installs Nearune, then opens the app — which starts on the
-    // home screen with no idea which room they were invited to. When the badge
-    // is tapped we hold the invite for 48 hours against the visitor's network
-    // address (memory only, never saved), and a brand-new install on the same
-    // network asks once for it and goes straight to the invite.
-    if (req.method === "POST" && url.pathname === "/api/deferred-invite") {
-      if (!rateLimit("deferred-set:" + clientIp(req, server), 20, HOUR)) return json({ ok: false }, { status: 429 });
-      const db = await readJson(req);
-      const dest = typeof db?.dest === "string" ? db.dest : "";
-      if (!/^\/r\/[a-z0-9]{1,40}\/\?invite=(mark|nikita)&token=[a-zA-Z0-9-]{6,64}$/.test(dest)) return json({ ok: false }, { status: 400 });
-      deferredInvites.set(clientIp(req, server), { dest, at: Date.now() });
-      return json({ ok: true });
-    }
-    if (req.method === "GET" && url.pathname === "/api/deferred-invite") {
-      const ip = clientIp(req, server);
-      const hit = deferredInvites.get(ip);
-      if (hit && Date.now() - hit.at < 48 * HOUR) { deferredInvites.delete(ip); return json({ dest: hit.dest }); }
-      return json({ dest: null });
-    }
-
     // Typing a room code on the Join screen: if that room is waiting for a
     // partner, go straight to its invite (name, city, language); otherwise
     // just open the room. A made-up code goes back with "not found".
@@ -319,7 +189,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
 
     if (req.method === "GET" && url.pathname === "/api/music-preview") {
       if (!rateLimit("music-preview:" + clientIp(req, server), 120, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
-      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "", { id: url.searchParams.get("i") || "", cc: url.searchParams.get("c") || "" });
+      const clip = await previewClip(url.searchParams.get("t") || "", url.searchParams.get("a") || "");
       if (!clip) return json({ error: "no_preview" }, { status: 404 });
       return new Response(clip.bytes, { headers: { "content-type": clip.type, "cache-control": "public, max-age=3600", "accept-ranges": "none" } });
     }
@@ -387,69 +257,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (Bun.env.REGISTRATIONS_PAUSED === "1" || Bun.env.REGISTRATIONS_PAUSED === "true") {
         return json({ error: "registrations_paused" }, { status: 503 });
       }
-      // Name, city and language (from the Make a friend sheet) so the room is
-      // created with this person already signed up.
-      let profile: FriendProfile | undefined;
-      const fp = fb?.profile;
-      if (fp && typeof fp === "object") {
-        const pName = typeof fp.name === "string" ? fp.name.trim().slice(0, 80) : "";
-        const pLoc = typeof fp.location === "string" ? fp.location.trim().slice(0, 80) : "";
-        const pLang = typeof fp.language === "string" ? fp.language.trim().slice(0, 40) : "";
-        const pTz = typeof fp.tz === "string" ? fp.tz.trim().slice(0, 60) : "";
-        if (!pName || !pLoc || !pLang) return json({ error: "profile_required" }, { status: 400 });
-        if (await isBlockedLocation(pLoc)) return json({ error: "region_unavailable" }, { status: 403 });
-        if (!(await isCityLevelLocation(pLoc))) return json({ error: "city_required" }, { status: 400 });
-        const resolvedTz = await resolveTimezoneFromLocation(pLoc);
-        profile = { name: pName, location: pLoc, language: pLang, ...((resolvedTz || pTz) ? { tz: resolvedTz || pTz } : {}) };
-      }
-      const fr = await friendJoin(device, profile);
-      console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId + " signedUp=" + fr.signedUp : "") + (profile ? " withProfile" : ""));
+      const fr = await friendJoin(device);
+      console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId : ""));
       return json(fr);
-    }
-    // In-app tip completed (Apple handles the payment; this is only a log line
-    // so tips show up in the server logs). No personal data.
-    // Anonymous new-user funnel step (random device ID + step name only).
-    if (req.method === "POST" && url.pathname === "/api/journey") {
-      if (!rateLimit("funnel:" + clientIp(req, server), 400, HOUR)) return json({ ok: true });
-      const fb2 = await readJson(req);
-      if (fb2 && (fb2.step === "lp_view" || fb2.step === "lp_tap" || fb2.step === "lp_play")) {
-        const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : fb2.page === "get (new)" ? "get (new)" : "";
-        const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
-        if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : fb2.step === "lp_play" ? "play" : "tap");
-        return json({ ok: true });
-      }
-      if (fb2 && fb2.step === "time" && isValidFunnelDevice(fb2.device)) {
-        const secs = Math.max(0, Math.min(600, Math.round(Number(fb2.seconds) || 0)));
-        if (secs > 0) await recordTime(fb2.device, secs, fb2.platform === "app" ? "app" : "web");
-        return json({ ok: true });
-      }
-      if (fb2 && isValidFunnelDevice(fb2.device) && isFunnelStep(fb2.step)) {
-        await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
-      }
-      return json({ ok: true });
-    }
-    if (req.method === "POST" && url.pathname === "/api/tip-log") {
-      if (!rateLimit("tip-log:" + clientIp(req, server), 20, HOUR)) return json({ ok: true });
-      const tb = await readJson(req);
-      const product = typeof tb?.product === "string" ? tb.product.replace(/[^a-z0-9._]/gi, "").slice(0, 60) : "";
-      console.log("[tip] in-app tip " + (product || "unknown"));
-      return json({ ok: true });
     }
     if (req.method === "GET" && url.pathname === "/api/friend/status") {
       if (!rateLimit("friend-status:" + clientIp(req, server), 900, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
       const t = url.searchParams.get("ticket") || "";
       if (!/^[a-f0-9]{24}$/.test(t)) return json({ status: "none" });
       return json(await friendStatus(t));
-    }
-    if (req.method === "POST" && url.pathname === "/api/friend/push") {
-      if (!rateLimit("friend-push:" + clientIp(req, server), 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
-      const pb = await readJson(req);
-      const t = typeof pb?.ticket === "string" ? pb.ticket : "";
-      const sub = pb?.subscription;
-      const kind = sub && (sub.kind === "fcm" ? "fcm" : sub.kind === "apns" ? "apns" : "");
-      if (!/^[a-f0-9]{24}$/.test(t) || !kind || typeof sub.token !== "string" || !sub.token || sub.token.length > 4096) return json({ error: "invalid" }, { status: 400 });
-      const okp = await friendSetPush(t, { kind: kind as "apns" | "fcm", token: sub.token });
-      return json({ ok: okp });
     }
     if (req.method === "POST" && url.pathname === "/api/friend/cancel") {
       const cb = await readJson(req);
@@ -496,11 +312,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json(generic);
     }
 
-    if (req.method === "GET" && (url.pathname === "/military" || url.pathname === "/military/")) {
-      return new Response(buildGetPage("military"), {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
-      });
-    }
     if (req.method === "GET" && (url.pathname === "/get" || url.pathname === "/get/")) {
       return new Response(buildGetPage(), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
@@ -521,12 +332,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
 
     if (req.method === "GET" && url.pathname === "/terms") {
       return new Response(buildTermsPage(), {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-      });
-    }
-
-    if (req.method === "GET" && url.pathname === "/child-safety") {
-      return new Response(buildChildSafetyPage(), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }
@@ -554,14 +359,13 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!isPerson(who) || !subscription) {
         return json({ error: "invalid" }, { status: 400 });
       }
-      if (subscription.kind === "apns" || subscription.kind === "fcm") {
+      if (subscription.kind === "apns") {
         if (typeof subscription.token !== "string" || !subscription.token) {
           return json({ error: "invalid" }, { status: 400 });
         }
-        const nativeKind = subscription.kind === "fcm" ? "fcm" : "apns";
         await saveState(roomId, (s) => {
           if (!s.pushSubs) s.pushSubs = {};
-          s.pushSubs[who] = { kind: nativeKind, token: subscription.token };
+          s.pushSubs[who] = { kind: "apns", token: subscription.token };
         });
         return json({ ok: true });
       }
@@ -613,20 +417,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json({ ok: true, changed, tz });
     }
 
-    // Admin tool: skip a room's current Never Have I Ever prompt and start a
-    // fresh round from the room's own set (friend matches get the next
-    // getting-to-know-you prompt). Same secret as the reminder.
-    if (req.method === "POST" && url.pathname === "/api/admin/nhie-refresh") {
-      const secret = Bun.env.CRON_SECRET;
-      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
-      const nb = await readJson(req);
-      const rid = typeof nb?.roomId === "string" ? nb.roomId : "";
-      if (!rid || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
-      const st = await saveState(rid, (s) => { s.nhie = newRound(s.nhie, roomRelationship(s)); });
-      console.log("[admin] nhie refreshed room=" + rid + " round=" + (st.nhie && st.nhie.round));
-      return json({ ok: true, round: st.nhie && st.nhie.round, text: st.nhie && st.nhie.text });
-    }
-
     // Admin tool: end a room (without erasing it). Same secret as the reminder.
     if (req.method === "POST" && url.pathname === "/api/admin/close") {
       const secret = Bun.env.CRON_SECRET;
@@ -639,67 +429,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json({ ok: true });
     }
 
-    // Admin tool: change a room's display name (title only; the room code and
-    // links stay the same). Blank removes the name.
-    if (req.method === "POST" && url.pathname === "/api/admin/rename") {
-      const secret = Bun.env.CRON_SECRET;
-      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
-      const rb = await readJson(req);
-      const rid = typeof rb?.roomId === "string" ? rb.roomId : "";
-      const nm = typeof rb?.name === "string" ? rb.name.trim().slice(0, 40) : "";
-      const newCode = typeof rb?.code === "string" ? rb.code.trim().toLowerCase() : "";
-      if (!rid || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
-      if (newCode) {
-        // A friendlier room code. The old code keeps working as the stored id.
-        if (!/^[a-z0-9]{4,40}$/.test(newCode)) return json({ error: "bad_code" }, { status: 400 });
-        if (!(await addRoomAlias(newCode, rid))) return json({ error: "code_taken" }, { status: 409 });
-      }
-      await saveState(rid, (s) => { if (nm) s.roomName = nm; else delete s.roomName; if (newCode) s.roomCode = newCode; });
-      console.log("[admin] renamed room " + rid + " -> " + (nm || "(no name)") + (newCode ? " code " + newCode : ""));
-      return json({ ok: true });
-    }
-
-    // Admin tool: correct a person's registered city (and timezone). Body:
-    // { roomId, who, location }.
-    if (req.method === "POST" && url.pathname === "/api/admin/location") {
-      const secret = Bun.env.CRON_SECRET;
-      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
-      const lb = await readJson(req);
-      const rid = typeof lb?.roomId === "string" ? lb.roomId : "";
-      const who = lb?.who;
-      let loc = typeof lb?.location === "string" ? lb.location.trim().slice(0, 80) : "";
-      if (!rid || !isPerson(who) || !loc || !(await roomExists(rid))) return json({ error: "invalid" }, { status: 400 });
-      if (!(await isCityLevelLocation(loc))) return json({ error: "city_required" }, { status: 400 });
-      loc = await canonicalPlaceLabel(loc);
-      const tzNew = await resolveTimezoneFromLocation(loc);
-      let found = false;
-      await saveState(rid, (s) => {
-        const p = s.people && s.people[who];
-        if (!p) return;
-        found = true;
-        p.location = loc;
-        if (tzNew) p.tz = tzNew;
-      });
-      if (!found) return json({ error: "no_person" }, { status: 404 });
-      console.log("[admin] location room=" + rid + " who=" + who + " -> " + loc + (tzNew ? " (" + tzNew + ")" : ""));
-      return json({ ok: true, location: loc });
-    }
-
     // Admin tool: email a "finish registering" reminder to someone whose email
     // sign-up is still unconfirmed. Called by the nearune-admin service with
     // the x-cron-secret header. Body: { roomId, who }.
-    // Admin Home "Refresh now": run the stats snapshot on demand.
-    if (req.method === "POST" && url.pathname === "/api/admin/stats-refresh") {
-      const secret = Bun.env.CRON_SECRET;
-      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
-      // Waits up to 45s (under the 60s idle limit); a slower run keeps going and saves when done.
-      const run = refreshStats().then(() => "done", (e: any) => "error: " + String(e?.message || e).slice(0, 120));
-      const res = await Promise.race([run, new Promise<string>((r) => setTimeout(() => r("pending"), 45_000))]);
-      if (res === "done") return json({ ok: true });
-      if (res === "pending") return json({ ok: true, pending: true });
-      return json({ error: res }, { status: 500 });
-    }
-
     if (req.method === "POST" && url.pathname === "/api/admin/remind") {
       const secret = Bun.env.CRON_SECRET;
       if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
@@ -757,38 +489,25 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           const state = await loadState(id);
           if (!state.pushSubs) continue;
           const today = todayKeyFor(state);
-          // "Still waiting" nudges for someone whose invited partner hasn't
-          // joined: at most three, spaced out, each worded differently and
-          // led by what they get, not by what's missing. Only people who
-          // turned notifications on can receive them. Not for Make a friend
-          // rooms (the match arrives on its own).
+          // "Still waiting" nudge: an invite unanswered for 2+ days, at most
+          // once every 3 days, pushed to whoever sent it.
           const DAY_MS = 24 * 60 * 60 * 1000;
-          const NUDGES = [
-            { after: 1 * DAY_MS, title: "Your Nearune is almost ready", body: "One text from you and your first question opens for the two of you. Your invite link is waiting." },
-            { after: 3 * DAY_MS, title: "Your partner is one tap away", body: "Send your link again. It takes ten seconds, and a daily question is better with two." },
-            { after: 7 * DAY_MS, title: "Your room is still open", body: "Whenever you're ready, share your invite and start the daily question together." },
-          ];
           for (const other of ["mark", "nikita"] as PersonKey[]) {
-            if (state.origin === "friend") break;
             const inv = state.pendingInvite && state.pendingInvite[other];
             const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
             const inviterSub = state.pushSubs[inviterKey];
             if (!inv || !inviterSub) continue;
             if (state.people && state.people[other] && state.people[other]!.confirmed) continue;
-            const sentCount = state.inviteNudgeCount || (state.inviteNudgeAt ? 1 : 0);
-            if (sentCount >= NUDGES.length) continue;
             const lastNudge = state.inviteNudgeAt ? Date.parse(state.inviteNudgeAt) : 0;
-            const startAt = Date.parse(inv.at);
-            if (!startAt || Date.now() - startAt < NUDGES[sentCount].after || Date.now() - lastNudge < 2 * DAY_MS) continue;
+            if (Date.now() - Date.parse(inv.at) < 2 * DAY_MS || Date.now() - lastNudge < 3 * DAY_MS) continue;
             const nres = await sendPush(inviterSub, {
-              title: NUDGES[sentCount].title,
-              body: NUDGES[sentCount].body,
+              title: "Still waiting for your Nearune partner",
+              body: "Open Nearune to get a fresh invite link and send it to them yourself — text, Instagram or email.",
               tag: "invite-nudge",
             });
             if (nres.ok) {
               sent++;
-              console.log("[invite-nudge] room=" + (id || "main") + " #" + (sentCount + 1));
-              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = sentCount + 1; });
+              await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); });
             }
             if (nres.gone) {
               await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
@@ -915,7 +634,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 4000);
-      const blockedA = await moderate(roomId, who, "answer", trimmed, body.confirmFlagged === true);
+      const blockedA = await moderate(roomId, who, "answer", trimmed);
       if (blockedA) return blockedA;
       const state = await saveState(roomId, (s) => {
         if (!s.answers[date]) s.answers[date] = {};
@@ -997,7 +716,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           // only targets APNs.
           for (const person of ["mark", "nikita"] as PersonKey[]) {
             const sub = state.pushSubs[person];
-            if (!sub || (sub.kind !== "apns" && sub.kind !== "fcm")) continue;
+            if (!sub || sub.kind !== "apns") continue;
             const solo = isSoloRoom(state);
             sendPush(sub, {
               title: solo ? "Answer saved" : "You're all caught up",
@@ -1016,7 +735,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           }
         }
       }
-      recordRoomUse(roomId, "answer");
       return json(forClient(state));
     }
 
@@ -1035,7 +753,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const cur = await loadState(roomId);
       if (cur.origin !== "friend") return json({ error: "not_friend_room" }, { status: 400 });
-      const wasClosed = !!cur.closed;
       const report = body.report === true;
       const about: PersonKey = who === "mark" ? "nikita" : "mark";
       const note = typeof body.note === "string" ? body.note.slice(0, 300) : undefined;
@@ -1048,17 +765,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (s.reports.length > 50) s.reports = s.reports.slice(-50);
       });
       await friendBlock(cur.friendDevices && cur.friendDevices.mark, cur.friendDevices && cur.friendDevices.nikita);
-      // A plain leave (not a report) before the other person answered anything:
-      // they did nothing wrong, so they go back to the front of the line.
-      if (!report && !wasClosed) {
-        const stayerAnswered = Object.values((cur as any).answers || {}).some((day: any) => day && day[about]);
-        const sp: any = cur.people && (cur.people as any)[about];
-        if (!stayerAnswered) {
-          await friendRequeue(cur.friendDevices && (cur.friendDevices as any)[about],
-            sp && sp.name && sp.location ? { name: sp.name, location: sp.location, language: sp.language || "English", ...(sp.tz ? { tz: sp.tz } : {}) } : undefined);
-          console.log("[friend-leave] room=" + roomId + " other person requeued at front");
-        }
-      }
       console.log("[friend-leave] room=" + roomId + " by=" + who + " report=" + report + (note ? " note=" + JSON.stringify(note) : ""));
       return json(forClient(state));
     }
@@ -1105,7 +811,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return json({ error: "invalid" }, { status: 400 });
       }
       const trimmed = text.trim().slice(0, 300);
-      const blockedC = await moderate(roomId, who, "comment", trimmed, body.confirmFlagged === true);
+      const blockedC = await moderate(roomId, who, "comment", trimmed);
       if (blockedC) return blockedC;
       const state = await saveState(roomId, (s) => {
         if (!s.comments[date]) s.comments[date] = [];
@@ -1259,51 +965,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json(forClient(state));
     }
 
-    // Turn military (24-hour) time on or off for this person's clock.
-    if (req.method === "POST" && restPath === "/api/military") {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const who = body.who;
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const on = body.on === true;
-      const state = await saveState(roomId, (s) => {
-        if (!s.people || !s.people[who]) return;
-        if (on) s.people[who]!.military = true;
-        else delete s.people[who]!.military;
-      });
-      return json(forClient(state));
-    }
-
-    // A section of the room page failed to draw on someone's device. The page
-    // skips that section and keeps going; this just writes the error to the
-    // log so it can be fixed. No personal data, capped length.
-    if (req.method === "POST" && restPath === "/api/client-error") {
-      if (!rateLimit("clienterr:" + clientIp(req, server), 30, HOUR)) return json({ ok: false }, { status: 429 });
-      const ce = await readJson(req);
-      const clip = (v: any, n: number) => String(v == null ? "" : v).replace(/[\r\n]+/g, " | ").slice(0, n);
-      console.log("[client-error] room=" + (roomId || "main") + " who=" + clip(ce?.who, 10) + " part=" + clip(ce?.part, 30) + " msg=" + clip(ce?.msg, 200) + " at=" + clip(ce?.stack, 400) + " ua=" + clip(req.headers.get("user-agent"), 120));
-      return json({ ok: true });
-    }
-
-    // Anonymous sign-up funnel: records the first time a room reaches each
-    // step of the registration screens, so the admin view can show where
-    // people give up. Whitelisted step names only; no personal data.
-    if (req.method === "POST" && restPath === "/api/funnel") {
-      if (!rateLimit("funnel:" + clientIp(req, server), 60, HOUR)) return json({ ok: false }, { status: 429 });
-      const body = await readJson(req);
-      const step = typeof body?.step === "string" ? body.step : "";
-      if (!FUNNEL_STEPS.has(step)) return json({ ok: false }, { status: 400 });
-      const cur = await loadState(roomId);
-      // Only rooms that were really created (never conjure a room from a made-up id).
-      if (roomId && !cur.createdAt) return json({ ok: false }, { status: 404 });
-      if (cur.funnel && cur.funnel[step]) return json({ ok: true });
-      await saveState(roomId, (s) => {
-        if (!s.funnel) s.funnel = {};
-        if (!s.funnel[step]) s.funnel[step] = new Date().toISOString();
-      });
-      return json({ ok: true });
-    }
-
     if (req.method === "POST" && restPath === "/api/status") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
@@ -1340,7 +1001,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         body?.relationship === "its_complicated"
           ? body.relationship
           : undefined;
-      const military = body?.military === true;
       // Email / Instagram is optional: a contact that is given must still be
       // valid, but none at all is fine (the person just can't recover the
       // room by email later, so they keep their Nearune link).
@@ -1349,10 +1009,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       }
       if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
-      // Optional room name typed by the first person on the setup screen.
-      if ((await applySignupRoomName(roomId, body?.roomName)) === "blocked") {
-        return json({ error: "inappropriate_name" }, { status: 400 });
-      }
       if (!email) {
         // Instagram-handle sign-up: nothing is emailed (there's no address),
         // so there's nothing to confirm and nothing that could be used to
@@ -1369,7 +1025,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
         const stateH = await saveState(roomId, (s) => {
           if (!s.people) s.people = {};
-          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}), ...(military ? { military: true } : {}) };
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}) };
           if (s.pendingConfirm) delete s.pendingConfirm[who];
           if (relationship && !s.relationship) s.relationship = relationship;
         });
@@ -1404,7 +1060,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash, ...(military ? { military: true } : {}) };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         const prevPc = s.pendingConfirm[who];
         s.pendingConfirm[who] = {
@@ -1542,19 +1198,19 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         console.log("[invite] room=" + (roomId || "main") + " via=instagram");
         return json({ ...forClient(state), _viaHandle: true, _inviteUrl: inviteUrl, _appStoreUrl: Bun.env.APP_STORE_URL || "" });
       }
-      const inviterName = String(cur.people[who]!.name || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as any)[c]);
+      const inviterName = cur.people[who]!.name;
       const r = await sendEmail(
         email,
         inviterName + " invited you to Nearune",
-        "<p style=\"font-size:16px\">" + inviterName + " invited you to Nearune: one question a day, just for the two of you. It's free.</p>" +
-          "<p style=\"margin:20px 0\"><a href=\"" + inviteUrl + "\" style=\"background:#A9532C;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700;display:inline-block\">Accept " + inviterName + "'s invite</a></p>" +
+        "<p>" + inviterName + " invited you to Nearune.</p>" +
+          "<ol><li><a href=\"" + inviteUrl + "\">Confirm your email</a></li>" +
+          "<li>Access Nearune to begin your togetherness bonding</li></ol>" +
           (roomId ? "<p style=\"font-size:15px\">Your room code: <b>" + roomId + "</b><br><span style=\"font-size:14px\">If the link doesn't open the app, open Nearune, tap <b>Open an existing room</b> and enter this code.</span></p>" : "") +
           (Bun.env.APP_STORE_URL
             ? "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0\"><tr>" +
               "<td style=\"padding-right:14px;vertical-align:middle\"><a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/apple-touch-icon.png\" width=\"64\" height=\"64\" alt=\"Nearune\" style=\"border-radius:14px;display:block;border:0\"></a></td>" +
               "<td style=\"vertical-align:middle\"><div style=\"font-size:15px;margin-bottom:8px\">Get the Nearune app</div>" +
-              "<a href=\"" + Bun.env.APP_STORE_URL + "\" style=\"display:inline-block;margin:0 8px 6px 0\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a>" +
-              "<a href=\"" + GOOGLE_PLAY_URL + "\" style=\"display:inline-block;margin:0 0 6px 0\"><img src=\"" + publicOrigin + "/google-play-badge.png\" width=\"182\" alt=\"Get it on Google Play\" style=\"display:block;border:0;height:auto\"></a></td>" +
+              "<a href=\"" + Bun.env.APP_STORE_URL + "\"><img src=\"" + publicOrigin + "/app-store-badge.png\" width=\"160\" alt=\"Download on the App Store\" style=\"display:block;border:0;height:auto\"></a></td>" +
               "</tr></table>"
             : "") +
           "<p style=\"font-size:14px\">Already have the app? Copy the link above, open Nearune and tap <b>Paste my invite</b>. Nearune only reads the link you just copied.</p>" +
@@ -1686,7 +1342,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         delete s.puzzleLastGuessText;
         delete s.puzzleLastGuessCorrect;
       });
-      recordRoomUse(roomId, "puzzle_uploaded");
       return json(forClient(state));
     }
 
@@ -1709,12 +1364,11 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who, choice, round } = body || {};
       if (!isPerson(who) || (choice !== "never" && choice !== "have")) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (!s.nhie) s.nhie = newRound(undefined, roomRelationship(s));
+        if (!s.nhie) s.nhie = newRound(undefined, s.relationship);
         if (s.nhie.round !== round) return;
         if (!s.nhie.votes) s.nhie.votes = {};
         s.nhie.votes[who] = choice;
       });
-      recordRoomUse(roomId, "nhie_vote");
       return json(forClient(state));
     }
 
@@ -1727,9 +1381,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who, round } = body || {};
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (!s.nhie) { s.nhie = newRound(undefined, roomRelationship(s)); return; }
+        if (!s.nhie) { s.nhie = newRound(undefined, s.relationship); return; }
         const v = s.nhie.votes || {};
-        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, roomRelationship(s));
+        if (s.nhie.round === round && v.mark && v.nikita) s.nhie = newRound(s.nhie, s.relationship);
       });
       return json(forClient(state));
     }
@@ -1742,7 +1396,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who, round, text } = body || {};
       const trimmed = typeof text === "string" ? text.trim().slice(0, 300) : "";
       if (!isPerson(who) || !Number.isInteger(round) || round < 1 || !trimmed) return json({ error: "invalid" }, { status: 400 });
-      const blockedN = await moderate(roomId, who, "nhie-comment", trimmed, body.confirmFlagged === true);
+      const blockedN = await moderate(roomId, who, "nhie-comment", trimmed);
       if (blockedN) return blockedN;
       const state = await saveState(roomId, (s) => {
         if (!s.nhie || round > s.nhie.round) return;
@@ -1825,11 +1479,20 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const who = body && body.who;
       const dataUrl = body && body.dataUrl;
       if (!isPerson(who) || typeof dataUrl !== "string") return json({ error: "invalid" }, { status: 400 });
-      // Same checks the morning QA runs (parseVoiceSample in voice.ts).
-      const sample = parseVoiceSample(dataUrl);
-      if (!sample.ok) return json({ error: sample.error }, { status: 400 });
-      const mimeType = sample.mimeType;
-      const bytes = sample.bytes;
+      const match = dataUrl.match(/^data:([a-zA-Z0-9/.+-]+);base64,(.+)$/);
+      if (!match) return json({ error: "invalid" }, { status: 400 });
+      const mimeType = match[1];
+      let bytes: Uint8Array;
+      try {
+        bytes = Buffer.from(match[2], "base64");
+      } catch {
+        return json({ error: "invalid" }, { status: 400 });
+      }
+      // A clean ~20-60s sample is plenty for Instant Voice Cloning — capping
+      // well above that (10MB) just guards against an oversized upload, not
+      // against a long recording that's actually fine.
+      if (bytes.length < 2000) return json({ error: "too_short" }, { status: 400 });
+      if (bytes.length > 10 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
       const existing = await loadState(roomId);
       const oldVoiceId = existing.people && existing.people[who] && existing.people[who]!.voiceId;
       const label = "nearune-" + (roomId || "legacy") + "-" + who;
@@ -1843,7 +1506,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       // Old clone is no longer referenced by anything — clean it up at the
       // provider rather than letting clones accumulate there forever.
       if (oldVoiceId && oldVoiceId !== result.voiceId) deleteVoice(oldVoiceId).catch(() => {});
-      recordRoomUse(roomId, "voice_recorded");
       return json(forClient(state));
     }
 
@@ -1872,7 +1534,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     // same resize-client-side-then-base64-POST approach as /api/voice-sample
     // and /api/puzzle-batch above.
     // Photo sharing is off in "Make a friend" rooms (strangers).
-    if (req.method === "POST" && (restPath === "/api/photo-upload" || restPath === "/api/photo-caption" || restPath === "/api/video-upload")) {
+    if (req.method === "POST" && (restPath === "/api/photo-upload" || restPath === "/api/photo-caption")) {
       if ((await loadState(roomId)).origin === "friend") return json({ error: "photos_disabled" }, { status: 403 });
     }
 
@@ -1912,128 +1574,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         s.people[who]!.photoAt = new Date().toISOString();
         const cap = typeof body.caption === "string" ? body.caption.trim().slice(0, 200) : "";
         if (cap) s.people[who]!.photoCaption = cap; else delete s.people[who]!.photoCaption;
-        delete s.people[who]!.photoKind;
-        delete s.people[who]!.videoType;
       });
-      deleteSharedVideo(roomId, who).catch(() => {});
       return json(forClient(state));
-    }
-
-    // Share a video instead of a photo (same one-per-person slot). Sent as a
-    // form: the video file, plus up to 3 still frames the phone took from it
-    // (start, middle, end). Every frame and the comment are checked by the
-    // same moderation as photos; the first frame becomes the thumbnail.
-    if (req.method === "POST" && restPath === "/api/video-upload") {
-      if (!rateLimit("photo-upload:" + roomId, 30, HOUR)) {
-        return json({ error: "rate_limited" }, { status: 429 });
-      }
-      let form: FormData;
-      try { form = await req.formData(); } catch { return json({ error: "invalid" }, { status: 400 }); }
-      const who = String(form.get("who") || "");
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      const video = form.get("video");
-      if (!video || typeof video === "string") return json({ error: "invalid" }, { status: 400 });
-      const vType = String((video as File).type || "video/mp4").split(";")[0];
-      if (!/^video\/[a-z0-9.+-]+$/i.test(vType)) return json({ error: "invalid" }, { status: 400 });
-      if ((video as File).size < 1000) return json({ error: "invalid" }, { status: 400 });
-      if ((video as File).size > 60 * 1024 * 1024) return json({ error: "too_large" }, { status: 400 });
-      const frames: Uint8Array[] = [];
-      for (const f of form.getAll("frame")) {
-        if (f && typeof f !== "string" && (f as File).size > 200 && (f as File).size < 4 * 1024 * 1024) frames.push(new Uint8Array(await (f as File).arrayBuffer()));
-      }
-      if (!frames.length) return json({ error: "invalid" }, { status: 400 });
-      const capText = String(form.get("caption") || "").trim().slice(0, 200);
-      for (let i = 0; i < Math.min(frames.length, 3); i++) {
-        const verdict = await moderateContent({ image: frames[i], text: i === 0 ? capText : "" });
-        if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
-        if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
-      }
-      const vBytes = new Uint8Array(await (video as File).arrayBuffer());
-      if (useS3 && s3) {
-        await s3.file(videoKey(roomId, who)).write(vBytes, { type: vType });
-        await s3.file(photoKey(roomId, who)).write(frames[0], { type: "image/jpeg" });
-      } else {
-        await Bun.write(localVideoPath(roomId, who), vBytes);
-        await Bun.write(localPhotoPath(roomId, who), frames[0]);
-      }
-      const state = await saveState(roomId, (s) => {
-        if (!s.people) s.people = {};
-        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
-        s.people[who]!.photoAt = new Date().toISOString();
-        s.people[who]!.photoKind = "video";
-        s.people[who]!.videoType = vType;
-        delete s.people[who]!.videoV;
-        if (capText) s.people[who]!.photoCaption = capText; else delete s.people[who]!.photoCaption;
-      });
-      // Convert in the background so the sender doesn't wait; the original
-      // plays meanwhile on phones that support it.
-      const sharedAt = state.people && state.people[who] ? state.people[who]!.photoAt || "" : "";
-      convertSharedVideo(roomId, who, sharedAt, vBytes).catch((e) => console.log("[video] convert failed: " + (e?.message || e)));
-      return json(forClient(state));
-    }
-
-    // Share a link (one per person, replaced each time) with an optional
-    // comment. Off in "Make a friend" rooms, like photos. The link and the
-    // comment go through the same text moderation as photo comments.
-    if (req.method === "POST" && (restPath === "/api/link-share" || restPath === "/api/link-delete")) {
-      const body = await readJson(req);
-      if (!body) return json({ error: "bad_json" }, { status: 400 });
-      const who = body.who;
-      if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
-      if (restPath === "/api/link-delete") {
-        const st = await saveState(roomId, (s) => {
-          if (s.people && s.people[who]) { delete s.people[who]!.linkUrl; delete s.people[who]!.linkNote; delete s.people[who]!.linkAt; }
-        });
-        return json(forClient(st));
-      }
-      if ((await loadState(roomId)).origin === "friend") return json({ error: "links_disabled" }, { status: 403 });
-      if (!rateLimit("link-share:" + roomId, 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
-      let raw = typeof body.url === "string" ? body.url.trim() : "";
-      if (raw && !/^[a-z][a-z0-9+.-]*:/i.test(raw)) raw = "https://" + raw;
-      let u: URL;
-      try { u = new URL(raw); } catch { return json({ error: "bad_link" }, { status: 400 }); }
-      if ((u.protocol !== "https:" && u.protocol !== "http:") || !u.hostname.includes(".") || raw.length > 600) return json({ error: "bad_link" }, { status: 400 });
-      const note = typeof body.note === "string" ? body.note.trim().slice(0, 200) : "";
-      const verdict = await moderateContent({ text: (note ? note + "\n" : "") + "Link: " + u.toString() });
-      if (verdict === "blocked") return json({ error: "inappropriate" }, { status: 422 });
-      if (verdict === "unavailable") return json({ error: "moderation_unavailable" }, { status: 503 });
-      const st = await saveState(roomId, (s) => {
-        if (!s.people) s.people = {};
-        if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
-        s.people[who]!.linkUrl = u.toString();
-        s.people[who]!.linkAt = new Date().toISOString();
-        if (note) s.people[who]!.linkNote = note; else delete s.people[who]!.linkNote;
-      });
-      return json(forClient(st));
-    }
-
-    // Streams a shared video. Phones fetch video in pieces (byte ranges),
-    // and iPhones won't play a video whose server ignores those requests.
-    if (req.method === "GET" && restPath === "/api/video") {
-      const who = url.searchParams.get("who") || "";
-      if (!isPerson(who)) return new Response("Not found", { status: 404 });
-      try {
-        const st = await loadState(roomId);
-        const vType = (st.people && st.people[who] && st.people[who]!.videoType) || "video/mp4";
-        const file: any = useS3 && s3 ? s3.file(videoKey(roomId, who)) : Bun.file(localVideoPath(roomId, who));
-        if (!(await file.exists())) return new Response("Not found", { status: 404 });
-        const size: number = useS3 && s3 ? (await file.stat()).size : file.size;
-        const baseHeaders: Record<string, string> = { "content-type": vType, "accept-ranges": "bytes", "cache-control": "private, max-age=31536000, immutable" };
-        const range = req.headers.get("range");
-        const m = range && range.match(/^bytes=(\d*)-(\d*)$/);
-        if (m && (m[1] || m[2])) {
-          let start = m[1] ? parseInt(m[1], 10) : Math.max(0, size - parseInt(m[2], 10));
-          let end = m[1] && m[2] ? parseInt(m[2], 10) : size - 1;
-          if (!m[1]) end = size - 1;
-          end = Math.min(end, size - 1);
-          if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size } });
-          const chunk = await file.slice(start, end + 1).arrayBuffer();
-          return new Response(chunk, { status: 206, headers: { ...baseHeaders, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
-        }
-        return new Response(file.stream ? file.stream() : await file.arrayBuffer(), { headers: { ...baseHeaders, "content-length": String(size) } });
-      } catch {
-        return new Response("Not found", { status: 404 });
-      }
     }
 
     // Edit the comment under an already-shared photo.
@@ -2064,9 +1606,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const who = body && body.who;
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       const state = await saveState(roomId, (s) => {
-        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; delete s.people[who]!.photoKind; delete s.people[who]!.videoType; }
+        if (s.people && s.people[who]) { delete s.people[who]!.photoAt; delete s.people[who]!.photoCaption; }
       });
-      deleteSharedVideo(roomId, who).catch(() => {});
       try {
         if (useS3 && s3) await s3.file(photoKey(roomId, who)).delete();
         else await Bun.file(localPhotoPath(roomId, who)).delete();
@@ -2109,17 +1650,13 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!body) return json({ error: "bad_json" }, { status: 400 });
       const who = body && body.who;
       const text = typeof (body && body.text) === "string" ? body.text.slice(0, 2000).trim() : "";
-      if (!text) return json({ error: "invalid" }, { status: 400 });
+      if (!isPerson(who) || !text) return json({ error: "invalid" }, { status: 400 });
       const current = await loadState(roomId);
-      const person = isPerson(who) && current.people ? current.people[who] : undefined;
-      // Their own recorded voice, or a stock voice until they record one.
-      let voiceId = person && person.voiceId;
-      const own = !!voiceId;
-      if (!voiceId) voiceId = await defaultVoiceId(person && person.name ? await voiceGenderForName(person.name) : "neutral");
+      const voiceId = current.people && current.people[who] && current.people[who]!.voiceId;
+      if (!voiceId) return json({ error: "no_voice" }, { status: 404 });
       const audio = await synthesizeSpeech(text, voiceId);
       if (!audio) return json({ error: "synth_failed" }, { status: 502 });
-      recordRoomUse(roomId, "voice_played");
-      return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store", "x-nearune-voice": own ? "own" : "stock" } });
+      return new Response(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
     }
 
     if (req.method === "POST" && restPath === "/api/puzzle-guess") {
@@ -2270,17 +1807,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
     }
 
-    // Android app links: tells Android that invite links (/j/...) open the
-    // Nearune app. The SHA-256 fingerprint(s) of the app's signing key come
-    // from ANDROID_SHA256_FINGERPRINTS (comma-separated, from Play Console →
-    // App integrity → App signing, plus the upload key if testing locally).
-    if (req.method === "GET" && url.pathname === "/.well-known/assetlinks.json") {
-      const fps = (Bun.env.ANDROID_SHA256_FINGERPRINTS || "").split(",").map((x) => x.trim()).filter(Boolean);
-      if (!fps.length) return new Response("Not found", { status: 404 });
-      const body = [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: "com.nearune.app", sha256_cert_fingerprints: fps } }];
-      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=300" } });
-    }
-
     // The Never Have I Ever how-to clip. iOS needs Range support to play video.
     if (req.method === "GET" && url.pathname === "/nhie-howto.mp4") {
       const f = Bun.file(import.meta.dir + "/nhie-howto.mp4");
@@ -2296,18 +1822,6 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return new Response(f.slice(start, end + 1), { status: 206, headers: { ...base, "content-range": "bytes " + start + "-" + end + "/" + size, "content-length": String(end - start + 1) } });
       }
       return new Response(f, { headers: { ...base, "content-length": String(size) } });
-    }
-
-    if (req.method === "GET" && url.pathname === "/google-play-badge.svg") {
-      return new Response(GOOGLE_PLAY_BADGE_SVG, {
-        headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
-      });
-    }
-
-    if (req.method === "GET" && url.pathname === "/google-play-badge.png") {
-      return new Response(Buffer.from(GOOGLE_PLAY_BADGE_PNG_B64, "base64"), {
-        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
-      });
     }
 
     if (req.method === "GET" && url.pathname === "/app-store-badge.png") {
@@ -2384,46 +1898,6 @@ async function purgeStaleEmails(): Promise<void> {
     console.error("[email-purge] failed", err);
   }
 }
-// "Make a friend" no-shows: if one person signed up but their match hasn't
-// within 24 hours of being matched, close the room and tell the person who
-// showed up, so they can find a new friend instead of waiting forever.
-const FRIEND_NO_SHOW_MS = 24 * 60 * 60 * 1000;
-async function sweepFriendNoShows(): Promise<void> {
-  try {
-    const now = Date.now();
-    for (const id of await listRoomIds()) {
-      if (!id) continue;
-      let st: any;
-      try { st = await loadState(id); } catch { continue; }
-      if (st.origin !== "friend" || st.closed) continue;
-      const keys: PersonKey[] = ["mark", "nikita"];
-      const joined = keys.filter((k) => st.people && st.people[k]);
-      if (joined.length === 2) continue;
-      const missing = keys.filter((k) => !(st.people && st.people[k]));
-      const invAt = missing
-        .map((k) => st.pendingInvite && (st.pendingInvite as any)[k] && (st.pendingInvite as any)[k].at)
-        .filter(Boolean)
-        .map((a: string) => new Date(a).getTime());
-      const matchedAt = invAt.length ? Math.min(...invAt) : (st.createdAt ? new Date(st.createdAt).getTime() : NaN);
-      if (!isFinite(matchedAt) || now - matchedAt < FRIEND_NO_SHOW_MS) continue;
-      await saveState(id, (s) => { s.closed = true; s.closedBy = "no_show"; });
-      console.log("[friend] no-show closed room=" + id + " joined=" + joined.length + " waited=" + Math.round((now - matchedAt) / 3600000) + "h");
-      for (const k of joined) {
-        const sub = st.pushSubs && st.pushSubs[k];
-        if (!sub) continue;
-        sendPush(sub, {
-          title: "Your match didn't show up",
-          body: "Sorry about that. Tap to find a new friend on Nearune.",
-          tag: "friend-no-show",
-        }).catch(() => {});
-      }
-    }
-  } catch (err) {
-    console.error("[friend-no-show] failed", err);
-  }
-}
-setTimeout(sweepFriendNoShows, 3 * 60 * 1000);
-setInterval(sweepFriendNoShows, 60 * 60 * 1000);
 setTimeout(purgeStaleEmails, 6 * 60 * 1000);
 setInterval(purgeStaleEmails, 24 * 60 * 60 * 1000);
 setTimeout(purgeEmptyRooms, 5 * 60 * 1000);
@@ -2483,59 +1957,3 @@ setInterval(() => lastBadgeSent.clear(), 6 * 60 * 60 * 1000);
 
 startQaSchedule();
 startStatsSchedule();
-
-
-// Removes a person's shared video (when they share a photo instead, or
-// remove what they shared).
-async function deleteSharedVideo(roomId: string, who: PersonKey): Promise<void> {
-  try {
-    if (useS3 && s3) await s3.file(videoKey(roomId, who)).delete();
-    else await Bun.file(localVideoPath(roomId, who)).delete();
-  } catch {}
-}
-
-
-// Converts a shared video to H.264 + AAC in an MP4 (at most 1280px on the
-// long side), the one format every iPhone and Android plays. iPhones often
-// record HEVC, which many Android phones can't play. Runs ffmpeg (installed
-// on Railway via RAILPACK_DEPLOY_APT_PACKAGES=ffmpeg). Swaps the stored file
-// only if the person hasn't shared something else in the meantime.
-async function convertSharedVideo(roomId: string, who: PersonKey, sharedAt: string, bytes: Uint8Array): Promise<void> {
-  const ff = Bun.which("ffmpeg");
-  if (!ff) { console.log("[video] ffmpeg not installed: video kept as uploaded"); return; }
-  const tag = (roomId || "legacy") + "-" + who + "-" + Date.now();
-  const inPath = "/tmp/nr-video-in-" + tag;
-  const outPath = "/tmp/nr-video-out-" + tag + ".mp4";
-  const started = Date.now();
-  try {
-    await Bun.write(inPath, bytes);
-    const proc = Bun.spawn([ff, "-y", "-loglevel", "error", "-i", inPath, "-t", "61",
-      "-vf", "scale='min(1280,iw)':'min(1280,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
-      "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", outPath], { stdout: "ignore", stderr: "pipe" });
-    const killer = setTimeout(() => { try { proc.kill(); } catch {} }, 240000);
-    const code = await proc.exited;
-    clearTimeout(killer);
-    if (code !== 0) {
-      let err = "";
-      try { err = (await new Response(proc.stderr).text()).slice(0, 300); } catch {}
-      console.log("[video] ffmpeg exit " + code + ": " + err);
-      return;
-    }
-    const out = new Uint8Array(await Bun.file(outPath).arrayBuffer());
-    if (out.length < 1000) { console.log("[video] converted file empty"); return; }
-    const now = await loadState(roomId);
-    const p = now.people && now.people[who];
-    if (!p || p.photoKind !== "video" || p.photoAt !== sharedAt) return; // replaced meanwhile
-    if (useS3 && s3) await s3.file(videoKey(roomId, who)).write(out, { type: "video/mp4" });
-    else await Bun.write(localVideoPath(roomId, who), out);
-    await saveState(roomId, (s) => {
-      const q = s.people && s.people[who];
-      if (q && q.photoKind === "video" && q.photoAt === sharedAt) { q.videoType = "video/mp4"; q.videoV = Date.now(); }
-    });
-    console.log("[video] converted room=" + (roomId || "legacy") + " who=" + who + " " + Math.round(bytes.length / 1024) + "KB -> " + Math.round(out.length / 1024) + "KB in " + Math.round((Date.now() - started) / 1000) + "s");
-  } finally {
-    try { await Bun.file(inPath).delete(); } catch {}
-    try { await Bun.file(outPath).delete(); } catch {}
-  }
-}

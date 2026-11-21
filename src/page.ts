@@ -130,8 +130,6 @@ const RAW = String.raw`<!doctype html>
   .trend-bar-hum { font-size: 0.8rem; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; }
   /* Sits beside the weather tile, so left-aligned rather than the old
      full-width centered line under the clocks. */
-  .weather-attribution { display: block; text-align: right; margin: 4px 6px 0 0; font-size: 0.72rem; color: inherit; opacity: 0.7; text-decoration: none; }
-  .weather-attribution:hover { text-decoration: underline; }
   .sky-line {
     text-align: left; font-style: italic; color: var(--ink-soft);
     font-size: 0.8rem; line-height: 1.4; margin: 0; flex: 1 1 auto; min-width: 0; text-wrap: balance;
@@ -261,8 +259,6 @@ const RAW = String.raw`<!doctype html>
   .answer-text { font-size: 0.98rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
   .translate-inline { display: block; margin-top: 6px; font-size: 0.88rem; font-style: italic; color: var(--ink-soft); border-left: 2px solid var(--line); padding-left: 8px; }
   .translate-inline-row { display: flex; align-items: baseline; gap: 6px; }
-  .listen-inline { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.85rem; color: var(--ink-soft); }
-  body.weather-active .listen-inline { color: inherit; opacity: 0.85; }
   .speak-btn { background: none; border: none; color: inherit; opacity: 0.6; cursor: pointer; padding: 0; line-height: 1; font-size: 0.92rem; flex: none; }
   .speak-btn:hover { opacity: 1; }
   .speak-btn:disabled { opacity: 0.3; cursor: default; }
@@ -338,8 +334,6 @@ const RAW = String.raw`<!doctype html>
   .puzzle-progress { font-size: 0.8rem; color: var(--ink-soft); }
   .puzzle-explain { font-size: 0.83rem; color: var(--ink-soft); margin: 2px 0 4px; line-height: 1.4; }
   .puzzle-grid-wrap { position: relative; border-radius: 14px; overflow: hidden; touch-action: none; }
-  .zoomable { touch-action: pan-x pan-y; -webkit-touch-callout: none; }
-  .puzzle-grid-wrap.zoomable { touch-action: none; }
   .puzzle-zoom-overlay { position: fixed; inset: 0; background: #14100C; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; }
   .puzzle-zoom-overlay .puzzle-grid-wrap { width: 100vw; height: 100vh; border-radius: 0; box-shadow: none; }
   .puzzle-zoom-overlay .puzzle-grid { width: 100vmax; height: 100vmax; }
@@ -409,8 +403,8 @@ const RAW = String.raw`<!doctype html>
   .puzzle-batch-remove { background: none; border: none; color: var(--ink-soft); font-size: 0.9rem; cursor: pointer; padding: 2px 6px; flex: none; }
   .puzzle-locked { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
 
-  .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
-  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; text-align: center; }
+  .tab-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 4px; }
+  .tab-btn { position: relative; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 0.7rem; line-height: 1.15; padding: 8px 2px 7px; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
   .tab-btn.active { background: var(--accent); color: var(--on-accent); }
   .tab-ico { font-size: 1.2rem; line-height: 1; }
   .puzzle-card .translate-inline { color: #5a4a3f; }
@@ -431,7 +425,6 @@ const RAW = String.raw`<!doctype html>
   .nhie-note { text-align: center; color: var(--ink-soft); font-size: 0.8rem; margin: 0; }
   .tab-badge { background: var(--accent-2); color: #fff; position: absolute; top: 3px; right: 6px; font-size: 0.6rem; font-weight: 700; border-radius: 999px; padding: 1px 5px; line-height: 1.3; }
   .tab-btn.active .tab-badge { background: var(--on-accent); color: var(--accent); }
-  .tab-badge.alert, .tab-btn.active .tab-badge.alert { background: #D93B30; color: #fff; min-width: 9px; text-align: center; }
   .puzzle-flash { background: color-mix(in srgb, var(--good) 20%, var(--surface)); border: 1px solid var(--good); border-radius: 12px; padding: 11px 14px; font-size: 0.88rem; font-weight: 700; color: var(--ink); text-align: center; margin: 0; }
 
   .journal-toggle { background: none; border: none; color: var(--accent-ink); font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; padding: 6px 2px; text-align: left; display: flex; align-items: center; gap: 6px; }
@@ -508,117 +501,7 @@ const RAW = String.raw`<!doctype html>
   .photo-zoom-overlay .photo-zoom-wrap .shared-photo { width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; background: transparent; }
   .photo-zoom-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px; width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 20px; z-index: 2; cursor: pointer; }
   .shared-photo { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; margin-top: 8px; background: var(--surface-2); }
-  .video-thumb-wrap { position: relative; display: inline-block; flex: none; line-height: 0; cursor: pointer; }
-  .video-thumb-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 32px; height: 32px; border-radius: 16px; background: rgba(0,0,0,0.55); color: #fff; font-size: 14px; line-height: 32px; text-align: center; pointer-events: none; }
-  .video-wrap { background: #000; }
-  .link-row { margin: 8px 0 12px; }
-  .link-open { display: inline-block; margin-top: 4px; font-weight: 600; word-break: break-all; color: inherit; text-decoration: underline; }
-  .video-wrap .shared-video { background: #000; }
-  .video-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 32px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 26px; cursor: pointer; }
-  .video-mute { position: absolute; right: 10px; bottom: 18px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 18px; cursor: pointer; }
-  .video-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: rgba(255,255,255,0.25); cursor: pointer; }
-  .video-bar-fill { height: 100%; width: 0; background: #fff; }
   [hidden] { display: none !important; }
-
-  /* ===== Live-sky look (Nov 2026 redesign) =====
-     When the partner's weather is known (body.weather-active), the whole
-     room sits on their real sky (see applyWeatherSky) and everything else
-     becomes frosted glass with white text, like Raise Your Right Hand.
-     Done mostly through the color tokens, so every card follows. */
-  body.weather-active {
-    --bg: rgba(10,16,42,0.34);
-    --surface: rgba(10,16,42,0.40);
-    --surface-2: rgba(255,255,255,0.12);
-    --ink: #FFFFFF;
-    --ink-soft: rgba(255,255,255,0.84);
-    --line: rgba(255,255,255,0.22);
-    --accent: #FFFFFF;
-    --accent-ink: #AEB9FF;
-    --accent-2: #8E9BFF;
-    --on-accent: #151A33;
-    --good: #9BE7B4;
-    --shadow: rgba(0,0,0,0.22);
-    --weather-ink: #FFFFFF;
-    color-scheme: dark;
-    background: #0B1230;
-    color: #FFFFFF;
-    padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px));
-  }
-  body.weather-active #app { text-shadow: 0 1px 6px rgba(0,0,0,0.22); }
-  body.weather-active input, body.weather-active textarea, body.weather-active select, body.weather-active button { text-shadow: none; }
-  body.weather-active input::placeholder, body.weather-active textarea::placeholder { color: rgba(255,255,255,0.72); }
-  body.weather-active .card,
-  body.weather-active .clocks,
-  body.weather-active .status-chip,
-  body.weather-active .streak-card,
-  body.weather-active .top-action-row,
-  body.weather-active .voice-card,
-  body.weather-active .puzzle-card,
-  body.weather-active .edit-form,
-  body.weather-active .weather-widget-detail {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
-    backdrop-filter: blur(16px) saturate(140%);
-    box-shadow: none;
-  }
-  body.weather-active .card { border-radius: 26px; }
-  body.weather-active .puzzle-card .translate-inline { color: var(--ink-soft); }
-  body.weather-active .comment-send, body.weather-active .puzzle-guess-btn { background: #FFFFFF; color: #151A33; }
-  body.weather-active .weather-widget-detail { max-width: none; border-radius: 20px; }
-  body.weather-active .trend-bar-fill { background: #FFFFFF; }
-
-  /* Hero: the partner's local time, big, over their sky. */
-  .sky-top { display: flex; align-items: center; gap: 8px; }
-  .sky-pill { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 19px; background: rgba(10,16,42,0.34); border: 1px solid rgba(255,255,255,0.24); color: #FFFFFF; font: inherit; font-size: 0.86rem; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-  .sky-pill svg { width: 16px; height: 16px; flex: none; }
-  .sky-pill.round { width: 38px; padding: 0; justify-content: center; }
-  .sky-pill.code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-  .sky-spacer { flex: 1 1 auto; }
-  .sky-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 16px 0 4px; }
-  .sky-hero-label { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
-  .sky-hero-time { white-space: nowrap; font-size: clamp(3rem, 16.5vw, 5rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,0.28); }
-  .sky-hero-weather { margin-top: 8px; background: none; border: none; color: #FFFFFF; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; text-shadow: 0 1px 8px rgba(0,0,0,0.30); }
-  .sky-hero-weather svg { width: 20px; height: 20px; }
-  .sky-hero-weather { flex-wrap: wrap; justify-content: center; }
-  .sky-hero-you { font-size: 0.9rem; font-weight: 600; opacity: 0.95; }
-  .sky-hero-you .clock-time { font-size: inherit; font-weight: inherit; }
-  .sky-credit { font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.86); text-decoration: none; margin-top: 2px; }
-  .sky-room-name { text-align: center; font-size: 1rem; font-weight: 800; margin-top: 6px; }
-
-  /* Floating glass tab bar at the bottom of the screen. */
-  .tab-bar.floating {
-    position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-    width: min(532px, calc(100% - 24px)); box-sizing: border-box;
-    height: 70px; padding: 6px; gap: 2px; border-radius: 35px; align-items: stretch;
-    background: rgba(10,16,42,0.58); border: 1px solid rgba(255,255,255,0.20);
-    -webkit-backdrop-filter: blur(18px) saturate(150%); backdrop-filter: blur(18px) saturate(150%);
-    box-shadow: 0 12px 34px rgba(0,0,0,0.30);
-  }
-  .tab-bar.floating .tab-btn { color: rgba(255,255,255,0.82); border-radius: 29px; justify-content: center; font-size: 0.66rem; padding: 4px 2px; }
-  .tab-bar.floating .tab-btn.active { background: rgba(255,255,255,0.20); color: #FFFFFF; }
-  .tab-bar.floating .tab-ico svg { width: 22px; height: 22px; display: block; }
-  .tab-bar.floating .tab-badge { top: 2px; right: calc(50% - 22px); background: rgba(255,255,255,0.22); color: #FFFFFF; }
-  .tab-bar.floating .tab-badge.alert { background: #E5372B; }
-
-  /* Stars on a dusk or night sky. */
-  body.sky-night #weather-sky::after, body.sky-dusk #weather-sky::after {
-    content: ""; position: absolute; inset: 0 0 45% 0; pointer-events: none; opacity: 0.8;
-    background-image:
-      radial-gradient(1.2px 1.2px at 8% 12%, #fff 99%, transparent),
-      radial-gradient(1px 1px at 22% 30%, #fff 99%, transparent),
-      radial-gradient(1.4px 1.4px at 38% 8%, #fff 99%, transparent),
-      radial-gradient(1px 1px at 54% 22%, #fff 99%, transparent),
-      radial-gradient(1.2px 1.2px at 70% 10%, #fff 99%, transparent),
-      radial-gradient(1px 1px at 86% 26%, #fff 99%, transparent),
-      radial-gradient(1.3px 1.3px at 94% 6%, #fff 99%, transparent),
-      radial-gradient(1px 1px at 14% 52%, #fff 99%, transparent),
-      radial-gradient(1px 1px at 62% 46%, #fff 99%, transparent),
-      radial-gradient(1.2px 1.2px at 80% 58%, #fff 99%, transparent),
-      radial-gradient(1px 1px at 32% 64%, #fff 99%, transparent);
-  }
-  body.sky-dusk #weather-sky::after { opacity: 0.55; }
 </style>
 <link rel="manifest" id="manifestLink" href="/manifest.json">
 <meta name="theme-color" content="#FAF6EE" media="(prefers-color-scheme: light)">
@@ -637,8 +520,6 @@ const RAW = String.raw`<!doctype html>
 
   var ROOM = "__ROOM__";
   var RP = ROOM ? "/r/" + ROOM : "";
-  // The code shown to people: the admin may have given the room a newer one.
-  function displayCode() { return (typeof state !== "undefined" && state && state.roomCode) || ROOM; }
   try {
     var manifestLinkEl = document.getElementById("manifestLink");
     if (manifestLinkEl) manifestLinkEl.href = RP + "/manifest.json";
@@ -1075,81 +956,15 @@ const RAW = String.raw`<!doctype html>
     "What's something you're grateful we became friends over?"
   ];
 
-  // Make-a-friend matches: two people who just met. Starts light and gets
-  // a little deeper day by day, counted from the room's first day (see
-  // questionForKey()), so every new match begins with question one.
-  var QUESTIONS_NEW_FRIEND = [
-    "What's something about your day today that you'd tell a new friend?",
-    "What do people usually get wrong about where you're from?",
-    "What's your go-to comfort food?",
-    "What does a perfect weekend look like for you?",
-    "What's a song you've had on repeat lately?",
-    "What's one thing you're really good at that most people don't know?",
-    "Morning person or night owl, and why?",
-    "What's the best trip you've ever taken?",
-    "What's a food from your country everyone should try at least once?",
-    "What do you do for work or study, and what's the best part of it?",
-    "What's a hobby you'd pick up if you had more time?",
-    "What's the last thing that made you laugh out loud?",
-    "What's a movie or show you could watch again and again?",
-    "What's a small thing that instantly makes your day better?",
-    "What's the most interesting place you've ever lived or stayed?",
-    "Coffee, tea, or neither? How do you take it?",
-    "What's something you're looking forward to this month?",
-    "What's a skill you've taught yourself?",
-    "What's a holiday or tradition you love where you live?",
-    "What's your favorite way to spend a rainy day?",
-    "What were you like as a kid?",
-    "What's a book, podcast or video that changed how you think about something?",
-    "If you could live anywhere in the world for a year, where would it be?",
-    "What's a word or phrase from your language you wish existed in every language?",
-    "What's the best advice anyone ever gave you?",
-    "What's something you've changed your mind about in the last few years?",
-    "What's a goal you're working toward right now?",
-    "Who's someone you look up to, and why?",
-    "What's a place in your city you'd show a visitor first?",
-    "What's the best meal you've ever had?",
-    "What's something that always makes you feel at home?",
-    "What's a fear you've gotten over, or are still working on?",
-    "What's your favorite season where you live, and what's it like?",
-    "What's a talent you wish you had?",
-    "What's something you're proud of from this past year?",
-    "What do you usually do to relax after a long day?",
-    "What's a habit you're trying to build or break?",
-    "What's the most spontaneous thing you've ever done?",
-    "What's a question you wish people asked you more often?",
-    "What's one thing on your bucket list?",
-    "What's a childhood game or snack you still miss?",
-    "What's something you're curious about in my part of the world?",
-    "What's the kindest thing a stranger has ever done for you?",
-    "What did you want to be when you grew up?",
-    "What's a small luxury you'd never give up?",
-    "What's a mistake that taught you something important?",
-    "What kind of friend are you: planner, listener, or the one who makes everyone laugh?",
-    "What's a moment from this week you'd want to remember?",
-    "What's something about you that surprises people when they get to know you?",
-    "What's your idea of a perfect day from start to finish?",
-    "What's a dream you've had for a long time but haven't told many people?",
-    "What's something you've learned from talking with me so far?"
-  ];
-
   // Picks the right pool for this room's relationship (see RelationshipType
   // in types.ts). Unset — every room created before this existed, plus the
   // legacy main room — defaults to significant_other so nothing already
   // running changes which questions it gets. its_complicated gets the same
   // pool as significant_other (falls through to the default below).
-  // Make-a-friend matches are always friends. Matches made before the
-  // server started saving that on the room switch to the friend pool from
-  // FRIEND_MATCH_POOL_START on, so their earlier days keep the question
-  // that was actually asked.
-  var FRIEND_MATCH_POOL_START = "2026-11-13";
-  var NEW_FRIEND_POOL_START = "2026-11-14";
-  function questionPoolFor(key) {
+  function questionPoolFor() {
     var rel = state && state.relationship;
-    if (state && state.origin === "friend" && (!key || key >= NEW_FRIEND_POOL_START)) return QUESTIONS_NEW_FRIEND;
     if (rel === "family") return QUESTIONS_FAMILY;
     if (rel === "friend") return QUESTIONS_FRIEND;
-    if (!rel && state && state.origin === "friend" && (!key || key >= FRIEND_MATCH_POOL_START)) return QUESTIONS_FRIEND;
     return QUESTIONS_SIGNIFICANT_OTHER_V1;
   }
 
@@ -1204,7 +1019,7 @@ const RAW = String.raw`<!doctype html>
     return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
   function questionForKey(key) {
-    var pool = questionPoolFor(key);
+    var pool = questionPoolFor();
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
     if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V3_START) {
       pool = QUESTIONS_SIGNIFICANT_OTHER_V3;
@@ -1213,12 +1028,6 @@ const RAW = String.raw`<!doctype html>
       pool = QUESTIONS_SIGNIFICANT_OTHER_V2;
       days = Math.floor((keyToUtcMs(key) - keyToUtcMs(QUESTIONS_V2_START)) / DAY_MS);
     }
-    if (pool === QUESTIONS_NEW_FRIEND) {
-      // Day 1 is the room's first day (or the day this set started, for
-      // matches made before it), so each new match opens with question one.
-      var firstMs = Math.max(state && state.createdAt ? Date.parse(state.createdAt) || 0 : 0, keyToUtcMs(NEW_FRIEND_POOL_START));
-      days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS) - Math.floor((firstMs - EPOCH_MS) / DAY_MS);
-    }
     var idx = ((days % pool.length) + pool.length) % pool.length;
     return pool[idx];
   }
@@ -1226,27 +1035,7 @@ const RAW = String.raw`<!doctype html>
     var d = new Date(keyToUtcMs(key) + 12 * 3600000);
     return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(d);
   }
-  function clockFor(tz, military) {
-    if (military) {
-      // Military (24-hour) time, written the military way: 0730, 1930.
-      var hh = "", mm = "";
-      new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).forEach(function (p) {
-        if (p.type === "hour") hh = p.value; else if (p.type === "minute") mm = p.value;
-      });
-      if (hh === "24") hh = "00";
-      return hh + mm;
-    }
-    return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date());
-  }
-  // "3 PM" -> "1500" (weather hour labels come from the server as 12-hour).
-  function militaryHourLabel(label) {
-    var m = /(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M/i.exec(String(label || ""));
-    if (!m) return String(label || "");
-    var hr = parseInt(m[1], 10) % 12;
-    if (m[3].toUpperCase() === "P") hr += 12;
-    return (hr < 10 ? "0" : "") + hr + (m[2] || "00");
-  }
-  function isMilitaryKey(key) { return !!(state && state.people && state.people[key] && state.people[key].military); }
+  function clockFor(tz) { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date()); }
   // The registering browser's own IANA zone — captured automatically so the
   // other person's clock is correct without asking anyone to pick a
   // timezone by hand (free-text "location" alone can't reliably give us one).
@@ -1357,7 +1146,7 @@ const RAW = String.raw`<!doctype html>
   var photoCaptionDraft = null;
   var pendingPhotoFile = null;
   var pendingPhotoUrl = "";
-  var photoUploadState = { uploading: false, error: "", progress: -1, video: false };
+  var photoUploadState = { uploading: false, error: "" };
   var viewerKey = null;
   var soloRegistration = false;
   try {
@@ -1484,7 +1273,6 @@ const RAW = String.raw`<!doctype html>
   // how they'll hear the moment that happens, since nothing else will unless
   // they happen to have the app open.
   function pushPromptDialog(awaitingPartner) {
-    nrTrack("notif_asked");
     var body = awaitingPartner
       ? t("Turn these on and we'll let you know the moment your partner accepts your invite — plus a daily nudge whenever today's question is ready.")
       : t("Nearune can let you know when today's question is ready, so neither of you misses a day.");
@@ -1498,7 +1286,7 @@ const RAW = String.raw`<!doctype html>
     enableBtn.disabled = pushState === "busy";
     enableBtn.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
     var notNowBtn = h("button", { class: "picker-btn", text: t("Not now") });
-    notNowBtn.addEventListener("click", function () { nrTrack("notif_declined"); dismissPushPrompt(); renderApp(); });
+    notNowBtn.addEventListener("click", function () { dismissPushPrompt(); renderApp(); });
     choices.appendChild(enableBtn);
     choices.appendChild(notNowBtn);
     card.appendChild(choices);
@@ -1543,178 +1331,14 @@ const RAW = String.raw`<!doctype html>
     return Object.keys(state.answers).filter(isComplete).sort().reverse().slice(0, 30);
   }
 
-  // Anonymous new-user funnel: random device ID (shared with the rooms page)
-  // + step name. No names, rooms or answers are sent.
-  var nrSent = {};
-  var nrExisting = null;
-  function nrDevice() {
-    try {
-      var d = localStorage.getItem("nearuneDevice");
-      if (d && /^[A-Za-z0-9]{16,64}$/.test(d)) return d;
-      var c = "abcdefghijklmnopqrstuvwxyz0123456789", o = "";
-      for (var i = 0; i < 24; i++) o += c.charAt(Math.floor(Math.random() * c.length));
-      localStorage.setItem("nearuneDevice", o);
-      return o;
-    } catch (e) { return ""; }
-  }
-  function nrTrack(step) {
-    if (nrSent[step]) return; nrSent[step] = 1;
-    var dev = nrDevice(); if (!dev) return;
-    if (nrExisting === null) nrExisting = !!(state && viewerKey && state.people && state.people[viewerKey]);
-    var plat = "web";
-    try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
-    try {
-      fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
-        body: JSON.stringify({ device: dev, step: step, platform: plat, existing: nrExisting }) }).catch(function () {});
-    } catch (e) {}
-  }
-  // Time spent: seconds Nearune is on screen (visible), sent about once a
-  // minute and when the app is hidden. Same random device ID, no content.
-  (function () {
-    var acc = 0, last = Date.now();
-    function tick() {
-      var now = Date.now();
-      if (!document.hidden) acc += Math.min(now - last, 20000) / 1000;
-      last = now;
-    }
-    function flush() {
-      tick();
-      var secs = Math.round(acc);
-      if (secs < 3) return;
-      acc = 0;
-      var dev = nrDevice(); if (!dev) return;
-      var plat = "web";
-      try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) plat = "app"; } catch (e) {}
-      try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: dev, step: "time", seconds: secs, platform: plat }) }).catch(function () {}); } catch (e) {}
-    }
-    setInterval(tick, 10000);
-    setInterval(flush, 60000);
-    document.addEventListener("visibilitychange", function () { if (document.hidden) flush(); else last = Date.now(); });
-    window.addEventListener("pagehide", flush);
-  })();
-  function nrCheckState() {
-    try {
-      if (!state || typeof state !== "object") return;
-      nrTrack("open");
-      if (!viewerKey || !state.people || !state.people[viewerKey]) return;
-      var other = viewerKey === "mark" ? "nikita" : "mark";
-      if (state.people[other]) nrTrack("partner_joined");
-      var ans = state.answers || {};
-      for (var dk in ans) { var a = ans[dk]; if (a && a.mark && a.nikita) { nrTrack("both_answered"); break; } }
-    } catch (e) {}
-  }
-
   async function api(path, body) {
     var res = await fetch(RP + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) {
-      var er = new Error("request failed"); try { er.code = (await res.json()).error; } catch (x) {}
-      // The message has words the screen flags: warn, and let the writer edit
-      // it (Cancel) or post it anyway (OK).
-      if (er.code === "flagged_confirm" && !(body && body.confirmFlagged)) {
-        if (window.confirm(t("This message contains language that some people may find offensive. Post it anyway? Tap Cancel to edit it first."))) {
-          return api(path, Object.assign({}, body, { confirmFlagged: true }));
-        }
-        var ec = new Error("cancelled"); ec.code = "flag_cancelled"; throw ec;
-      }
-      throw er;
-    }
+    if (!res.ok) { var er = new Error("request failed"); try { er.code = (await res.json()).error; } catch (x) {} throw er; }
     var next = await res.json();
     state = next;
     online = true;
-    if (path === "/api/answer") nrTrack("answered");
-    if (path === "/api/nhie-vote") nrTrack("nhie_played");
     return next;
   }
-
-  // ---- Pinch-to-zoom for every photo and video (house standard) -------------
-  // Instagram-style: put two fingers anywhere on or around a photo or video
-  // marked class "zoomable". It lifts over the whole screen, follows your
-  // fingers, and springs back when you let go. Scrolling is paused while two
-  // fingers are down. Photos are lifted into a top-level layer (a placeholder
-  // keeps the page layout); videos are scaled in place so they keep playing.
-  var pinchG = null;
-  function pinchDist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
-  function pinchInside(r, x, y, pad) { return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad; }
-  function pinchFind(a, b) {
-    var mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
-    var list = document.querySelectorAll(".zoomable"), best = null, bestScore = 99, bestArea = 1e12;
-    for (var i = 0; i < list.length; i++) {
-      var r = list[i].getBoundingClientRect();
-      if (r.width < 40 || r.height < 40) continue;
-      var score = 99;
-      if (pinchInside(r, mx, my, 0)) score = 0;
-      else if (pinchInside(r, a.clientX, a.clientY, 0) || pinchInside(r, b.clientX, b.clientY, 0)) score = 1;
-      else if (pinchInside(r, mx, my, 70)) score = 2;
-      if (score === 99) continue;
-      var area = r.width * r.height;
-      if (score < bestScore || (score === bestScore && area < bestArea)) { best = list[i]; bestScore = score; bestArea = area; }
-    }
-    return best;
-  }
-  function pinchBegin(el, a, b) {
-    var r = el.getBoundingClientRect();
-    var g = { el: el, startDist: pinchDist(a, b) || 1, cx: (a.clientX + b.clientX) / 2, cy: (a.clientY + b.clientY) / 2, inPlace: el.tagName === "VIDEO", styleAttr: el.getAttribute("style"), ph: null, ov: null, done: false };
-    if (g.inPlace) {
-      if (window.getComputedStyle(el).position === "static") el.style.position = "relative";
-      el.style.zIndex = "10001";
-    } else {
-      var cs = window.getComputedStyle(el);
-      var ph = document.createElement("div");
-      ph.style.cssText = "width:" + r.width + "px;height:" + r.height + "px;margin:" + cs.margin + ";flex:none;display:" + (cs.display === "inline" ? "inline-block" : cs.display) + ";";
-      if (el.parentNode) el.parentNode.insertBefore(ph, el);
-      g.ph = ph;
-      var ov = document.createElement("div");
-      ov.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;z-index:10000;pointer-events:none;background:rgba(0,0,0,0);transition:background 0.2s;";
-      document.body.appendChild(ov);
-      g.ov = ov;
-      el.style.position = "fixed"; el.style.left = r.left + "px"; el.style.top = r.top + "px";
-      el.style.width = r.width + "px"; el.style.height = r.height + "px"; el.style.margin = "0"; el.style.maxHeight = "none";
-      ov.appendChild(el);
-    }
-    el.style.transformOrigin = (g.cx - r.left) + "px " + (g.cy - r.top) + "px";
-    el.style.willChange = "transform";
-    el.style.transition = "none";
-    pinchG = g;
-    document.documentElement.style.overflow = "hidden";
-  }
-  function pinchMove(a, b) {
-    var g = pinchG; if (!g || g.done) return;
-    var s = Math.min(Math.max(pinchDist(a, b) / g.startDist, 1), 6);
-    var tx = (a.clientX + b.clientX) / 2 - g.cx, ty = (a.clientY + b.clientY) / 2 - g.cy;
-    g.el.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + s + ")";
-    if (g.ov) g.ov.style.background = "rgba(0,0,0," + Math.min(0.7, (s - 1) * 0.5) + ")";
-  }
-  function pinchEnd() {
-    var g = pinchG; if (!g || g.done) return;
-    g.done = true;
-    pinchG = null;
-    document.documentElement.style.overflow = "";
-    g.el.style.transition = "transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15)";
-    g.el.style.transform = "translate(0px,0px) scale(1)";
-    if (g.ov) g.ov.style.background = "rgba(0,0,0,0)";
-    setTimeout(function () {
-      if (g.styleAttr === null) g.el.removeAttribute("style"); else g.el.setAttribute("style", g.styleAttr);
-      if (g.ph) {
-        if (g.ph.parentNode) g.ph.parentNode.replaceChild(g.el, g.ph);
-        else if (g.el.parentNode) g.el.parentNode.removeChild(g.el);
-      }
-      if (g.ov && g.ov.parentNode) g.ov.parentNode.removeChild(g.ov);
-    }, 320);
-  }
-  document.addEventListener("touchstart", function (e) {
-    if (pinchG) { if (e.touches.length >= 2) e.preventDefault(); return; }
-    if (e.touches.length !== 2) return;
-    var el = pinchFind(e.touches[0], e.touches[1]);
-    if (!el) return;
-    e.preventDefault();
-    pinchBegin(el, e.touches[0], e.touches[1]);
-  }, { passive: false });
-  document.addEventListener("touchmove", function (e) {
-    if (!pinchG) return;
-    if (e.touches.length >= 2) { e.preventDefault(); pinchMove(e.touches[0], e.touches[1]); }
-  }, { passive: false });
-  document.addEventListener("touchend", function (e) { if (pinchG && e.touches.length < 2) pinchEnd(); }, { passive: true });
-  document.addEventListener("touchcancel", function () { if (pinchG) pinchEnd(); }, { passive: true });
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -1738,7 +1362,7 @@ const RAW = String.raw`<!doctype html>
   // a 60-75s version fixed that but read as a chore, so this lands in
   // between: ~30-35s read naturally, still mixing a statement, a question,
   // and a warmer aside for intonation range without feeling like an essay.
-  var VOICE_SAMPLE_SCRIPT = "Hi, it's me. I'm recording this so that when you tap the speaker in our room, you hear my real voice instead of a computer's. Here's a little about my day: what the weather's like, what I had for lunch, and one thing that made me smile. I always like hearing how things are where you are, too. Whatever time it is there right now, I hope your day is going well. Talk soon, and don't forget to answer today's question!";
+  var VOICE_SAMPLE_SCRIPT = "Hi, it's me. I hope this message finds you smiling today. I've been thinking about you all day — what are you up to right now? No matter how far apart we are, you're always on my mind, from the moment I wake up to the moment I fall asleep. I can't wait to see you again soon, sharing a meal instead of a screen. Until then, take care of yourself — my heart's right there with you.";
   var VOICE_MEMOS_ICON_DATA_URL ="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAASjElEQVR42tVaW49kV3X+1tr71Omq6p7uuXR7rp4LgwkawGPHhJCQmHCJlEgmUQjYRIYHvyJA+QVRkodciJQnXhEyD9ysCEshdpQgQMJRFMYXEmwHwoxxe2Z6ZnrGM119qcvZa3152OdUV8/NPTYvHLWme6pOndpr7bW+9a1vL/niF/8av8pXvKO7RWSbd/KOHps/wjv93PYMEAEgIJ3uRjbf90u/RERUah9xux6Jt7uJgIglM3oIoSzbU+WUqjg54bjmXlJESE7aTd5sa+TGHRAIqtFoOBiMqgoiQVW2rue6vZfrDGD9ZZL/dlAoTpqlsj21sGvP7OxsWZaqofaQaP3FzfOcoOrE02X8t0PrD235NeEygm4pjYbD4fra+utXr/Z6K0LEoI19EI5tYH5AAABG5qdsrp4kBJLMNIYD+w/Nz8+HGEGoKKB0t5TMUzKzlCwld3fCCZLunv91d3fLf5v7+CV3z/8DqSEURVGWZVm2ujMznZnp2dnZmR07du3etbq6ev78ufXVtSJGkBAQAq/3qnEZFYjNput49YCklMpu+9jRY53OtCcLDKPh8PzFi+fOnV9evrTaW+33+6OqspSSJXcnmw+TBJxGUjwkGcICaSQb83I2bUaaioQQptrtuV07jxw79s4TJ/YfPLBzbld3eubcubOXL1wMMYAUIUUIKoTwHN4OyN/9/V8hbxHpgEBSStMz08eOHw8hCoXmL7348qlTpxYXFzfW1819HIjaxMwNSa9UKiJg4oDUoZK3XgTkZhwRBJH3hcD0zOzJ++//3d/70MzcDvPq4vkLr507W4QgE5mgAKQOpDj2fb16S2Wnfez421VVJaxcW3n66ad//MIL1aiKMYYixm2AkAC0alT1Cp1ia0qQFDrO9fE6NgFHEGLMzx32N374ve+fOX3645/4+MG7D9+1d19yW1paKkLMEJHtBwVCUQkf/eiHmgyGkaJ6/PjxolUGCcvLl7/+ta+/+D8vxljEGFX1OpzaAjsTkOKepHPXnpOfriDVtV+oxjsBUxRFXLl29Wf/+9ODdx+e27W72+lubGxs9PsaNOdzNr3ejRyT2SZLae/efZ3OtBArV1e+9Y1vvnLmTLvdzp6rnQcSmv02sIqEuhAK+NiCymzvB/5834c/f/QP/1I6ey2l7RtAwOhFLHorK9/6+teWly/GIh44cDDGwunZgyRYVycoWbvV3drt9p4982ZG86ef+tczp8+UZWmWsol1ItJztsL8wW6nFK9gRJKJe8Sdo7WUMBpVnirH5lvbvIweQ1i+dOFf//k7Varanc7uXbtTMkrtR9a4J5pDgEBy27VrdwghhvjST15+4YXni6LIsDh5OUTcja6Wfn9HewYckoTTY2MhQwyL3//H1Vf+c/Hf/yGtLKrEOzXAwUQrYuunP3nxZy++VBRxbtdODdEmKiUm0dNB0TCzYxbAaDj60X/9aDQa3TTE1cWEwkD60AYwEXdNhYvXdcldNKThNb9yxtcXJbQ9x90dXXVcMFXp+VM/SlU11em0O11LToHXtEkA1br0OspyqixLFbm4dGFxcTGEcKP7SYJu4nA1CCQYksHF3WGkkO4Cd6iqhmixo2LKXOnv4BKvN1ODLr766vKlS62i6Ha7TpLCBs0cVAcJcfeyLEMICjl39tza+pqq3jw6wWBwMSVBFXowTZqQktEcUEdwOuFwpTnqonWnIQQn3UWx1lu9uHQhhDA1NZVrMilsqFKGZyFZli0A5lxeXk4pbe9r3FFsSDL3T+3cMy+eDE6p1BrY4lu/UkqXLl0E0Gq1VDWXfbKuBgpqfiHGQhBSspWVle0EKQmBiaUjIUwlP9T1NiR5Al28xjY2GEfyTdNsd19dXXX3EIKKNiAoGUmVyLYgxoKAmW1sbNxmx51g/eNkpFefXpjdpeiPDMmd7iAz2tU3cxKF38QFoL+xkVIKIWhoimkOJNZslICIBILJbDQaTX64rq7ZkQIlKE4qQReCEE+kCUNOEJIKA0XoaIx5E63WRHHmoL+RDNBQk4+GRhEyZqM1Z09VVaVqsvQCENbFL7cKIAgLTqfkQKTDJDkDSdMRvTAQ1Giomjr/Vpq10XDk5gKIKElCJP8jiJsBmg1IqarSTVBZAELIgERvm3Kkg4Z+ZxZBE4KMVSsgVWZJaISJ61vrQkm4e+5jpMmrcXuz2UNJkzG5EdkCnUIHHVTDny0szOpgSKoHOBqscbiqiyvdqof3zu5TSVbVANfkwE0LyxvnACnS9LGyBQ9IauNeFVFS8ndMhlDNbeowsENFCGBhQ3jdihqohIMuPqpSRd9XhJJmdMDhCta8NfcP4xVMRul1WTf57QRFtP4cwyQMAjWZY91HIreFWx4EQKjqIg6DD5lCNXj0roWZkEZMm7dRaH5Pp9WhjZIYfQxAAPr9/tra2uc+97nDhw/3+/1JkWYLWtxgVX5BpPaCQJoF1+7T67DdJ01vrgqpEjohdHF1yELL2yYVJLPTnAMjDD61sLAgNqKhoQ8iqKrqvvvum56enp+fb7fb7g5gY2OjqqptVOhNgJmQkMZImnOAuUcQiLjZZKRmwO86gyfL4QaHhSGTmzSdcN0Oi0uywQjMINs0XzIcDR977LEDBw70ej13H41Gg8Hg5MmTc3NzGbInt+ImhYcU1Qkca5YvE0mcVwqARroTBA108RjdHj64MEvZqIYkHBSYupoYHLkVdRghoJAC0/EuCj0vcWNjw8xExMwOHDhA8tFHHz18+PBwOFTVfr9fVdWNHfaYjajqmMCBNeJwggtN2NVQKfFA6jUZgNgno+DpT3ftmqENAZIGoA43J8VBz9IdnMjMlCDNbNfu3SGEDEEisr6+/tnPfvbYsWPXrl0zs36/3+v1HnnkkaNHj165ciWllNcwHA7z33mZOiFrcQzeYDZg3JOBgGXdBrm02vunypZ73+GOk9OxbW6OhkwgbwjHadVU9fy2iAwGgy984fMHDx4cDAbXdRckR6PR+973vpmZmXvvvXdmZubkyZPz8/N5Nw4ePNjtdlNKORQ16I1a4BhGN90vIu5uZkImWKD9yV0LHYFRQF91jkD1mg75mBE2taX+2UpCi6IFyKTgVTN+kX6//+ijjx47duzq1aurq6uf+cxn9u/f/8gjjxw6dOixxx67995719fXJUuAotgq/Y5dETN+Si5uoLs5GRz0MEL679V+n5ZTonRQ3LG5QgfFadjkt74JnQRp7q1WK/tlXMjMLLsphPDcc89dvny5KIoY46lTp3q93g9+8IOrV68+88wzi4uLRVHkqiqaEb7u7IS1uCAyFncJIYRibu5WCRQMjm8uLbXJSHHwdXGkAEpevgPOptK45zrHRqnKhTe2iieeeOLixQsxxjE6dzqdEEJKqSzLr3zlK5nxxxgff/zx2dnZ0WhUFMVTTz0VYyzL0r3Jga2itdxKXnc3dweh9ErEYmRi1FBJ66uvLBtdJNHhE1WmroLNJtSWkO5exPjd736XWqhIjp+iKJ5++umlpaWZmRlVVdVut/ulL31pMBjs2LEDQFmWADqdzmQxVlHZlLU5qXHH2mW1LA23LFxmMJUIVMA3Lry+5lUfKLUQ5NUDEDoc0qy4CSGvVZscS91udzDycmpKVVNKrVbrySefnJqaeumll15//fUQgoj0ej1VHVcDAGY2maqqNU2QzK4AkFmnjJOIKwIzN3eQrjXKJPGX1/qFqAbND1bCKc0+NJouQXopEUJjneHqcDNRffbUqWvXrmWhoNPpdLvdxx9/vAkSDyHcVqAQkfFxAa/TMGOjuOeoprsxy7dNWyiQVpCcyOok1ZEQKDCKZWmAdAeo/vzaxqozetYKLEtUrbL9+Fe/OhgM2u32OIlbrRau42W3amcIUZBKeK1LZ5AmBIgyTj4AAjMzs0b8ql92CABxCEnxSoonzl++liRSjU7CATFXhG9fuDTtgpCBM1VSf1/Goi9/+ctLS0tlWY5ZxjYMyOiTO4Gb9EVRIY0XKahT7brDofwWhSm3kZCfr6WukupsnpuE8BgVpiNCR6qlQWsFEARjjC+//HKMMca4nXVPMATWWi7zSmomkYEpTtKOzFXqA4vrjCVcWCn+6bUrl6ndogrJ3QWsex1CKEMQCMWTS8sXE49orI9iGtdNTU1dR5632ZKJigJed6cQUpujmphpHUHCRLhJ7HhDU+kA9P9GwwgNCE2UKVzEhZluk0o5PRg4BWLYVNH4VsSVEFsQ59iAmjdQhHF8Vud0EcnEq0H2G84SwVJqQTsLvQ5LMIM5tfEtWxoGWzXtt9LUC1AURdMPu9QqykQhEyDUkikzONRB3zD1Sb01n5Jg3OSimpJSaveMG6pMJbwRnXhLbewWh+fXvVWWpUhubOvQl+aoY3zMSksGYqosJ2njjZvOnD0CgA4xFP9xtbdu0MYq4Hop1Em5vcR3a4mazlYspqam8qrMTLYeOEfJeQimlIQsy1bQ8Aa4NkYmUkX+7fLlbnBKTALxABqhIKTeAQGvVxO2HTyS+Wyn0wVoluhUFdG8D5TcE2eMStXI3Hfs2NFud3LzcdM2b7KryP4to3oovnF28WIyRBgoLlu60tt0u7cQrsevm1m7094xuwNAGlXwGmk2zyuajJbhcJCq0ezc7J49u8zsVng3mZcJblBxa7meNYWHFs2a07JGi2ko6+0edcu36L5nz/zs7CzI0WBAuohoLgyNsFXz1cFgMBgMOu32O95xTxYO3kBbZ2Z8SgaDTeWzW0I9EAk32as3o2mJ6rHjx7rT01l1Vqk3IMfoZk+sqqmq1tfXzP3+X79/ZnbG7FY2iMMBB6oWg8ITAKohGZia8yobjSqmUTVwT7k+3OklIqmyPXvmf+3Eu0MIaTRcX1+tG39xChQikg+9m2Pnq1evDof9w0eOvP/9v3ljFztxsO7iMJHTlZkRkggYVLxO8dFosOedH1048QdHT37MteVmd5TB9fGRuwgeeOC9h+6+m/DVXm80GqoK4DLRGqg2WlEIYXV1dbXXo9vHHnro6NG7h8Nsw1ZBEy40Ei7xO4uvrSQPCnGLJmMtyMgD9z00d/A39t//cDFzl6Uh7mQT8tqqqnrniRO/8+CDRQxWpeXl5aY/lmZkgSIMH/7wB7N+LgKSg8Fgbm52Zmb6yJEjzz///MZGP8bWpP8EInBXFYrnESXCwkTVEUGqUlW1d8y99uN/ufzT7xUhbBFGtjEUVlXV2++55xMPf/Ku/ftV9eLFi1euXIkxAAxSm5BrWfjIRz6YSYNkIWQ4dPfp6emFhT3H33b85ZdfunqtV8Qodd5LzTAab7hCIVsFdEooestnLjz37SunnwmBolHeaFxt7Nesf73rXe/+5CcfPnzkCER7vZVXX301BFWBiqhI5qdjAx4c0yECqrq6uqqq7XZn4a6F97zn3tevXDl//nxWzlQVKipajzuJaP3V112IqhDGGFWDClRUJkT8GxHT3VNKIjI/P//ggx986I/+eN++/VDdWF8/c+bnpEdVqe3MHVhuMyl/+zd/MaagWQJwMCXbu3ff/v37ilhUlT377LM//OEzp0+fXl1dTck2fTYRNzcbDJPJEQ4RmThIaUaFREIIRVF0u935hfm3HX/biRPvOnT33aEoBNLr9V75xS/cqqBB6oeMt6uOh6gQr9sEqCjpAokxLC2d7/f7Bw7s73Tav/2B33rgvQ8sLS2dPXv2/Pml3kpvfWNjY319VFXuLqKqGoKq5F8aQlANIQRVCRpU864Fza27iKrGIrZaZTlVtqfanW5nbufOubm5TrcbQiA9WVq+tHxhaUmAGEKTsg2NE45jMk7Qa8ndlpCAFEWxsnJtfX119+49czt3ttvtQ4cOHT5yJANcsmTJzNybE2dumfuTcUzK1iG6iVQXaTYhs8N8ODQYDHq93uXlSxvr6zFGFQXZEIZ6dEomBvJi/azcswtdIJnZu7diSO4XLlxYXl7udDqdTqecardarRBCjEU9syOS+QhBqHIznbipIcsWeJ+o0HU1N7OUqsGgv7HR31hfHw6HQbUoCgCUMepnO7k5OZiVuXoASupTAgXqw1NVkkFVVUmsra31er1cs1VVJKjoOBLHCI2mD/ItStoErWhqBevxuUYudYdTVFS1VRRZKJkEKJmIono7xy1lrgA5yQT1hODmaBgJIIQwbtbcs5YuY+2FW1Y5OVUqm8rxRGZvHrjUYS2qKmGMSy5Sn0NKnrjEeOlSE2mOZ+Y0NLHV3LLZEcttRoInYmPryc/NB4snmqGJk9ubz8NuepmyZXz4hjFYQRwvewvk3XCz3HbC7zYD0bcyZntnxxNH8rf4mm2M4/H2w9z8ZYx/v/lpcsWv+PX/mxPc1hheMdUAAAAASUVORK5CYII=";
   var PLANE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l17-7-6 17-3-7-8-3z"/></svg>';
 
@@ -1934,63 +1558,18 @@ const RAW = String.raw`<!doctype html>
     personVoiceCache[authorKey] = result;
     return result;
   }
-  // iPhones mute the built-in speech voice when the ring/silent switch is
-  // on, while a playing <audio> element is not muted. Playing a short,
-  // looping silent clip (started inside the tap) moves the phone into
-  // "media playback", so the speech voice is heard even on silent. It
-  // stops as soon as the speech ends.
-  var silentKeepAlive = null;
-  function silentWavUrl() {
-    var n = 4000, buf = new ArrayBuffer(44 + n), v = new DataView(buf), i;
-    function str(o, t) { for (var k = 0; k < t.length; k++) v.setUint8(o + k, t.charCodeAt(k)); }
-    str(0, "RIFF"); v.setUint32(4, 36 + n, true); str(8, "WAVE"); str(12, "fmt ");
-    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
-    str(36, "data"); v.setUint32(40, n, true);
-    for (i = 0; i < n; i++) v.setUint8(44 + i, 128);
-    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
-  }
-  function startSilentKeepAlive() {
-    try {
-      if (!silentKeepAlive) { silentKeepAlive = new Audio(silentWavUrl()); silentKeepAlive.loop = true; }
-      var p = silentKeepAlive.play();
-      if (p && p.catch) p.catch(function () {});
-    } catch (e) {}
-  }
-  function stopSilentKeepAlive() {
-    try { if (silentKeepAlive) silentKeepAlive.pause(); } catch (e) {}
-  }
   function speak(text, lang, authorKey) {
-    if (!canSpeak(lang) || !text) { stopSilentKeepAlive(); return; }
+    if (!canSpeak(lang) || !text) return;
     try {
-      var ss = window.speechSynthesis;
-      // Only cancel when something is actually playing: on iOS, speak()
-      // right after a needless cancel() is sometimes silently dropped.
-      if (ss.speaking || ss.pending) ss.cancel();
+      window.speechSynthesis.cancel(); // stop anything already playing first
       var u = new SpeechSynthesisUtterance(text);
-      var diag = { started: false, ended: false, err: "" };
-      u.onstart = function () { diag.started = true; };
-      u.onend = function () { diag.ended = true; stopSilentKeepAlive(); };
-      u.onerror = function (ev) { diag.err = (ev && ev.error) || "error"; stopSilentKeepAlive(); };
-      // Tell the server log whether the phone voice actually spoke, so a
-      // silent speaker shows up in Railway instead of going unnoticed.
-      setTimeout(function () {
-        try {
-          var vs = [];
-          try { vs = ss.getVoices() || []; } catch (e2) {}
-          fetch(RP + "/api/client-error", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: "speech", who: viewerKey || "", msg: "phone voice: started=" + diag.started + " err=" + diag.err + " voices=" + vs.length + " lang=" + u.lang + " speaking=" + ss.speaking + " pending=" + ss.pending }) }).catch(function () {});
-        } catch (e3) {}
-      }, 3000);
       // Until someone records a voice sample, always use the device's own
       // default voice for the language. A hand-picked "gendered" voice from the
       // name heuristic above could land on iOS novelty voices (Fred, Albert)
       // that sound harsh, so personVoice() is intentionally not used here.
       u.lang = lang === "en" ? enLocaleFor(authorKey) : SPEECH_LANG_MAP[lang];
-      if (ss.paused) ss.resume();
-      ss.speak(u);
-      // Safety net in case onend never fires.
-      setTimeout(stopSilentKeepAlive, Math.min(120000, 4000 + text.length * 120));
-    } catch (e) { stopSilentKeepAlive(); }
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
   }
   function personHasVoice(key) {
     var p = state.people && state.people[key];
@@ -2090,21 +1669,17 @@ const RAW = String.raw`<!doctype html>
   // delayed playback still succeeds.
   function speakAs(text, lang, authorKey, unlockedAudio) {
     if (!text) return;
-    // Always the server voice: the writer's recorded voice, or a stock voice
-    // until they record one. The phone's own speech voice is only a last
-    // resort (it makes no sound inside the iPhone app).
-    if (true) {
+    if (authorKey && personHasVoice(authorKey)) {
       try { if (activeCloneAudio && activeCloneAudio !== unlockedAudio) activeCloneAudio.pause(); } catch (e) {}
       var audio = unlockedAudio || new Audio();
       activeCloneAudio = audio;
       fetch(RP + "/api/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ who: authorKey || "", text: text }),
+        body: JSON.stringify({ who: authorKey, text: text }),
       })
         .then(function (res) { if (!res.ok) throw new Error("tts_failed"); return res.blob(); })
         .then(function (blob) {
-          nrTrack("voice_played");
           var url = URL.createObjectURL(blob);
           // If a newer tap started a different clone playback while this
           // fetch was still in flight, activeCloneAudio has already moved
@@ -2124,7 +1699,8 @@ const RAW = String.raw`<!doctype html>
     speak(text, lang, authorKey);
   }
   function speakButton(text, lang, label, authorKey) {
-    if (!text) return null;
+    var hasClone = !!authorKey && personHasVoice(authorKey);
+    if (!text || (!canSpeak(lang) && !hasClone)) return null;
     return h("button", {
       class: "speak-btn",
       type: "button",
@@ -2134,7 +1710,7 @@ const RAW = String.raw`<!doctype html>
         e.preventDefault();
         e.stopPropagation();
         var unlockedAudio = null;
-        {
+        if (hasClone) {
           // Fire a play() attempt synchronously, right in the tap handler,
           // on an element with no audio loaded yet — this is purely to
           // register the gesture with iOS; there's nothing to actually
@@ -2150,29 +1726,8 @@ const RAW = String.raw`<!doctype html>
     }, [document.createTextNode("🔊")]);
   }
 
-  // Answers and replies in a room where both people share a language get no
-  // translation line, so no 🔊 either. listenBlock gives them one: it plays
-  // the writer's own recorded voice, or the phone's built-in voice until
-  // they record one.
-  function listenBlock(text, lang, authorKey) {
-    if (!text) return null;
-    var hasClone = !!authorKey && personHasVoice(authorKey);
-    var label = hasClone
-      ? (authorKey === viewerKey ? t("Listen in your voice") : tTemplate("Listen in {name}'s voice", { name: personName(authorKey) }))
-      : t("Listen");
-    // Just the speaker icon; the words stay as its accessible label.
-    var btn = speakButton(text, lang || "en", label, authorKey);
-    if (!btn) return null;
-    return h("div", { class: "listen-inline" }, [btn]);
-  }
-  function translateBlock(text, target, alt, authorKey, listenSameLang) {
-    // Every spot that gets a 🔊 on its translation line in a two-language
-    // room gets the same 🔊 in a one-language room (pass false to opt out).
-    if (listenSameLang === undefined) listenSameLang = true;
-    if (!text || !target || target === alt) {
-      var lb = listenSameLang ? listenBlock(text, alt || target || "en", authorKey) : null;
-      return lb || h("div", { class: "translate-inline", hidden: "true" });
-    }
+  function translateBlock(text, target, alt, authorKey) {
+    if (!text || !target || target === alt) return h("div", { class: "translate-inline", hidden: "true" });
     var key = target + "|" + (alt || "") + "::" + text;
     scheduleTranslate(text, target, alt);
     var val = translationCache[key];
@@ -2180,8 +1735,6 @@ const RAW = String.raw`<!doctype html>
     if (val === undefined) {
       wrap.appendChild(document.createTextNode("Translating…"));
     } else if (!val) {
-      var lb2 = listenSameLang ? listenBlock(text, alt || target || "en", authorKey) : null;
-      if (lb2) return lb2;
       wrap.setAttribute("hidden", "true");
     } else {
       var row = h("div", { class: "translate-inline-row" });
@@ -2212,13 +1765,6 @@ const RAW = String.raw`<!doctype html>
   // longer notes): returns a separate translated line, styled exactly like
   // the rest of the app's dual-language display.
   function otherUiLang() {
-    // Before this viewer has signed up (setup / join screens), show the
-    // phone's language alongside English so they can read the setup.
-    var meP = viewerKey && state && state.people && state.people[viewerKey];
-    if (!(meP && meP.language) && (ROOM || !viewerKey)) {
-      var pc = phoneLanguageCode();
-      if (pc && pc !== "en") return pc;
-    }
     // Only one extra language can show alongside English on a given device,
     // so when the two people picked two different non-English languages,
     // this device shows whichever one the CURRENT viewer actually reads —
@@ -2244,10 +1790,7 @@ const RAW = String.raw`<!doctype html>
     return val ? text + " (" + val + ")" : text;
   }
   function uiTranslateBlock(text, authorKey) {
-    // The daily question and Never Have I Ever line read in the partner's
-    // voice: a 🔊 shows even when both people share a language (the phone's
-    // voice until the partner records one).
-    return translateBlock(text, otherUiLang(), "en", authorKey, !!authorKey);
+    return translateBlock(text, otherUiLang(), "en", authorKey);
   }
   function tTemplate(template, vars) {
     // Translation services translate the WORDS inside {name}-style tokens
@@ -2408,8 +1951,101 @@ const RAW = String.raw`<!doctype html>
   }
 
   function puzzleZoomableGrid(imgSrc) {
-    var wrap = h("div", { class: "puzzle-grid-wrap zoomable" });
-    wrap.appendChild(puzzleGrid(imgSrc));
+    var wrap = h("div", { class: "puzzle-grid-wrap" });
+    var grid = puzzleGrid(imgSrc);
+    wrap.appendChild(grid);
+
+    var scale = 1, panX = 0, panY = 0;
+    var pinchStartDist = 0, pinchStartScale = 1;
+    var panStartX = 0, panStartY = 0, pointerStartX = 0, pointerStartY = 0;
+    var lastTapTime = 0;
+    var overlay = null, placeholder = null;
+
+    function ensurePlaceholder() {
+      if (!placeholder && wrap.parentNode) {
+        placeholder = document.createComment("puzzle-zoom-placeholder");
+        wrap.parentNode.insertBefore(placeholder, wrap);
+      }
+    }
+    function activateZoom() {
+      ensurePlaceholder();
+      if (!overlay) {
+        overlay = h("div", { class: "puzzle-zoom-overlay" });
+        overlay.addEventListener("click", function (e) { if (e.target === overlay) resetZoom(); });
+      }
+      if (!overlay.parentNode) {
+        document.body.appendChild(overlay);
+        overlay.appendChild(wrap);
+      }
+    }
+    function deactivateZoom() {
+      if (overlay && overlay.parentNode) {
+        if (placeholder && placeholder.parentNode) {
+          placeholder.parentNode.insertBefore(wrap, placeholder);
+        }
+        overlay.parentNode.removeChild(overlay);
+      }
+    }
+    function updateZoomState() {
+      if (scale > 1) activateZoom(); else deactivateZoom();
+    }
+    function resetZoom() {
+      scale = 1; panX = 0; panY = 0;
+      applyTransform();
+    }
+    function clampPan() {
+      var gw = grid.offsetWidth * scale;
+      var gh = grid.offsetHeight * scale;
+      var maxX = Math.max(0, (gw - wrap.clientWidth) / 2);
+      var maxY = Math.max(0, (gh - wrap.clientHeight) / 2);
+      panX = Math.min(Math.max(panX, -maxX), maxX);
+      panY = Math.min(Math.max(panY, -maxY), maxY);
+    }
+    function applyTransform() {
+      updateZoomState();
+      clampPan();
+      grid.style.transform = "translate(-50%,-50%) translate(" + panX + "px," + panY + "px) scale(" + scale + ")";
+      grid.style.position = "relative";
+      grid.style.left = "50%";
+      grid.style.top = "50%";
+    }
+    function clampScale(s) { return Math.min(Math.max(s, 1), 8); }
+    function dist(t1, t2) {
+      var dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    wrap.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        pinchStartDist = dist(e.touches[0], e.touches[1]);
+        pinchStartScale = scale;
+      } else if (e.touches.length === 1) {
+        pointerStartX = e.touches[0].clientX;
+        pointerStartY = e.touches[0].clientY;
+        panStartX = panX; panStartY = panY;
+        var now = Date.now();
+        if (now - lastTapTime < 300) {
+          scale = scale > 1 ? 1 : 2.5;
+          if (scale === 1) { panX = 0; panY = 0; }
+          applyTransform();
+        }
+        lastTapTime = now;
+      }
+    }, { passive: true });
+    wrap.addEventListener("touchmove", function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var d = dist(e.touches[0], e.touches[1]);
+        scale = clampScale(pinchStartScale * (d / pinchStartDist));
+        applyTransform();
+      } else if (e.touches.length === 1 && scale > 1) {
+        e.preventDefault();
+        panX = panStartX + (e.touches[0].clientX - pointerStartX);
+        panY = panStartY + (e.touches[0].clientY - pointerStartY);
+        applyTransform();
+      }
+    }, { passive: false });
+
     return wrap;
   }
 
@@ -2540,7 +2176,6 @@ const RAW = String.raw`<!doctype html>
       }).then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
           online = true;
-          if (result.ok && !(result.body && result.body.error)) nrTrack("puzzle_uploaded");
           if (!result.ok || result.body.error) {
             // The upload itself worked — the server just refused to swap in
             // a new puzzle while the current one is still unsolved. Surface
@@ -2664,13 +2299,13 @@ const RAW = String.raw`<!doctype html>
         : tTemplate("Today's guess: “{guess}” — not quite. Try again tomorrow.", { guess: state.puzzleLastGuessText });
       wrap.appendChild(h("p", { class: "puzzle-guess-note", text: msg }));
       if (!state.puzzleLastGuessCorrect && state.puzzleLastGuessText && state.puzzleLastGuessBy) {
-        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy, true));
+        wrap.appendChild(translateBlock(state.puzzleLastGuessText, langCodeFor(otherKeyOf(state.puzzleLastGuessBy)), langCodeFor(state.puzzleLastGuessBy), state.puzzleLastGuessBy));
       }
       return wrap;
     }
     if (state.puzzleQuestion && state.puzzleSetBy) {
       wrap.appendChild(h("p", { class: "puzzle-question", text: state.puzzleQuestion }));
-      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, true));
+      wrap.appendChild(translateBlock(state.puzzleQuestion, langCodeFor(viewerKey), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
     }
     var input = document.createElement("input");
     input.type = "text"; input.maxLength = 120;
@@ -2719,8 +2354,7 @@ const RAW = String.raw`<!doctype html>
     ov.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; gap: 16px;";
     var vid = document.createElement("video");
     vid.src = "/nhie-howto.mp4";
-    vid.controls = false; vid.autoplay = true; vid.playsInline = true;
-    vid.className = "zoomable";
+    vid.controls = true; vid.autoplay = true; vid.playsInline = true;
     vid.setAttribute("playsinline", ""); vid.setAttribute("webkit-playsinline", "");
     vid.style.cssText = "max-width: 100%; max-height: 78vh; border-radius: 12px; background: #000;";
     var closeBtn = document.createElement("button");
@@ -2733,43 +2367,9 @@ const RAW = String.raw`<!doctype html>
     }
     closeBtn.addEventListener("click", shut);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
-    // Custom controls (not the browser's own) so a two-finger pinch anywhere
-    // on the video is never swallowed by the native player.
-    var bar = document.createElement("div");
-    bar.style.cssText = "display: flex; align-items: center; gap: 10px; width: 100%; max-width: 560px; color: #fff;";
-    function barBtn(label) {
-      var bb = document.createElement("button");
-      bb.type = "button"; bb.textContent = label;
-      bb.style.cssText = "border: 0; border-radius: 999px; min-width: 40px; height: 40px; padding: 0 12px; font: inherit; font-weight: 700; background: rgba(255,255,255,0.18); color: #fff; cursor: pointer;";
-      return bb;
-    }
-    var pp = barBtn("\u275A\u275A");
-    var seek = document.createElement("input");
-    seek.type = "range"; seek.min = "0"; seek.max = "1000"; seek.value = "0"; seek.style.cssText = "flex: 1; min-width: 0;";
-    var tm = document.createElement("span");
-    tm.style.cssText = "font-size: 13px; min-width: 82px; text-align: right;";
-    var mu = barBtn("\uD83D\uDD0A");
-    var seeking = false;
-    function fmt(x) { x = Math.max(0, Math.floor(x || 0)); return Math.floor(x / 60) + ":" + ("0" + (x % 60)).slice(-2); }
-    function sync() {
-      pp.textContent = vid.paused ? "\u25B6" : "\u275A\u275A";
-      if (vid.duration && !seeking) seek.value = String(Math.round(vid.currentTime / vid.duration * 1000));
-      tm.textContent = fmt(vid.currentTime) + " / " + fmt(vid.duration);
-      mu.textContent = vid.muted ? "\uD83D\uDD07" : "\uD83D\uDD0A";
-    }
-    function toggle() { try { if (vid.paused) { var q = vid.play(); if (q && q.catch) q.catch(function () {}); } else { vid.pause(); } } catch (e) {} }
-    ["timeupdate", "play", "pause", "loadedmetadata", "ended", "volumechange"].forEach(function (n) { vid.addEventListener(n, sync); });
-    pp.addEventListener("click", toggle);
-    vid.addEventListener("click", toggle);
-    mu.addEventListener("click", function () { vid.muted = !vid.muted; });
-    seek.addEventListener("input", function () { seeking = true; if (vid.duration) vid.currentTime = Number(seek.value) / 1000 * vid.duration; });
-    seek.addEventListener("change", function () { seeking = false; });
-    bar.appendChild(pp); bar.appendChild(seek); bar.appendChild(tm); bar.appendChild(mu);
     ov.appendChild(vid);
-    ov.appendChild(bar);
     ov.appendChild(closeBtn);
     document.body.appendChild(ov);
-    sync();
     try { var pr = vid.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) {}
   }
   function nhieVideo() {
@@ -2793,7 +2393,7 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
-      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who, true));
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
       if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
       wrap.appendChild(cDiv);
     });
@@ -2941,7 +2541,7 @@ const RAW = String.raw`<!doctype html>
     var pastEl = nhiePastRounds();
     if (pastEl) card.appendChild(pastEl);
     card.appendChild(nhieVideo());
-    card.appendChild(h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: block; text-align: center; font-weight: 700; color: var(--ink); text-decoration: underline;", text: t("Watch the funny version") }));
+    card.appendChild(h("a", { href: "https://www.youtube.com/watch?v=jqci-XEAbE0", target: "_blank", rel: "noopener noreferrer", style: "display: block; text-align: center; font-weight: 700; color: #2B211B; text-decoration: underline;", text: t("Watch the funny version") }));
     card.appendChild(h("p", { class: "nhie-note", text: t("Play responsibly - water or a sip of anything counts too. \uD83D\uDCA7") }));
     return card;
   }
@@ -2968,7 +2568,7 @@ const RAW = String.raw`<!doctype html>
       if (fullyRevealed) {
         card.appendChild(h("p", { class: "puzzle-done-note", text: tTemplate(state.puzzleSolved ? "Solved — it was “{answer}.” ✧" : "Fully revealed — it was “{answer}.” ✧", { answer: state.puzzleAnswer }) }));
         if (state.puzzleAnswer && state.puzzleSetBy) {
-          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy, true));
+          card.appendChild(translateBlock(state.puzzleAnswer, langCodeFor(otherKeyOf(state.puzzleSetBy)), langCodeFor(state.puzzleSetBy), state.puzzleSetBy));
         }
         if (puzzleQueueRemaining() > 0) {
           var nextBtn = h("button", { class: "puzzle-upload-btn", text: t("Next picture →") });
@@ -3002,7 +2602,7 @@ const RAW = String.raw`<!doctype html>
     var text = editDraftText.trim();
     if (!text) return;
     try { await api("/api/answer", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { if (e && e.code === "flag_cancelled") return; if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+    catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
     editingEntry = null;
     renderApp();
   }
@@ -3028,7 +2628,7 @@ const RAW = String.raw`<!doctype html>
     var text = (commentDrafts[dateKeyVal] || "").trim();
     if (!text) return;
     try { await api("/api/comment", { date: dateKeyVal, who: viewerKey, text: text }); }
-    catch (e) { if (e && e.code === "flag_cancelled") return; if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+    catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
     commentDrafts[dateKeyVal] = "";
     renderApp();
   }
@@ -3072,7 +2672,7 @@ const RAW = String.raw`<!doctype html>
         h("span", { class: "comment-name", style: "color:" + person.color, text: person.name + ":" }),
         h("span", { text: c.text })
       ]);
-      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who, true));
+      cDiv.appendChild(translateBlock(c.text, langCodeFor(otherKeyOf(c.who)), langCodeFor(c.who), c.who));
       if (c.who !== viewerKey) cDiv.appendChild(reportLink("comment"));
       wrap.appendChild(cDiv);
     });
@@ -3098,29 +2698,18 @@ const RAW = String.raw`<!doctype html>
 
   function tabBar() {
     var unlocked = puzzleUnlockedCount();
-    var skyOn = skyMode();
-    var SHORT = { "Local Feel": "Local", "Never Have I Ever": "Never" };
     function mk(id, icon, label, badge) {
-      var ico = skyOn && SKY_ICONS[id] ? h("span", { class: "tab-ico", html: SKY_ICONS[id] }) : h("span", { class: "tab-ico", text: icon });
-      var kids = [ico, h("span", { text: t(skyOn && SHORT[label] ? SHORT[label] : label) })];
-      if (badge) kids.push(h("span", { class: "tab-badge" + (id === "never" || (id === "puzzle" && badge === "1") ? " alert" : ""), text: badge }));
+      var kids = [h("span", { class: "tab-ico", text: icon }), h("span", { text: t(label) })];
+      if (badge) kids.push(h("span", { class: "tab-badge", text: badge }));
       var btn = h("button", { class: "tab-btn" + (activeTab === id ? " active" : ""), type: "button", "aria-label": label }, kids);
       btn.addEventListener("click", function () { setActiveTab(id); });
       return btn;
     }
     var tabs = [mk("today", "☀️", "Today"), mk("local", "📍", "Local Feel")];
     // The photo puzzle is off in "Make a friend" rooms (strangers).
-    // No picture in play (none loaded yet, or the last one is finished with
-    // nothing queued): a red "+" so someone adds photos.
-    var noPhoto = !!state && (!state.puzzleCurrentId || ((state.puzzleSolved || unlocked >= PUZZLE_TOTAL) && puzzleQueueRemaining() === 0));
-    if (!(state && state.origin === "friend")) tabs.push(mk("puzzle", "🧩", "Puzzle", noPhoto ? "1" : unlocked + "/" + PUZZLE_TOTAL));
-    // Red "1" on the tab when your partner has answered this round and you
-    // haven't yet. No push notification; just the dot in the app.
-    var nh = state && state.nhie;
-    var nhOther = viewerKey ? otherKeyOf(viewerKey) : null;
-    var nhYourTurn = !!(nh && viewerKey && nhOther && nh.voted && nh.voted[nhOther] && !nh.voted[viewerKey] && !nhieMyChoice[nh.round]);
-    tabs.push(mk("never", "🥃", "Never Have I Ever", nhYourTurn ? "1" : ""));
-    return h("div", { class: "tab-bar" + (skyOn ? " floating" : ""), role: "tablist" }, tabs);
+    if (!(state && state.origin === "friend")) tabs.push(mk("puzzle", "🧩", "Puzzle", unlocked + "/" + PUZZLE_TOTAL));
+    tabs.push(mk("never", "🥃", "Never Have I Ever"));
+    return h("div", { class: "tab-bar" }, tabs);
   }
 
   function puzzleFlashBanner() {
@@ -3174,7 +2763,7 @@ const RAW = String.raw`<!doctype html>
       if (CapApp.getLaunchUrl) CapApp.getLaunchUrl().then(function (r) { if (r && r.url) handleAppUrl(r.url, true); }, function () {});
     } catch (e) {}
   })();
-  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "", military: false, roomName: "" };
+  var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Name, city and language from an earlier sign-up on this device (kept only
   // on the device) so starting another room doesn't mean typing them again.
@@ -3187,70 +2776,11 @@ const RAW = String.raw`<!doctype html>
     if (!d.location && savedProfile.location) d.location = savedProfile.location;
     if (!d.language && savedProfile.language) { d.language = savedProfile.language; d.languageTouched = true; }
   }
-  // The phone's own language, as a name from LANGUAGES ("Spanish"), or "" if
-  // Nearune doesn't list it. Pre-selects the language on the sign-up forms
-  // and shows the setup screen in that language before anyone has picked.
-  function phoneLanguageCode() {
-    try {
-      var list = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ""];
-      for (var i = 0; i < list.length; i++) {
-        var c = String(list[i] || "").toLowerCase().split("-")[0];
-        if (c === "nb" || c === "nn") c = "no";
-        if (c === "iw") c = "he";
-        if (c === "fil") c = "tl";
-        for (var j = 0; j < LANGUAGES.length; j++) if (LANGUAGES[j][1] === c) return c;
-      }
-    } catch (e) {}
-    return "";
-  }
-  function phoneLanguageName() {
-    var c = phoneLanguageCode();
-    for (var j = 0; j < LANGUAGES.length; j++) if (LANGUAGES[j][1] === c) return LANGUAGES[j][0];
-    return "";
-  }
-  // Fills the language from the phone when nothing (saved profile, earlier
-  // pick) has set it yet. Counts as chosen, so the city lookup won't swap it.
-  function applyPhoneLanguage(d) {
-    if (d.language || d.languageTouched) return;
-    var nm = phoneLanguageName();
-    if (nm) { d.language = nm; d.languageTouched = true; }
-  }
   function rememberProfile() {
     var me = state && state.people && viewerKey && state.people[viewerKey];
     if (!me || !me.name || !me.location) return;
     var prof = { name: me.name, location: me.location, language: me.language || "" };
     try { localStorage.setItem("nearuneProfile", JSON.stringify(prof)); } catch (e) {}
-  }
-  // A device that has an account in another room but never saved a profile
-  // (signed up before this existed, or went straight to an invite link) reads
-  // its name, city and language from that room, then refills the form.
-  function seedProfileFromRooms() {
-    if (savedProfile) return;
-    var ids = [];
-    try {
-      var rl = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
-      if (Array.isArray(rl)) rl.forEach(function (r) { if (r && typeof r.id === "string" && r.id !== ROOM) ids.push(r.id); });
-    } catch (e) {}
-    if (ROOM) ids.push("");
-    var seen = {};
-    ids = ids.filter(function (i) { if (seen[i]) return false; seen[i] = 1; return true; });
-    var tryNext = function () {
-      var id = ids.shift();
-      if (id === undefined) return;
-      var who = null;
-      try { who = localStorage.getItem("sameSkyViewer:" + id); } catch (e) {}
-      if (who !== "mark" && who !== "nikita") { tryNext(); return; }
-      fetch(id ? "/r/" + id + "/api/state" : "/api/state").then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
-        var pp = st && st.people && st.people[who];
-        if (pp && pp.name && pp.location) {
-          savedProfile = { name: pp.name, location: pp.location, language: pp.language || "" };
-          try { localStorage.setItem("nearuneProfile", JSON.stringify(savedProfile)); } catch (e) {}
-          registerDraft.prefilled = false; acceptDraft.prefilled = false;
-          try { renderApp(); } catch (e) {}
-        } else tryNext();
-      }).catch(tryNext);
-    };
-    tryNext();
   }
   // Looks up the typed location and, unless the person has already picked
   // a language themselves, pre-selects the language most likely spoken
@@ -3429,7 +2959,6 @@ const RAW = String.raw`<!doctype html>
   }
 
   function acceptInviteForm() {
-    nrTrack("invite_opened");
     var card = h("div", { class: "card" }, [
       h("a", { class: "reg-back", href: "/home", style: "display:inline-block;margin:-6px 0 6px -4px;", text: "\u2039 " + t("Rooms") }),
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
@@ -3438,23 +2967,15 @@ const RAW = String.raw`<!doctype html>
     // In a browser (not the app): lead with the app. Tapping the button also
     // copies this invite link, so it can be pasted on the app's first screen.
     if (!IN_NATIVE_APP && APP_STORE_URL && !/^__APP/.test(APP_STORE_URL)) {
-      var copyInvite = function () {
+      var getApp = h("a", { class: "puzzle-upload-btn", href: APP_STORE_URL, style: "display:block;text-align:center;text-decoration:none;margin:4px 0 8px;", text: t("Get the Nearune app") });
+      getApp.addEventListener("click", function () {
         try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href); } catch (e) {}
-      };
-      var getApp = h("a", { href: APP_STORE_URL, "aria-label": "Download Nearune on the App Store", style: "display:inline-block;line-height:0;" }, [
-        h("img", { src: "/app-store-badge.png", alt: "Download on the App Store", style: "height:48px;width:auto;" })
-      ]);
-      getApp.addEventListener("click", copyInvite);
-      var getPlay = h("a", { href: "https://play.google.com/store/apps/details?id=com.nearune.app", "aria-label": "Get Nearune on Google Play", style: "display:inline-block;line-height:0;" }, [
-        h("img", { src: "/google-play-badge.svg", alt: "Get it on Google Play", style: "height:48px;width:auto;" })
-      ]);
-      getPlay.addEventListener("click", copyInvite);
-      card.appendChild(h("div", { style: "display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;margin:4px 0 12px;" }, [getApp, getPlay]));
+      });
+      card.appendChild(getApp);
       card.appendChild(h("p", { class: "puzzle-guess-note", text: t("Your invite link is copied when you tap this. After installing, open Nearune and paste it into the box on the first screen. Or just continue below in your browser.") }));
     }
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(acceptDraft);
-    applyPhoneLanguage(acceptDraft);
     lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(acceptDraft));
@@ -3479,8 +3000,6 @@ const RAW = String.raw`<!doctype html>
           if (!res.ok) { regError = res.data && res.data.error === "region_unavailable" ? t("Nearune isn't available in that location.") : res.data && res.data.error === "city_required" ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).") : t("That invite link isn't valid."); renderApp(); return; }
           state = res.data;
           viewerKey = res.data.who;
-          nrTrack("signed_up");
-          nrTrack("invite_joined");
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
           if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
           try {
@@ -3504,17 +3023,6 @@ const RAW = String.raw`<!doctype html>
   }
 
   var lastConfirmUrl = "";
-  // Anonymous sign-up funnel: tells the server (once per step per page load)
-  // how far this room got, so the admin view can show where people give up.
-  // Fire-and-forget; a failure here never affects the app.
-  var funnelSent = {};
-  function funnelPing(step) {
-    if (funnelSent[step]) return;
-    funnelSent[step] = true;
-    try {
-      fetch(RP + "/api/funnel", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ step: step }), keepalive: true }).catch(function () {});
-    } catch (e) {}
-  }
   // The address a confirmation was sent to. The server only keeps a one-way
   // hash of it, so it is remembered on this device only, to show "Sent to ..."
   // and to prefill the form when fixing a typo.
@@ -3534,27 +3042,23 @@ const RAW = String.raw`<!doctype html>
   }
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
-    funnelPing("reg_clicked");
-    if (!registerDraft.location.trim()) { funnelPing("reg_err_city"); regError = t("Enter the city where you're based."); renderApp(); return; }
-    if (locCityError) { funnelPing("reg_err_city"); regError = locCityError; renderApp(); return; }
-    if (!name) { funnelPing("reg_err_name"); regError = t("Enter your name."); renderApp(); return; }
+    if (!registerDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
+    if (locCityError) { regError = locCityError; renderApp(); return; }
+    if (!name) { regError = t("Enter your name."); renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
     // only required when it's actually shown.
-    if (soloRegistration && !registerDraft.relationship) { funnelPing("reg_err_relationship"); regError = t("Pick how you two know each other."); renderApp(); return; }
+    if (soloRegistration && !registerDraft.relationship) { regError = t("Pick how you two know each other."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/register", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined, military: !!registerDraft.military, roomName: soloRegistration ? (registerDraft.roomName || "").trim() || undefined : undefined })
+      body: JSON.stringify({ who: viewerKey, name: name, contact: email, location: registerDraft.location.trim(), language: registerDraft.language.trim(), tz: browserTz(), relationship: registerDraft.relationship || undefined })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
         if (!res.ok) {
-          funnelPing("reg_err_server");
-          regError = res.data && res.data.error === "inappropriate_name"
-            ? t("Please choose a different room name.")
-            : res.data && res.data.error === "region_unavailable"
+          regError = res.data && res.data.error === "region_unavailable"
             ? t("Nearune isn't available in that location.")
             : res.data && res.data.error === "city_required"
             ? t("Please enter a city, not just a state or country (for example, Los Angeles, CA).")
@@ -3563,7 +3067,6 @@ const RAW = String.raw`<!doctype html>
             : t("Couldn't register — try again.");
           renderApp(); return;
         }
-        nrTrack("signed_up");
         lastConfirmUrl = res.data._confirmUrl || "";
         if (email) {
           lastConfirmEmail = email;
@@ -3594,7 +3097,6 @@ const RAW = String.raw`<!doctype html>
     var mine = state.people && state.people[viewerKey];
     var awaiting = state.pendingConfirm && state.pendingConfirm[viewerKey];
     if (mine && awaiting && !showRegisterForm) {
-      funnelPing("confirm_screen");
       var wait = h("div", { class: "card" }, [
         h("div", { class: "eyebrow" }, [h("span", { text: t("Almost there") })]),
         h("p", { class: "question", text: t("Check your email for a confirmation link.") }),
@@ -3633,31 +3135,20 @@ const RAW = String.raw`<!doctype html>
     ]);
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(registerDraft);
-    applyPhoneLanguage(registerDraft);
-    funnelPing("reg_screen");
     form.appendChild(h("div", { class: "reg-label", text: t("Where are you?") }));
-    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; if (v) funnelPing("reg_city"); suggestLanguageFromLocation(registerDraft, v); });
+    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); }));
+    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; }));
     form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
     form.appendChild(languageSelectField(registerDraft.language, function (v) { registerDraft.language = v; registerDraft.languageTouched = true; }));
-    var milRow = h("label", { style: "display:flex; align-items:center; gap:10px; margin:10px 2px 4px; cursor:pointer;" });
-    var milBox = document.createElement("input");
-    milBox.type = "checkbox";
-    milBox.style.cssText = "width:20px; height:20px; flex:0 0 auto; margin:0; accent-color: var(--accent, #a8552a);";
-    milBox.checked = !!registerDraft.military;
-    milBox.addEventListener("change", function () { registerDraft.military = milBox.checked; });
-    milRow.appendChild(milBox);
-    milRow.appendChild(h("span", { style: "font-size:0.95rem; line-height:1.3; text-align:left;", text: t("I'm in the military (show my time as 1930, not 7:30 PM)") }));
-    form.appendChild(milRow);
     // Only the first person through sets this: it's shared by the room
     // (questionPoolFor() uses it for both people's daily question).
     if (soloRegistration) {
-      form.appendChild(h("div", { class: "reg-label", text: t("Your Nearune partner is your...") }));
+      form.appendChild(h("div", { class: "reg-label", text: t("Your partner is your...") }));
       var chips = h("div", { class: "reg-chips" });
       RELATIONSHIPS.forEach(function (pair) {
         var chip = h("button", { type: "button", class: "reg-chip" + (registerDraft.relationship === pair[0] ? " on" : ""), text: t(pair[1]) });
@@ -3666,20 +3157,9 @@ const RAW = String.raw`<!doctype html>
       });
       form.appendChild(chips);
     }
-    // Optional room name — moved here from the old "Start a room" page now
-    // that the first tile creates the room in one tap. Only the first person,
-    // and only while the room has no name yet.
-    if (soloRegistration && !state.roomName) {
-      form.appendChild(h("div", { class: "reg-label", text: t("Room name (optional)") }));
-      var rn = textField(registerDraft.roomName, "Leave blank and we'll pick one", function (v) { registerDraft.roomName = v; });
-      rn.setAttribute("maxlength", "24");
-      rn.setAttribute("autocapitalize", "words");
-      rn.setAttribute("autocorrect", "off");
-      form.appendChild(rn);
-    }
     // Email is optional: only for getting the room back on a new phone.
     if (regShowEmail || registerDraft.email) {
-      var regEmailInput = textField(registerDraft.email, "Email (optional)", function (v) { registerDraft.email = v; if (v) funnelPing("reg_email"); });
+      var regEmailInput = textField(registerDraft.email, "Email (optional)", function (v) { registerDraft.email = v; });
       regEmailInput.setAttribute("inputmode", "email");
       regEmailInput.setAttribute("autocapitalize", "off");
       regEmailInput.setAttribute("autocorrect", "off");
@@ -3732,7 +3212,6 @@ const RAW = String.raw`<!doctype html>
         }
         state = res.data;
         showInviteForm = false;
-        if (res.data._emailSent !== false) { showEmailInvite = false; inviteEmailDraft = ""; }
         regError = res.data._emailSent === false ? t("Saved, but the email failed to send — try again.") : "";
         renderApp();
       })
@@ -3780,7 +3259,6 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
       var copyText = url === lastInviteUrl ? inviteMessage(url) : url;
-      nrTrack("invite_sent"); markInviteShared();
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
       else { window.prompt(t("Copy this link:"), url); done(); }
     });
@@ -3794,14 +3272,8 @@ const RAW = String.raw`<!doctype html>
     var labelText = label || t("Share invite link");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
-      nrTrack("invite_sent"); markInviteShared();
       if (navigator.share) {
-        // Link only: adding a title/text made the share sheet flash and close
-        // inside the iPhone app (Nov 14, 2026), so invites go out as the bare
-        // link, which Messages turns into a preview card.
-        var shareObj = url === lastInviteUrl
-          ? { url: url }
-          : { url: url };
+        var shareObj = url === lastInviteUrl ? { url: url } : { url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
@@ -3814,111 +3286,34 @@ const RAW = String.raw`<!doctype html>
 
   var showEmailInvite = false;
   var inviteAutoTried = false;
-  // Remembers (per room, on this device) that the invite went out, so the
-  // invite card can follow up with the notification ask right away.
-  function inviteSharedKey() { return "nearuneInviteShared:" + (ROOM || "main"); }
-  function inviteWasShared() { try { return !!localStorage.getItem(inviteSharedKey()); } catch (e) { return false; } }
-  function markInviteShared() {
-    var first = !inviteWasShared();
-    try { localStorage.setItem(inviteSharedKey(), String(Date.now())); } catch (e) {}
-    if (first) setTimeout(renderApp, 1200);
-  }
-  // Push is the only way Nearune can reach someone who's waiting (email is
-  // optional), so the invite card asks for it in context: "know the moment
-  // they join". Shown whenever reminders are off, and it stays until they're on.
-  function invitePushAsk() {
-    if (!pushSupported() || pushState === "on") return null;
-    var shared = inviteWasShared();
-    var box = h("div", { style: "margin-top:16px;padding:14px 14px 12px;border-radius:16px;background:rgba(232,154,92,0.14);text-align:center;" }, [
-      h("p", { style: "margin:0 0 8px;font-weight:600;", text: shared ? t("Want to know the moment they join?") : t("Get a heads-up when they join") }),
-      h("p", { class: "puzzle-guess-note", style: "margin:0 0 10px;", text: t("Turn on notifications and we'll tell you when your partner joins, and remind you if they haven't yet.") })
-    ]);
-    if (pushError) box.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);margin:0 0 10px;", text: pushError }));
-    var b = h("button", { class: "puzzle-upload-btn", type: "button", text: pushState === "busy" ? t("Working…") : t("Turn on notifications") });
-    b.disabled = pushState === "busy";
-    b.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
-    box.appendChild(b);
-    return box;
-  }
   // Right after setting up a room: just the room code and the invite link, with
   // buttons to share or copy them. The link is fetched automatically (the
   // server keeps the same link every time, so asking again is harmless).
   function inviteFlow(otherKey) {
-    funnelPing("invite_screen");
-    // Nearune only starts once the other person joins, so this card is the
-    // one thing that matters on a new room. After a day of waiting it turns
-    // into a gentle nudge (no push needed: it shows whenever the app opens).
-    var ageMs = 0;
-    try {
-      var created = state && state.createdAt ? Date.parse(state.createdAt) : 0;
-      if (!created) {
-        var fk = "nearuneFirstSeen:" + ROOM;
-        created = parseInt(localStorage.getItem(fk) || "0", 10);
-        if (!created) { created = Date.now(); localStorage.setItem(fk, String(created)); }
-      }
-      ageMs = Date.now() - created;
-    } catch (e) {}
-    var stillWaiting = ageMs > 24 * 3600 * 1000;
-    // Kept calm on purpose: one main button, two small ones, one optional
-    // reminder line. Email is offered because many people only have their
-    // partner's email, not a quick way to text them a link.
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
-      h("p", { class: "reg-sub", text: stillWaiting
-        ? t("They haven't joined yet. Send it again by text or email.")
-        : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })
+      h("p", { class: "reg-title", text: t("Invite your partner") }),
+      h("p", { class: "reg-sub", text: t("Send them this link, or give them the room code.") })
     ]);
     if (!lastInviteUrl && !regBusy && !inviteAutoTried) {
       inviteAutoTried = true;
       setTimeout(submitInviteLink, 0);
     }
+    if (ROOM) {
+      var codeBox = h("div", { class: "inv-code", title: t("Tap to copy") }, [
+        h("div", { class: "inv-code-label", text: t("Room code") }),
+        h("div", { class: "inv-code-value", text: ROOM })
+      ]);
+      codeBox.addEventListener("click", function () {
+        try { navigator.clipboard.writeText(ROOM); codeBox.querySelector(".inv-code-label").textContent = t("Copied!"); setTimeout(function () { codeBox.querySelector(".inv-code-label").textContent = t("Room code"); }, 1500); } catch (e) {}
+      });
+      card.appendChild(codeBox);
+    }
     if (lastInviteUrl) {
-      var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
-      main.style.marginTop = "12px";
-      card.appendChild(main);
-      var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email it") });
-      emailBtn.addEventListener("click", function () { showEmailInvite = !showEmailInvite; regError = ""; renderApp(); });
-      card.appendChild(h("div", { style: "display:flex;gap:8px;justify-content:center;margin-top:10px;" }, [
-        emailBtn,
+      card.appendChild(h("p", { class: "inv-link", text: lastInviteUrl }));
+      card.appendChild(h("div", { class: "inv-actions" }, [
+        shareLinkButton(lastInviteUrl, t("Share invite"), "puzzle-upload-btn reg-cta"),
         copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
       ]));
-      if (showEmailInvite) {
-        var em = h("input", { type: "email", placeholder: t("Their email"), value: inviteEmailDraft });
-        em.setAttribute("inputmode", "email"); em.setAttribute("autocapitalize", "off"); em.setAttribute("autocorrect", "off");
-        em.style.cssText = "width:100%;box-sizing:border-box;margin-top:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:11px 16px;color:var(--ink);font:inherit;font-size:16px;outline:none;";
-        em.addEventListener("input", function () { inviteEmailDraft = em.value; });
-        var send = h("button", { class: "puzzle-upload-btn", type: "button", text: regBusy ? t("Sending…") : t("Send invite email") });
-        send.disabled = regBusy;
-        send.style.marginTop = "8px";
-        send.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); submitInvite(); });
-        card.appendChild(em); card.appendChild(send);
-      } else if (lastInviteEmail && !regError) {
-        card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:8px;", text: "\u2713 " + t("Invite emailed to") + " " + lastInviteEmail }));
-      }
-      if (regError) card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);text-align:center;", text: t(regError) }));
-      if (ROOM) {
-        var codeLine = h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:12px 0 0;cursor:pointer;", text: t("Room code") + ": " + displayCode() });
-        codeLine.addEventListener("click", function () { try { navigator.clipboard.writeText(displayCode()); codeLine.textContent = t("Copied!"); setTimeout(function () { codeLine.textContent = t("Room code") + ": " + displayCode(); }, 1500); } catch (e) {} });
-        card.appendChild(codeLine);
-      }
-      // One quiet line each: reminders (until they're on), and after a day,
-      // something to do while waiting.
-      if (pushSupported() && pushState !== "on") {
-        var bell = h("button", { class: "switch-link", type: "button", text: pushState === "busy" ? t("Working…") : "\uD83D\uDD14 " + t("Tell me when they join") });
-        bell.style.cssText = "display:block;margin:12px auto 0;font-size:0.9rem;";
-        bell.addEventListener("click", function () { dismissPushPrompt(); enablePush(); });
-        card.appendChild(bell);
-        if (pushError) card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;", text: pushError }));
-      }
-      // Offered from the start (not only after a day): many people install
-      // without a specific person in mind, and a match gets them a real
-      // second person right away instead of an empty room.
-      {
-        var mfl = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + (stillWaiting ? t("Make a friend while you wait") : t("No one in mind? Make a friend instead")) });
-        mfl.style.cssText = "display:block;margin:6px auto 0;font-size:0.9rem;";
-        mfl.addEventListener("click", function () { location.href = "/home?friend=1"; });
-        card.appendChild(mfl);
-      }
     } else if (regError) {
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
       var retry = h("button", { class: "puzzle-upload-btn reg-cta", text: t("Try again") });
@@ -3984,7 +3379,7 @@ const RAW = String.raw`<!doctype html>
         if (!text) return;
         btn.disabled = true;
         try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
-        catch (e) { if (e && e.code === "flag_cancelled") { btn.disabled = false; return; } if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+        catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
         renderApp();
       });
       form.appendChild(textarea); form.appendChild(btn);
@@ -4049,40 +3444,6 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
   }
   function closedRoomCard() {
-    if (state.closedBy === "no_show") {
-      var again = h("button", { class: "puzzle-upload-btn", type: "button", style: "margin-top: 14px;", text: t("Find me a new friend") });
-      again.addEventListener("click", function () {
-        try {
-          var list = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
-          if (Array.isArray(list)) localStorage.setItem("nearuneRooms", JSON.stringify(list.filter(function (r) { return r.id !== ROOM; })));
-          localStorage.removeItem("nearuneFriend");
-        } catch (e) {}
-        location.href = "/home?friend=1";
-      });
-      return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
-        h("p", { class: "puzzle-guess-note", text: t("Your match didn't join within a day, so this room has closed. Sorry about that!") }),
-        again,
-        h("div", { style: "margin-top: 10px;" }, [h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })])
-      ]);
-    }
-    // Make a friend room ended by the other person (often before this person
-    // even opened it): say so plainly and offer a new match right here.
-    if (state.origin === "friend" && state.closedBy && state.closedBy !== "admin" && state.closedBy !== viewerKey) {
-      var again2 = h("button", { class: "puzzle-upload-btn", type: "button", style: "margin-top: 14px;", text: t("Find me a new friend") });
-      again2.addEventListener("click", function () {
-        try {
-          var list2 = JSON.parse(localStorage.getItem("nearuneRooms") || "[]");
-          if (Array.isArray(list2)) localStorage.setItem("nearuneRooms", JSON.stringify(list2.filter(function (r) { return r.id !== ROOM; })));
-          localStorage.removeItem("nearuneFriend");
-        } catch (e) {}
-        location.href = "/home?friend=1";
-      });
-      return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
-        h("p", { class: "puzzle-guess-note", text: t("Your match left this room before you two got to talk. Sorry about that! Tap below and we'll find you someone new.") }),
-        again2,
-        h("div", { style: "margin-top: 10px;" }, [h("a", { class: "switch-link", href: "/home", text: t("Back to my rooms") })])
-      ]);
-    }
     var msg = state.closedBy === "admin" ? t("This room was closed by Nearune.") : (state.closedBy && state.closedBy === viewerKey) ? t("You left this room.") : t("This room has ended.");
     return h("div", { class: "card", style: "margin: 60px 16px; text-align: center;" }, [
       h("p", { class: "puzzle-guess-note", text: msg }),
@@ -4117,12 +3478,6 @@ const RAW = String.raw`<!doctype html>
     var q = report
       ? t("Report this person and leave? This ends the room for both of you, and you won't be matched again.")
       : t("Leave this room? This ends it for both of you, and you won't be matched again.");
-    // Matched only minutes ago: the other person was just notified and may
-    // not have opened Nearune yet, so say that before they give up.
-    try {
-      var ageMin = state && state.createdAt ? (Date.now() - new Date(state.createdAt).getTime()) / 60000 : 999;
-      if (!report && ageMin < 120) q = t("Your match was notified when you were paired and may not have opened Nearune yet. Most people join within a few hours. Leave anyway? This ends the room for both of you.");
-    } catch (e) {}
     if (!window.confirm(q)) return;
     fetch(RP + "/api/leave-friend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, report: report }) })
       .then(function (r) { if (!r.ok) throw new Error("bad"); return r.json(); })
@@ -4134,11 +3489,9 @@ const RAW = String.raw`<!doctype html>
     var box = h("div", { class: "card" });
     box.appendChild(h("p", { class: "puzzle-guess-note", style: "margin: 0 0 8px;", text: t("You met this person through Make a friend. Be kind and keep personal details private. Photo sharing is off in this room.") }));
     var row = h("div", { class: "switch-row" });
-    // Fixed colors: this row sits in a light card, so the night-sky light link
-    // color would make these safety links nearly invisible.
-    var rep = h("button", { class: "switch-link", type: "button", style: "color:#B3361F; font-size:0.9rem; font-weight:600; opacity:1;", text: t("Report and leave") });
+    var rep = h("button", { class: "switch-link", type: "button", text: t("Report and leave") });
     rep.addEventListener("click", function () { leaveFriend(true); });
-    var lv = h("button", { class: "switch-link", type: "button", style: "color:#4A3B30; font-size:0.9rem; opacity:1;", text: t("Leave this room") });
+    var lv = h("button", { class: "switch-link", type: "button", text: t("Leave this room") });
     lv.addEventListener("click", function () { leaveFriend(false); });
     row.appendChild(rep);
     row.appendChild(lv);
@@ -4146,63 +3499,6 @@ const RAW = String.raw`<!doctype html>
     return box;
   }
   var soloFeedOpen = false;
-  // "Higher or lower" — a tiny game for the days before a partner joins.
-  // Pairs come from one category, so the comparison is always fair. Streak and
-  // best streak stay on this device.
-  var HL_SETS = [
-    { q: "Which is taller?", unit: "m", items: [["Eiffel Tower", 330], ["Statue of Liberty (with base)", 93], ["Big Ben", 96], ["Burj Khalifa", 828], ["Golden Gate Bridge towers", 227], ["Space Needle", 184], ["Empire State Building (with antenna)", 443]] },
-    { q: "Which mountain is higher?", unit: "m", items: [["Mount Everest", 8849], ["K2", 8611], ["Mont Blanc", 4806], ["Mount Fuji", 3776], ["Kilimanjaro", 5895], ["Denali", 6190], ["The Matterhorn", 4478], ["Ben Nevis", 1345]] },
-    { q: "Which river is longer?", unit: "km", items: [["The Nile", 6650], ["The Amazon", 6400], ["The Mississippi", 3730], ["The Thames", 346], ["The Mekong", 4350]] },
-    { q: "Which animal is faster?", unit: "km/h", items: [["Cheetah", 110], ["Peregrine falcon (diving)", 390], ["Horse (gallop)", 88], ["Usain Bolt (top speed)", 44], ["Greyhound", 72]] },
-    { q: "Which came later?", unit: "", items: [["The Eiffel Tower opening", 1889], ["The Golden Gate Bridge opening", 1937], ["The first iPhone", 2007], ["The first Moon landing", 1969], ["The Titanic sinking", 1912], ["The fall of the Berlin Wall", 1989], ["The Statue of Liberty dedication", 1886], ["The Wright brothers' first flight", 1903]] }
-  ];
-  var hlState = null;
-  function hlLoad() { try { return JSON.parse(localStorage.getItem("nearuneHL") || "{}") || {}; } catch (e) { return {}; } }
-  function hlSave(o) { try { localStorage.setItem("nearuneHL", JSON.stringify(o)); } catch (e) {} }
-  function hlFmt(set, v) { return (set.unit === "" ? String(v) : v.toLocaleString() + " " + set.unit); }
-  function hlNewRound() {
-    var set = HL_SETS[Math.floor(Math.random() * HL_SETS.length)];
-    var i = Math.floor(Math.random() * set.items.length), j = i;
-    while (j === i) j = Math.floor(Math.random() * set.items.length);
-    hlState = { set: set, a: set.items[i], b: set.items[j], picked: null };
-  }
-  function waitingGameCard() {
-    if (!hlState) hlNewRound();
-    var saved = hlLoad();
-    var streak = saved.streak || 0, best = saved.best || 0;
-    var g = hlState;
-    var card = h("div", { class: "card" });
-    card.appendChild(h("div", { class: "eyebrow" }, [h("span", { text: t("While you wait") })]));
-    card.appendChild(h("p", { class: "reg-title", text: t("Higher or lower?") }));
-    card.appendChild(h("p", { class: "puzzle-guess-note", text: t(g.set.q) }));
-    card.appendChild(h("p", { style: "font-weight:700;font-size:1.05rem;margin:6px 0 2px;", text: g.a[0] + ": " + hlFmt(g.set, g.a[1]) }));
-    card.appendChild(h("p", { style: "margin:0 0 12px;", text: g.set.unit === "" ? t("Did this come later or earlier?") + " " + g.b[0] : t("Is") + " " + g.b[0] + " " + t("higher or lower?") }));
-    function pick(guessHigher) {
-      if (g.picked !== null) return;
-      var higher = g.b[1] > g.a[1];
-      g.picked = (guessHigher === higher) ? "right" : "wrong";
-      var cur = hlLoad();
-      if (g.picked === "right") { cur.streak = (cur.streak || 0) + 1; if (cur.streak > (cur.best || 0)) cur.best = cur.streak; }
-      else cur.streak = 0;
-      hlSave(cur);
-      renderApp();
-    }
-    if (g.picked === null) {
-      var up = h("button", { class: "puzzle-upload-btn reg-cta", style: "margin-right:8px;", text: "↑ " + (g.set.unit === "" ? t("Later") : t("Higher")) });
-      var down = h("button", { class: "puzzle-choose-btn", text: "↓ " + (g.set.unit === "" ? t("Earlier") : t("Lower")) });
-      up.addEventListener("click", function () { pick(true); });
-      down.addEventListener("click", function () { pick(false); });
-      card.appendChild(h("div", { class: "inv-actions" }, [up, down]));
-    } else {
-      card.appendChild(h("p", { style: "font-weight:700;margin:0 0 4px;", text: (g.picked === "right" ? t("Right!") : t("Not quite.")) + " " + g.b[0] + ": " + hlFmt(g.set, g.b[1]) }));
-      var nxt = h("button", { class: "puzzle-upload-btn reg-cta", text: t("Next one") });
-      nxt.addEventListener("click", function () { hlNewRound(); renderApp(); });
-      card.appendChild(nxt);
-    }
-    if (streak || best) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;", text: t("Streak") + " " + streak + " · " + t("Best") + " " + best }));
-    return card;
-  }
-
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
     ensureSoloFeed();
@@ -4227,13 +3523,10 @@ const RAW = String.raw`<!doctype html>
       var invCard = inviteFlow(otherKey);
       app.appendChild(invCard);
     }
-    // Today's question sits right under the invite, so there's an obvious
-    // next step after sending it.
-    if (confirmed) app.appendChild(soloQuestionCard(otherKey));
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {
-      if (state.origin !== "friend") app.appendChild(waitingGameCard());
+      app.appendChild(soloQuestionCard(otherKey));
       var streak = soloStreakCard();
       if (streak) app.appendChild(streak);
       // The example only helps until they've answered once themselves.
@@ -4261,28 +3554,7 @@ const RAW = String.raw`<!doctype html>
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
-  // Draws one section of the room page. If that section throws (bad or
-  // unexpected room data), it's skipped so the rest of the page still shows,
-  // and the error goes to the server log once per page load.
-  var clientErrorsSent = {};
-  function reportClientError(part, e) {
-    try {
-      var msg = (e && e.message) || String(e);
-      var key = part + ":" + msg;
-      if (clientErrorsSent[key]) return;
-      clientErrorsSent[key] = true;
-      fetch(RP + "/api/client-error", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: part, msg: msg, stack: (e && e.stack) || "", who: viewerKey || "" }) }).catch(function () {});
-    } catch (x) {}
-  }
-  function safePart(part, fn) {
-    try { return fn(); } catch (e) { reportClientError(part, e); return null; }
-  }
-  function addPart(app, part, fn) {
-    var el = safePart(part, fn);
-    if (el) app.appendChild(el);
-  }
   function renderApp() {
-    nrCheckState();
     var app = document.getElementById("app");
     if (!app) return;
     app.innerHTML = "";
@@ -4351,18 +3623,21 @@ const RAW = String.raw`<!doctype html>
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
 
-    addPart(app, "header", header);
-    addPart(app, "friendBanner", friendBanner);
+    app.appendChild(header());
+    var friendNote = friendBanner();
+    if (friendNote) app.appendChild(friendNote);
     // Traveling button sits right under the clock/timezone block at the
     // very top of the page. The "enable notifications" link used to sit
     // right under it too — moved to the bottom of the page, under the
     // voice-recording box, per feedback (see its new call site below).
-    addPart(app, "travel", travelBlock);
-    addPart(app, "status", statusRow);
+    var travelRow = travelBlock();
+    if (travelRow) app.appendChild(travelRow);
+    app.appendChild(statusRow());
     // SANDBOX EXPERIMENT: the weather badge + blurb now sit here (where the
     // "next question" countdown used to be), right under the status row.
-    addPart(app, "weather", weatherWidgetBlock);
-    addPart(app, "tabs", tabBar);
+    var weatherBlock = weatherWidgetBlock();
+    if (weatherBlock) app.appendChild(weatherBlock);
+    app.appendChild(tabBar());
     // The fun local-news line, the music/movies chart lines, and the shared
     // photo card live on their own "Local Feel" tab now (per feedback — the
     // Today tab was getting cluttered), with nothing else alongside them.
@@ -4370,22 +3645,26 @@ const RAW = String.raw`<!doctype html>
     // itself, respectively.
     if (activeTab === "puzzle" && state && state.origin === "friend") activeTab = "today";
     if (activeTab === "local") {
-      addPart(app, "news", newsLineBlock);
-      addPart(app, "music", musicLineBlock);
-      addPart(app, "movies", moviesLineBlock);
-      addPart(app, "photo", photoCardBlock);
-      addPart(app, "links", linkCardBlock);
+      var newsBlock = newsLineBlock();
+      if (newsBlock) app.appendChild(newsBlock);
+      var musicBlock = musicLineBlock();
+      if (musicBlock) app.appendChild(musicBlock);
+      var moviesBlock = moviesLineBlock();
+      if (moviesBlock) app.appendChild(moviesBlock);
+      var photoBlock = photoCardBlock();
+      if (photoBlock) app.appendChild(photoBlock);
     } else if (activeTab === "never") {
-      addPart(app, "nhie", nhieSection);
+      app.appendChild(nhieSection());
     } else {
-      addPart(app, "countdown", function () { return h("p", { class: "cdt", id: "cd-note", text: countdownText() }); });
+      app.appendChild(h("p", { class: "cdt", id: "cd-note", text: countdownText() }));
       if (activeTab === "puzzle") {
-        addPart(app, "puzzleFlash", puzzleFlashBanner);
-        addPart(app, "puzzle", puzzleSection);
+        var flash = puzzleFlashBanner();
+        if (flash) app.appendChild(flash);
+        app.appendChild(puzzleSection());
       } else {
-        addPart(app, "question", questionCard);
-        addPart(app, "streak", streakCard);
-        addPart(app, "journal", journalSection);
+        app.appendChild(questionCard());
+        app.appendChild(streakCard());
+        app.appendChild(journalSection());
       }
       // Moved below the Today/Puzzle content (and "Look back at past days" on
       // the Today tab specifically) per feedback — used to sit right under
@@ -4393,15 +3672,17 @@ const RAW = String.raw`<!doctype html>
       // only — on the Puzzle and Local Feel tabs it read as unrelated
       // clutter (it's an account-level voice setting, not tied to either).
       if (activeTab === "today") {
-        addPart(app, "voice", voiceRecorderBlock);
+        var voiceBlock = voiceRecorderBlock();
+        if (voiceBlock) app.appendChild(voiceBlock);
       }
     }
     // The "enable notifications" link — now sits here, under the
     // voice-recording box, instead of up under the traveling button (see
     // that call site above). Only renders while notifications are actually
     // off (pushToggleRow() returns null once they're on).
-    addPart(app, "pushRow", pushToggleRow);
-    addPart(app, "switchRow", switchRow);
+    var pushRow = pushToggleRow();
+    if (pushRow) app.appendChild(pushRow);
+    app.appendChild(switchRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
@@ -4518,10 +3799,7 @@ const RAW = String.raw`<!doctype html>
     if (!story || !story.headline) return null;
     var shownName = worldLabel(worldKey());
     var line = h("p", { class: "news-line" });
-    // A story from a nearby town says which one ("from Dayton").
-    line.appendChild(document.createTextNode(story.near
-      ? tTemplate("🤪 Quirky story near {name}, from {town}: ", { name: shownName, town: String(story.near).split(",")[0] })
-      : tTemplate("🤪 Quirky story near {name}: ", { name: shownName })));
+    line.appendChild(document.createTextNode(tTemplate("🤪 Quirky story near {name}: ", { name: shownName })));
     line.appendChild(
       h("a", { class: "news-link", href: story.url || "#", target: "_blank", rel: "noopener noreferrer", text: story.headline })
     );
@@ -4529,7 +3807,8 @@ const RAW = String.raw`<!doctype html>
     // Headlines come from English-language news; show the reader's own
     // language underneath, same as exchanged answers do.
     var ul = otherUiLang();
-    return h("div", {}, [line, translateBlock(story.headline, ul || "en", "en", soloMode() ? null : otherKeyOf(viewerKey))]);
+    if (!ul) return line;
+    return h("div", {}, [line, translateBlock(story.headline, ul, "en", soloMode() ? null : otherKeyOf(viewerKey))]);
   }
   // SANDBOX EXPERIMENT: same "other person's" rule as currentPartnerNews(),
   // for the top-songs/top-movies charts.
@@ -4645,8 +3924,6 @@ const RAW = String.raw`<!doctype html>
     var shownTraveling = personIsTraveling(shownKey);
     var sky = (w.theme && w.theme.sky) || ["#888", "#666"];
     var wrap = h("div", { id: "weather-widget" });
-    var skyOn = skyMode();
-    if (skyOn && !weatherExpanded) return null;
     // Which unit leads the big number: based on whoever is actually
     // holding THIS device (viewerKey — their real, device-pinned identity,
     // not previewKey/effectiveViewKey, so peeking at a partner's screen
@@ -4710,20 +3987,7 @@ const RAW = String.raw`<!doctype html>
       ),
       h("strong", { text: solo ? t("The sky over your head right now.") : tTemplate("The sky over {name}'s head right now.", { name: (shownTraveling ? "✈️ " : "") + shownName }) }),
     ]);
-    if (!skyOn) wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
-    // Apple requires WeatherKit data to carry the Apple Weather mark and a
-    // link to its data-source page. The Apple logo character only draws on
-    // Apple devices, so everyone else sees the words "Apple Weather".
-    if (w.source === "apple" && !skyOn) {
-      var appleUa = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
-      wrap.appendChild(h("a", {
-        class: "weather-attribution",
-        href: "https://weatherkit.apple.com/legal-attribution.html",
-        target: "_blank",
-        rel: "noopener noreferrer",
-        text: appleUa ? "\uF8FF Weather" : "Apple Weather",
-      }));
-    }
+    wrap.appendChild(h("div", { class: "weather-widget-row" }, [blurb, tile]));
     if (weatherExpanded) {
       var detailKids = [
         h("div", { class: "weather-widget-detail-place", text: w.location || "" }),
@@ -4738,19 +4002,17 @@ const RAW = String.raw`<!doctype html>
         var lo = Math.min.apply(null, temps);
         var hi = Math.max.apply(null, temps);
         var span = Math.max(1, hi - lo);
-        var milHours = isMilitaryKey(shownKey);
         var bars = w.recentHours.map(function (p) {
-          var hourText = milHours ? militaryHourLabel(p.hour) : p.hour;
           var pct = Math.round(((p.temp - lo) / span) * 100);
           // The temperature used to only show as a tap-and-hold tooltip
           // (title attribute), which doesn't work on a phone tap — so the
           // chart looked like bare bars with no visible numbers. Now the
           // actual reading sits above each bar, same way a native weather
           // app's hourly strip does.
-          return h("div", { class: "trend-bar-col", title: hourText + ": " + p.temp + "°" + w.unit + (typeof p.humidity === "number" ? ", " + p.humidity + "% humidity" : "") }, [
+          return h("div", { class: "trend-bar-col", title: p.hour + ": " + p.temp + "°" + w.unit + (typeof p.humidity === "number" ? ", " + p.humidity + "% humidity" : "") }, [
             h("div", { class: "trend-bar-temp", text: p.temp + "°" }),
             h("div", { class: "trend-bar-fill", style: "height:" + Math.max(pct, 8) + "%" }),
-            h("div", { class: "trend-bar-hour", text: milHours ? hourText : p.hour.replace(/\s?[AP]M/i, "") }),
+            h("div", { class: "trend-bar-hour", text: p.hour.replace(/\s?[AP]M/i, "") }),
             typeof p.humidity === "number" ? h("div", { class: "trend-bar-hum", text: "💧" + p.humidity + "%" }) : null,
           ].filter(Boolean));
         });
@@ -4767,7 +4029,7 @@ const RAW = String.raw`<!doctype html>
     var isMe = key === (soloMode() ? viewerKey : (previewKey || otherKeyOf(viewerKey)));
     var block = h("div", { class: "clock-block" + (isMe ? " clock-me" : "") }, [
       h("div", { class: "clock-city", text: cityLabel }),
-      h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key), isMilitaryKey(key)) }),
+      h("div", { class: "clock-time", "data-key": key, text: clockFor(effectiveClockTz(key)) }),
     ]);
     // Tapping a clock switches the view the same way tapping that person's
     // status chip does (preview only — never changes who you are).
@@ -4789,83 +4051,14 @@ const RAW = String.raw`<!doctype html>
       h("div", { class: "puzzle-guess-note", style: "margin: 2px 0 0;", text: sub }),
     ]);
   }
-  // The live-sky layout applies once this viewer is signed up and the sky
-  // we show (the partner's, or your own while solo) has loaded.
-  var skyMoreOpen = false;
-  function skyMode() {
-    var me = viewerKey && state && state.people && state.people[viewerKey];
-    return !!(me && me.confirmed && currentSkyWeather());
-  }
-  var SKY_ICONS = {
-    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
-    more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
-    today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-    local: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
-    puzzle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4a2 2 0 1 1 4 0h4v4a2 2 0 1 1 0 4v4H4z"/></svg>',
-    never: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1 9a4 4 0 0 1-8 0z"/><path d="M12 16v5M8 21h8"/></svg>'
-  };
-  function shortCity(loc) { return String(loc || "").split(",")[0].trim(); }
-  function skyHeader() {
-    var w = currentSkyWeather();
-    var solo = soloMode();
-    var key = worldKey();
-    var code = displayCode() || "q7mvx3ke";
-    var back = h("a", { class: "sky-pill", href: "/home", html: SKY_ICONS.back + "<span></span>" });
-    back.lastChild.textContent = t("Rooms");
-    var codePill = h("button", { class: "sky-pill code", type: "button", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
-    codePill.addEventListener("click", function () {
-      try { navigator.clipboard.writeText(code); codePill.textContent = t("Copied!"); setTimeout(function () { codePill.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
-    });
-    var more = h("button", { class: "sky-pill round", type: "button", "aria-label": t("More"), "aria-expanded": skyMoreOpen ? "true" : "false", html: SKY_ICONS.more });
-    more.addEventListener("click", function () { skyMoreOpen = !skyMoreOpen; renderApp(); });
-    var top = h("div", { class: "sky-top" }, [back, h("div", { class: "sky-spacer" }), codePill, more]);
-    var city = shortCity(effectiveClockLocation(key)) || (w && w.location) || "";
-    var label = solo
-      ? tTemplate("Your sky in {city}", { city: city })
-      : tTemplate("{name}'s sky in {city}", { name: (personIsTraveling(key) ? "✈️ " : "") + personName(key), city: city });
-    var viewerWeather = weatherByPerson[viewerKey];
-    var viewerIsUS = !!(viewerWeather && viewerWeather.unit === "F");
-    var temp = viewerIsUS ? (w.tempF + "°F · " + w.tempC + "°C") : (w.tempC + "°C");
-    var phaseWord = w.phase === "dawn" ? t("Sunrise") : w.phase === "dusk" ? t("Sunset") : "";
-    var wx = h("button", { class: "sky-hero-weather", type: "button", "aria-expanded": weatherExpanded ? "true" : "false", html: (w.theme && w.theme.icon) || "" });
-    wx.appendChild(document.createTextNode((phaseWord ? phaseWord + " · " : "") + t(w.theme.label) + " · " + temp));
-    // Humidity, as on the old weather tile (WeatherKit, or Open-Meteo as backup).
-    if (typeof w.humidity === "number") {
-      // Spelled out: a drop icon alone reads as "chance of rain".
-      wx.appendChild(document.createTextNode(" · " + tTemplate("{n}% humidity", { n: w.humidity })));
-    }
-    wx.addEventListener("click", function () { weatherExpanded = !weatherExpanded; renderApp(); });
-    var hero = h("div", { class: "sky-hero" }, [
-      h("div", { class: "sky-hero-label", text: label }),
-      h("div", { class: "sky-hero-time clock-time", "data-key": key, text: clockFor(effectiveClockTz(key), isMilitaryKey(key)) }),
-      wx,
-    ]);
-    if (!solo) {
-      hero.appendChild(h("div", { class: "sky-hero-you" }, [
-        document.createTextNode(t("You") + " · " + shortCity(effectiveClockLocation(viewerKey)) + " "),
-        h("span", { class: "clock-time", "data-key": viewerKey, text: clockFor(effectiveClockTz(viewerKey), isMilitaryKey(viewerKey)) }),
-      ]));
-    } else {
-      hero.appendChild(h("div", { class: "sky-hero-you", text: t("Your partner's sky shows here once they join.") }));
-    }
-    if (w.source === "apple") {
-      var appleUa = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
-      hero.appendChild(h("a", { class: "sky-credit", href: "https://weatherkit.apple.com/legal-attribution.html", target: "_blank", rel: "noopener noreferrer", text: appleUa ? "\uF8FF Weather" : "Apple Weather" }));
-    }
-    var kids = [top];
-    if (state && state.roomName) kids.push(h("div", { class: "sky-room-name", text: state.roomName }));
-    kids.push(hero);
-    return h("div", {}, kids);
-  }
   function header() {
-    if (skyMode()) return skyHeader();
     var wordmark = h("div", { class: "wordmark", html: LOGO_MARK_SVG + "<span>Nearune</span>" });
     var solo = soloMode();
     var markClock = solo && !isConfirmedKey("mark") ? pendingClockBlock("mark") : clockBlock("mark");
     var nikitaClock = solo && !isConfirmedKey("nikita") ? pendingClockBlock("nikita") : clockBlock("nikita");
     var divider = h("div", { class: "clock-divider", html: PLANE_SVG });
     var clocks = h("div", { class: "clocks" }, [markClock, divider, nikitaClock]);
-    var code = displayCode() || "q7mvx3ke";
+    var code = ROOM || "q7mvx3ke";
     var roomLine = h("div", { class: "room-code", title: "Tap to copy", text: tTemplate("Room code: {code}", { code: code }) });
     roomLine.addEventListener("click", function () {
       try { navigator.clipboard.writeText(code); roomLine.textContent = t("Copied!"); setTimeout(function () { roomLine.textContent = tTemplate("Room code: {code}", { code: code }); }, 1500); } catch (e) {}
@@ -4907,9 +4100,7 @@ const RAW = String.raw`<!doctype html>
     var blob = blobOverride;
     if (!blob) {
       var mimeType = (voiceRecordState.mediaRecorder && voiceRecordState.mediaRecorder.mimeType) || "audio/webm";
-      // Drop codec details ("audio/webm;codecs=opus" -> "audio/webm"): the
-      // server only needs the container type.
-      blob = new Blob(voiceRecordState.chunks, { type: String(mimeType).split(";")[0] });
+      blob = new Blob(voiceRecordState.chunks, { type: mimeType });
     }
     voiceRecordState.chunks = [];
     voiceRecordState.mediaRecorder = null;
@@ -4934,22 +4125,13 @@ const RAW = String.raw`<!doctype html>
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ who: key, dataUrl: reader.result }),
       })
-        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, status: res.status, body: body || {} }; }); })
+        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
           voiceRecordState.uploading = false;
-          if (result.ok && !(result.body && result.body.error)) nrTrack("voice_recorded");
           if (!result.ok || result.body.error) {
-            var verr = result.body && result.body.error;
-            voiceRecordState.error = verr === "too_short"
+            voiceRecordState.error = result.body && result.body.error === "too_short"
               ? t("That was too short — try recording at least 15-20 seconds.")
-              : verr === "rate_limited"
-              ? t("That's a lot of recordings for one day — try again tomorrow.")
-              : verr === "too_large"
-              ? t("That recording is too long — about 30 seconds is plenty.")
-              : result.status >= 500
-              ? t("Voice saving isn't working on our end right now. Please try again later.")
-              : t("Couldn't read that recording — please try again.");
-            try { fetch(RP + "/api/client-error", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ part: "voice", msg: "voice-sample failed: " + (verr || "unknown") + " type=" + (blob && blob.type) + " size=" + (blob && blob.size), who: key }) }).catch(function () {}); } catch (e) {}
+              : t("Couldn't save that voice sample — try recording again somewhere quieter.");
             suppressPollUntil = 0;
             renderApp();
             return;
@@ -4985,8 +4167,8 @@ const RAW = String.raw`<!doctype html>
     wrap.appendChild(h("p", {
       class: "voice-card-desc",
       text: hasVoice
-        ? tTemplate("Your voice is saved. Whenever {name} taps 🔊, they hear your words in your own voice.", { name: partnerName })
-        : tTemplate("Record about 30 seconds so that when {name} taps 🔊, they hear your words in your own voice instead of a computer's.", { name: partnerName }),
+        ? tTemplate("{name} already hears your voice in their head — now, whenever they tap 🔊, they can actually hear it.", { name: partnerName })
+        : tTemplate("You already hear {name}'s voice in your head when you think of them. Record about 30 seconds so they can actually hear yours too, instead of a generic one.", { name: partnerName }),
     }));
     if (voiceRecordState.error) {
       wrap.appendChild(h("p", { class: "voice-card-error", text: voiceRecordState.error }));
@@ -5146,7 +4328,7 @@ const RAW = String.raw`<!doctype html>
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ who: key, dataUrl: dataUrl, caption: caption || "" }),
       })
-        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, status: res.status, body: body || {} }; }); })
+        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
           photoUploadState.uploading = false;
           photoCaptionDraft = null;
@@ -5204,281 +4386,91 @@ const RAW = String.raw`<!doctype html>
   // viewport note up top), so this mirrors the puzzle's handler. Pinching, or
   // double-tapping, lifts the photo into a full-screen overlay where you can
   // pan; the close button or zooming back out returns it inline.
-  // Shares a video in the photo slot. Checks length (60s) and size (60MB),
-  // takes 3 still frames (start, middle, end) for the thumbnail and the
-  // safety check, then uploads with a progress readout.
-  var VIDEO_MAX_SECONDS = 60;
-  var VIDEO_MAX_BYTES = 60 * 1024 * 1024;
-  function videoFrames(file, done) {
-    var url = "";
-    try { url = URL.createObjectURL(file); } catch (e) { done(null, "unreadable"); return; }
-    var v = document.createElement("video");
-    v.muted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.preload = "auto";
-    var frames = [], times = [], idx = 0, finished = false;
-    var timer = setTimeout(function () { finish(frames.length ? null : "unreadable"); }, 15000);
-    function finish(err) {
-      if (finished) return; finished = true; clearTimeout(timer);
-      try { URL.revokeObjectURL(url); } catch (e) {}
-      if (err) done(null, err); else done({ frames: frames, duration: v.duration || 0 }, "");
-    }
-    function grab() {
-      try {
-        var w = v.videoWidth, hh = v.videoHeight;
-        if (!w || !hh) { finish("unreadable"); return; }
-        var scale = Math.min(1, 1280 / Math.max(w, hh));
-        var c = document.createElement("canvas");
-        c.width = Math.round(w * scale); c.height = Math.round(hh * scale);
-        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-        c.toBlob(function (b) {
-          if (b) frames.push(b);
-          idx++;
-          if (idx < times.length) v.currentTime = times[idx]; else finish(frames.length ? "" : "unreadable");
-        }, "image/jpeg", 0.82);
-      } catch (e) { finish("unreadable"); }
-    }
-    v.addEventListener("seeked", grab);
-    v.addEventListener("error", function () { finish("unreadable"); });
-    v.addEventListener("loadedmetadata", function () {
-      var d = v.duration;
-      if (!isFinite(d) || d <= 0) d = 1;
-      if (d > VIDEO_MAX_SECONDS + 1) { finish("too_long"); return; }
-      times = [Math.min(0.5, d / 4), d / 2, Math.max(0, d - 0.5)];
-      v.currentTime = times[0];
-    });
-    v.src = url;
-    try { v.load(); } catch (e) {}
-  }
-  function uploadVideo(key, file, caption) {
-    photoUploadState.error = "";
-    if (file.size > VIDEO_MAX_BYTES) {
-      photoUploadState.error = t("That video is too big. Please share one under a minute long.");
-      renderApp();
-      return;
-    }
-    photoUploadState.uploading = true;
-    photoUploadState.video = true;
-    photoUploadState.progress = 0;
-    renderApp();
-    videoFrames(file, function (res, err) {
-      if (!res) {
-        photoUploadState.uploading = false;
-        photoUploadState.error = err === "too_long"
-          ? t("That video is longer than a minute. Please trim it or choose a shorter one.")
-          : t("Couldn't open that video. Please try a different one.");
-        renderApp();
-        return;
-      }
-      var fd = new FormData();
-      fd.append("who", key);
-      fd.append("caption", caption || "");
-      fd.append("video", file, file.name || "video");
-      for (var i = 0; i < res.frames.length; i++) fd.append("frame", res.frames[i], "frame" + i + ".jpg");
-      suppressPollUntil = Date.now() + 120000;
-      var xhr = new XMLHttpRequest();
-      xhr.open("POST", RP + "/api/video-upload");
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) {
-          var pct = Math.round((e.loaded / e.total) * 100);
-          if (pct !== photoUploadState.progress) {
-            photoUploadState.progress = pct;
-            var st = document.getElementById("video-upload-status");
-            if (st) st.textContent = tTemplate("Sharing your video… {n}%", { n: pct });
-          }
-        }
-      };
-      xhr.onload = function () {
-        var body = {};
-        try { body = JSON.parse(xhr.responseText) || {}; } catch (e) {}
-        photoUploadState.uploading = false;
-        photoUploadState.video = false;
-        photoUploadState.progress = -1;
-        photoCaptionDraft = null;
-        if (xhr.status < 200 || xhr.status >= 300 || body.error) {
-          photoUploadState.error = body.error === "inappropriate"
-            ? t("That video or comment can't be shared here. Please choose something else.")
-            : body.error === "too_large"
-            ? t("That video is too big. Please share one under a minute long.")
-            : body.error === "moderation_unavailable"
-            ? t("Couldn't check that video right now — please try again in a minute.")
-            : t("Couldn't share that video — try again.");
-          suppressPollUntil = 0;
-          renderApp();
-          return;
-        }
-        state = body;
-        online = true;
-        suppressPollUntil = Date.now() + 3000;
-        renderApp();
-      };
-      xhr.onerror = function () {
-        photoUploadState.uploading = false;
-        photoUploadState.video = false;
-        photoUploadState.progress = -1;
-        photoUploadState.error = t("Upload failed — check your connection and try again.");
-        suppressPollUntil = 0;
-        renderApp();
-      };
-      xhr.send(fd);
-    });
-  }
-  // A shared video with simple custom controls (tap to play or pause, a
-  // mute button, a progress bar you can tap to jump). No native controls,
-  // so two-finger pinch-to-zoom isn't swallowed by them (house standard).
-  // The page redraws every few seconds (new answers, weather). Reusing the
-  // same video element across redraws keeps a playing video playing (the
-  // element is moved into the new layout instead of being rebuilt).
-  var liveVideoWraps = {};
-  function zoomableVideo(src, poster, alt) {
-    if (liveVideoWraps[src]) return liveVideoWraps[src];
-    for (var oldSrc in liveVideoWraps) {
-      if (oldSrc.split("&v=")[0] === src.split("&v=")[0]) delete liveVideoWraps[oldSrc];
-    }
-    var wrap = h("div", { class: "photo-zoom-wrap video-wrap" });
-    liveVideoWraps[src] = wrap;
-    var v = h("video", { class: "shared-photo shared-video zoomable", src: src, poster: poster, preload: "metadata", "aria-label": alt });
-    v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
-    var playBtn = h("button", { class: "video-play", type: "button", "aria-label": t("Play"), text: "▶" });
-    var muteBtn = h("button", { class: "video-mute", type: "button", "aria-label": t("Sound on or off"), text: "🔊" });
-    var bar = h("div", { class: "video-bar" });
-    var fill = h("div", { class: "video-bar-fill" });
-    bar.appendChild(fill);
-    function toggle() {
-      if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause();
-    }
-    v.addEventListener("click", toggle);
-    playBtn.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
-    v.addEventListener("play", function () { playBtn.hidden = true; });
-    v.addEventListener("pause", function () { playBtn.hidden = false; });
-    v.addEventListener("ended", function () { playBtn.hidden = false; });
-    v.addEventListener("timeupdate", function () { if (v.duration) fill.style.width = (100 * v.currentTime / v.duration) + "%"; });
-    muteBtn.addEventListener("click", function (e) { e.stopPropagation(); v.muted = !v.muted; muteBtn.textContent = v.muted ? "🔇" : "🔊"; });
-    bar.addEventListener("click", function (e) {
-      e.stopPropagation();
-      var r = bar.getBoundingClientRect();
-      if (v.duration && r.width) v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * v.duration;
-    });
-    wrap.appendChild(v);
-    wrap.appendChild(playBtn);
-    wrap.appendChild(muteBtn);
-    wrap.appendChild(bar);
-    return wrap;
-  }
   function zoomablePhoto(src, alt) {
     var wrap = h("div", { class: "photo-zoom-wrap" });
-    wrap.appendChild(h("img", { class: "shared-photo zoomable", src: src, alt: alt }));
+    var img = h("img", { class: "shared-photo", src: src, alt: alt });
+    wrap.appendChild(img);
+    var scale = 1, panX = 0, panY = 0, startDist = 0, startScale = 1;
+    var startX = 0, startY = 0, startPanX = 0, startPanY = 0, lastTap = 0;
+    var overlay = null, placeholder = null;
+    function openOverlay() {
+      if (overlay) return;
+      placeholder = document.createComment("photo-zoom");
+      if (wrap.parentNode) wrap.parentNode.insertBefore(placeholder, wrap);
+      overlay = h("div", { class: "puzzle-zoom-overlay photo-zoom-overlay" });
+      var closeBtn = h("button", { class: "photo-zoom-close", text: "\u2715" });
+      closeBtn.addEventListener("click", closeOverlay);
+      overlay.appendChild(wrap);
+      overlay.appendChild(closeBtn);
+      document.body.appendChild(overlay);
+    }
+    function closeOverlay() {
+      scale = 1; panX = 0; panY = 0;
+      draw();
+      if (!overlay) return;
+      if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(wrap, placeholder);
+        placeholder.parentNode.removeChild(placeholder);
+      }
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      overlay = null; placeholder = null;
+    }
+    function draw() {
+      var maxX = Math.max(0, (wrap.clientWidth * scale - wrap.clientWidth) / 2);
+      var maxY = Math.max(0, (wrap.clientHeight * scale - wrap.clientHeight) / 2);
+      panX = Math.min(Math.max(panX, -maxX), maxX);
+      panY = Math.min(Math.max(panY, -maxY), maxY);
+      img.style.transform = scale > 1 ? "translate(" + panX + "px," + panY + "px) scale(" + scale + ")" : "";
+    }
+    function dist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
+    wrap.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        startDist = dist(e.touches[0], e.touches[1]);
+        startScale = scale;
+      } else if (e.touches.length === 1) {
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        startPanX = panX; startPanY = panY;
+        var now = Date.now();
+        if (now - lastTap < 300) {
+          if (scale > 1) { closeOverlay(); } else { scale = 2.5; openOverlay(); draw(); }
+        }
+        lastTap = now;
+      }
+    }, { passive: true });
+    wrap.addEventListener("touchmove", function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        scale = Math.min(Math.max(startScale * (dist(e.touches[0], e.touches[1]) / startDist), 1), 8);
+        if (scale > 1) openOverlay();
+        draw();
+      } else if (e.touches.length === 1 && scale > 1) {
+        e.preventDefault();
+        panX = startPanX + (e.touches[0].clientX - startX);
+        panY = startPanY + (e.touches[0].clientY - startY);
+        draw();
+      }
+    }, { passive: false });
+    wrap.addEventListener("touchend", function () { if (scale <= 1.02 && overlay) closeOverlay(); }, { passive: true });
     return wrap;
   }
   function photoRow(personKey, label, photoAt, caption, expanded, onToggle, canReport) {
-    var isVideo = !!(state.people && state.people[personKey] && state.people[personKey].photoKind === "video");
     var box = h("div", {});
     var row = h("div", { class: "photo-row" });
-    var thumbSrc = RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt);
-    var img = h("img", { class: "photo-thumb zoomable", src: thumbSrc, alt: label });
+    var img = h("img", { class: "photo-thumb", src: RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), alt: label });
     img.addEventListener("click", onToggle);
-    if (isVideo) {
-      var tw = h("span", { class: "video-thumb-wrap" }, [img, h("span", { class: "video-thumb-play", "aria-hidden": "true", text: "▶" })]);
-      tw.addEventListener("click", function (e) { if (e.target !== img) onToggle(); });
-      row.appendChild(tw);
-    } else {
-      row.appendChild(img);
-    }
+    row.appendChild(img);
     var meta = h("div", { class: "photo-meta" });
-    meta.appendChild(h("div", { class: "photo-who", text: (isVideo ? "🎬 " : "📷 ") + label }));
+    meta.appendChild(h("div", { class: "photo-who", text: "📷 " + label }));
     if (caption) {
       meta.appendChild(h("p", { class: "photo-caption", text: caption }));
-      meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey, true));
+      meta.appendChild(translateBlock(caption, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey));
     }
-    meta.appendChild(h("p", { class: "photo-hint", text: isVideo
-      ? (expanded ? t("Tap the small picture to close the video") : t("Tap to watch the video"))
-      : (expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it")) }));
+    meta.appendChild(h("p", { class: "photo-hint", text: expanded ? t("Tap the photo to shrink it") : t("Tap the photo to enlarge it") }));
     if (canReport) meta.appendChild(reportLink("photo"));
     row.appendChild(meta);
     box.appendChild(row);
-    if (expanded) {
-      if (isVideo) box.appendChild(zoomableVideo(RP + "/api/video?who=" + personKey + "&v=" + encodeURIComponent(photoAt + "." + (state.people[personKey].videoV || 0)), thumbSrc, label));
-      else box.appendChild(zoomablePhoto(thumbSrc, label));
-    }
+    if (expanded) box.appendChild(zoomablePhoto(RP + "/api/photo?who=" + personKey + "&v=" + encodeURIComponent(photoAt), label));
     return box;
-  }
-  // Share a link (an article, a song, a listing) with an optional comment.
-  // One per person, replaced each time. Off in "Make a friend" rooms.
-  var linkDraft = { url: "", note: "", error: "", busy: false };
-  function linkRow(personKey, label, canReport) {
-    var p = state.people && state.people[personKey];
-    if (!p || !p.linkUrl) return null;
-    var host = "";
-    try { host = new URL(p.linkUrl).hostname.replace(/^www\./, ""); } catch (e) { host = p.linkUrl; }
-    var box = h("div", { class: "link-row" });
-    box.appendChild(h("div", { class: "photo-who", text: "🔗 " + label }));
-    box.appendChild(h("a", { class: "link-open", href: p.linkUrl, target: "_blank", rel: "noopener noreferrer", text: host + " ↗" }));
-    if (p.linkNote) {
-      box.appendChild(h("p", { class: "photo-caption", text: p.linkNote }));
-      box.appendChild(translateBlock(p.linkNote, langCodeFor(otherKeyOf(personKey)), langCodeFor(personKey), personKey, true));
-    }
-    if (canReport) box.appendChild(reportLink("link"));
-    return box;
-  }
-  function linkCardBlock() {
-    if (!viewerKey) return null;
-    if (state && state.origin === "friend") return null;
-    var key = viewerKey, otherKey = otherKeyOf(key), partnerName = personName(otherKey);
-    var mine = state.people && state.people[key];
-    var theirs = state.people && state.people[otherKey];
-    var wrap = h("div", { class: "voice-card" });
-    wrap.appendChild(h("div", { class: "voice-card-title", text: "🔗 " + tTemplate("Links with {name}", { name: partnerName }) }));
-    if (theirs && theirs.linkUrl && isBlocked()) {
-      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("You've blocked {name}.", { name: partnerName }) }));
-    } else if (theirs && theirs.linkUrl) {
-      wrap.appendChild(linkRow(otherKey, partnerName, true));
-    } else {
-      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a link yet.", { name: partnerName }) }));
-    }
-    if (mine && mine.linkUrl) wrap.appendChild(linkRow(key, t("Your link"), false));
-    if (linkDraft.error) wrap.appendChild(h("p", { class: "voice-card-error", text: linkDraft.error }));
-    var urlIn = document.createElement("input");
-    urlIn.type = "url"; urlIn.inputMode = "url"; urlIn.autocapitalize = "off"; urlIn.className = "photo-comment";
-    urlIn.placeholder = t("Paste a link"); urlIn.maxLength = 600; urlIn.value = linkDraft.url;
-    urlIn.addEventListener("input", function () { linkDraft.url = urlIn.value; });
-    var noteIn = document.createElement("input");
-    noteIn.type = "text"; noteIn.className = "photo-comment"; noteIn.maxLength = 200;
-    noteIn.placeholder = t("Add a comment (optional)"); noteIn.value = linkDraft.note;
-    noteIn.addEventListener("input", function () { linkDraft.note = noteIn.value; });
-    wrap.appendChild(urlIn);
-    wrap.appendChild(noteIn);
-    var row = h("div", { class: "voice-card-actions" });
-    var send = h("button", { class: "mini-btn primary", type: "button", text: linkDraft.busy ? t("Sharing…") : t("Share link") });
-    send.disabled = linkDraft.busy;
-    send.addEventListener("click", function () {
-      if (!linkDraft.url.trim()) { linkDraft.error = t("Paste a link first."); renderApp(); return; }
-      linkDraft.busy = true; linkDraft.error = ""; renderApp();
-      suppressPollUntil = Date.now() + 15000;
-      fetch(RP + "/api/link-share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: key, url: linkDraft.url, note: linkDraft.note }) })
-        .then(function (r) { return r.json().catch(function () { return {}; }); })
-        .then(function (b) {
-          linkDraft.busy = false;
-          if (b && !b.error && b.people) { state = b; linkDraft.url = ""; linkDraft.note = ""; suppressPollUntil = Date.now() + 3000; }
-          else {
-            suppressPollUntil = 0;
-            linkDraft.error = b && b.error === "bad_link" ? t("That doesn't look like a web link. Please check it and try again.")
-              : b && b.error === "inappropriate" ? t("That link or comment can't be shared here.")
-              : b && b.error === "moderation_unavailable" ? t("Couldn't check that link right now — please try again in a minute.")
-              : t("Couldn't share that link — try again.");
-          }
-          renderApp();
-        })
-        .catch(function () { linkDraft.busy = false; suppressPollUntil = 0; linkDraft.error = t("Upload failed — check your connection and try again."); renderApp(); });
-    });
-    row.appendChild(send);
-    if (mine && mine.linkUrl) {
-      var rm = h("button", { class: "mini-btn ghost", type: "button", text: t("Remove mine") });
-      rm.addEventListener("click", function () {
-        fetch(RP + "/api/link-delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: key }) })
-          .then(function (r) { return r.json(); }).then(function (b) { if (b && b.people) state = b; renderApp(); }).catch(function () {});
-      });
-      row.appendChild(rm);
-    }
-    wrap.appendChild(row);
-    return wrap;
   }
   function photoCardBlock() {
     if (!viewerKey) return null;
@@ -5490,13 +4482,13 @@ const RAW = String.raw`<!doctype html>
     var myPhotoAt = state.people && state.people[key] && state.people[key].photoAt;
     var partnerPhotoAt = state.people && state.people[otherKey] && state.people[otherKey].photoAt;
     var wrap = h("div", { class: "voice-card" });
-    wrap.appendChild(h("div", { class: "voice-card-title", text: "📷 " + tTemplate("Photos & videos with {name}", { name: partnerName }) }));
+    wrap.appendChild(h("div", { class: "voice-card-title", text: "📷 " + tTemplate("Photos with {name}", { name: partnerName }) }));
     if (partnerPhotoAt && isBlocked()) {
       wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("You've blocked {name}.", { name: partnerName }) }));
     } else if (partnerPhotoAt) {
       wrap.appendChild(photoRow(otherKey, partnerName, partnerPhotoAt, state.people[otherKey].photoCaption || "", photoExpanded, function () { photoExpanded = !photoExpanded; renderApp(); }, true));
     } else {
-      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo or video yet.", { name: partnerName }) }));
+      wrap.appendChild(h("p", { class: "voice-card-desc", text: tTemplate("{name} hasn't shared a photo yet.", { name: partnerName }) }));
     }
     // If your partner signed up with (or was invited by) an Instagram
     // handle, link to it — a plain https link, opens in the browser/app.
@@ -5512,7 +4504,7 @@ const RAW = String.raw`<!doctype html>
       wrap.appendChild(h("p", { class: "voice-card-error", text: photoUploadState.error }));
     }
     if (myPhotoAt) {
-      wrap.appendChild(photoRow(key, (state.people[key].photoKind === "video" ? t("Your video") : t("Your photo")), myPhotoAt, state.people[key].photoCaption || "", myPhotoExpanded, function () { myPhotoExpanded = !myPhotoExpanded; renderApp(); }, false));
+      wrap.appendChild(photoRow(key, t("Your photo"), myPhotoAt, state.people[key].photoCaption || "", myPhotoExpanded, function () { myPhotoExpanded = !myPhotoExpanded; renderApp(); }, false));
     }
     var commentInput = document.createElement("input");
     commentInput.type = "text";
@@ -5524,7 +4516,7 @@ const RAW = String.raw`<!doctype html>
     wrap.appendChild(commentInput);
     var fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = "image/*,video/*";
+    fileInput.accept = "image/*";
     fileInput.style.display = "none";
     fileInput.addEventListener("change", function () {
       var file = fileInput.files && fileInput.files[0];
@@ -5537,35 +4529,27 @@ const RAW = String.raw`<!doctype html>
       renderApp();
     });
     var btnRow = h("div", { class: "voice-card-actions" });
-    var pendingIsVideo = !!(pendingPhotoFile && /^video\//i.test(pendingPhotoFile.type || ""));
     if (pendingPhotoFile && pendingPhotoUrl) {
-      var prev;
-      if (pendingIsVideo) {
-        prev = h("video", { src: pendingPhotoUrl, muted: "", autoplay: "", loop: "", playsinline: "" });
-        prev.muted = true; prev.playsInline = true;
-      } else {
-        prev = h("img", { src: pendingPhotoUrl, alt: "" });
-      }
+      var prev = h("img", { src: pendingPhotoUrl, alt: "" });
       prev.style.cssText = "display:block;max-width:100%;max-height:220px;border-radius:12px;margin:10px 0;";
       wrap.insertBefore(prev, commentInput);
     }
     var pickBtn = h("button", {
       class: pendingPhotoFile ? "mini-btn ghost" : "mini-btn primary",
       type: "button",
-      text: pendingPhotoFile ? t("Choose a different one") : (myPhotoAt ? t("Share a new photo or video") : t("Share a photo or video")),
+      text: pendingPhotoFile ? t("Choose a different photo") : (myPhotoAt ? t("Share a new photo") : t("Share a photo")),
     });
     pickBtn.disabled = photoUploadState.uploading;
     pickBtn.addEventListener("click", function () { fileInput.click(); });
     if (pendingPhotoFile) {
-      var sendBtn = h("button", { class: "mini-btn primary", type: "button", text: pendingIsVideo ? t("Send video") : t("Send photo") });
+      var sendBtn = h("button", { class: "mini-btn primary", type: "button", text: t("Send photo") });
       sendBtn.disabled = photoUploadState.uploading;
       sendBtn.addEventListener("click", function () {
         var f = pendingPhotoFile;
         pendingPhotoFile = null;
         if (pendingPhotoUrl) { try { URL.revokeObjectURL(pendingPhotoUrl); } catch (e) {} }
         pendingPhotoUrl = "";
-        if (/^video\//i.test(f.type || "")) uploadVideo(key, f, commentInput.value);
-        else uploadPhoto(key, f, commentInput.value);
+        uploadPhoto(key, f, commentInput.value);
       });
       btnRow.appendChild(sendBtn);
       var cancelBtn = h("button", { class: "mini-btn ghost", type: "button", text: t("Cancel") });
@@ -5598,9 +4582,7 @@ const RAW = String.raw`<!doctype html>
     btnRow.appendChild(fileInput);
     wrap.appendChild(btnRow);
     if (photoUploadState.uploading) {
-      wrap.appendChild(photoUploadState.video
-        ? h("p", { class: "voice-card-status-text", id: "video-upload-status", text: photoUploadState.progress > 0 ? tTemplate("Sharing your video… {n}%", { n: photoUploadState.progress }) : t("Preparing your video…") })
-        : h("p", { class: "voice-card-status-text", text: t("Sharing your photo…") }));
+      wrap.appendChild(h("p", { class: "voice-card-status-text", text: t("Sharing your photo…") }));
     }
     return wrap;
   }
@@ -5709,7 +4691,7 @@ const RAW = String.raw`<!doctype html>
           bubble.appendChild(h("p", { class: "puzzle-guess-note", text: tTemplate("You've blocked {name}.", { name: personName(key) }) }));
         } else {
           bubble.appendChild(h("p", { class: "answer-text", text: entry[key].text }));
-          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key, true));
+          bubble.appendChild(translateBlock(entry[key].text, langCodeFor(otherKeyOf(key)), langCodeFor(key), key));
           if (key !== viewerKey) bubble.appendChild(reportLink("answer"));
         }
         reveal.appendChild(bubble);
@@ -5722,7 +4704,7 @@ const RAW = String.raw`<!doctype html>
       } else {
         var mineWrap = h("div", { class: "own-answer-visible" });
         mineWrap.appendChild(h("p", { class: "answer-text", text: mine }));
-        mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey), viewerKey, true));
+        mineWrap.appendChild(translateBlock(mine, langCodeFor(otherKeyOf(viewerKey)), langCodeFor(viewerKey), viewerKey));
         var editBtn2 = h("button", { class: "edit-btn", text: t("Edit your answer") });
         editBtn2.addEventListener("click", function () { startEdit(today); });
         mineWrap.appendChild(editBtn2);
@@ -5752,7 +4734,7 @@ const RAW = String.raw`<!doctype html>
         if (!text) return;
         btn.disabled = true;
         try { await api("/api/answer", { date: today, who: viewerKey, text: text }); draftText = ""; }
-        catch (e) { if (e && e.code === "flag_cancelled") { btn.disabled = false; return; } if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
+        catch (e) { if (e && e.code === "content_blocked") { blockedNotice(); return; } online = false; }
         renderApp();
       });
       form.appendChild(textarea); form.appendChild(btn);
@@ -5802,7 +4784,7 @@ const RAW = String.raw`<!doctype html>
               line.appendChild(ebtn);
             }
             entryDiv.appendChild(line);
-            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey), pKey, true));
+            entryDiv.appendChild(translateBlock(entry[pKey].text, langCodeFor(otherKeyOf(pKey)), langCodeFor(pKey), pKey));
           });
           entryDiv.appendChild(commentsBlock(key));
           list.appendChild(entryDiv);
@@ -5820,11 +4802,6 @@ const RAW = String.raw`<!doctype html>
   // or import needed to reach it from here).
   function isNativeApp() {
     try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
-  }
-
-  // "android" inside the Android app shell, otherwise "ios" / "web".
-  function nativePlatform() {
-    try { return (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || ""; } catch (e) { return ""; }
   }
 
   function pushSupported() {
@@ -5915,24 +4892,17 @@ const RAW = String.raw`<!doctype html>
     if (isNativeApp()) {
       try {
         var PN = window.Capacitor.Plugins.PushNotifications;
-        // Android 8+ needs a notification channel before a push can show.
-        if (nativePlatform() === "android") {
-          try { await PN.createChannel({ id: "nearune", name: "Nearune", description: "Daily question and partner updates", importance: 4, visibility: 1 }); } catch (e) {}
-        }
         var perm = await PN.requestPermissions();
         if (perm.receive !== "granted") {
-          nrTrack("notif_blocked");
           pushState = "off";
-          pushError = nativePlatform() === "android"
-            ? t("Notifications are blocked for this app — enable them in Android Settings → Apps → Nearune → Notifications, then try again.")
-            : t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
+          pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
           renderApp(); return;
         }
         await new Promise(function (resolve, reject) {
           var settled = false;
           var timeoutId = setTimeout(function () {
             if (settled) return; settled = true;
-            reject(new Error(nativePlatform() === "android" ? "Timed out waiting for Google to register this device for push (no response after 45s)." : "Timed out waiting for Apple to register this device for push (no response after 45s)."));
+            reject(new Error("Timed out waiting for Apple to register this device for push (no response after 45s)."));
           }, 45000);
           PN.addListener("registration", function (token) {
             if (settled) return; settled = true;
@@ -5940,7 +4910,7 @@ const RAW = String.raw`<!doctype html>
             fetch(RP + "/api/push-subscribe", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ who: viewerKey, subscription: { kind: (nativePlatform() === "android" ? "fcm" : "apns"), token: token.value } })
+              body: JSON.stringify({ who: viewerKey, subscription: { kind: "apns", token: token.value } })
             }).then(function () { resolve(); }).catch(reject);
           });
           PN.addListener("registrationError", function (err) {
@@ -5951,7 +4921,6 @@ const RAW = String.raw`<!doctype html>
           PN.register();
         });
         pushState = "on";
-        nrTrack("notif_allowed");
         try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
         syncAppBadge();
       } catch (e) {
@@ -5982,7 +4951,6 @@ const RAW = String.raw`<!doctype html>
         body: JSON.stringify({ who: viewerKey, subscription: sub.toJSON() })
       });
       pushState = "on";
-      nrTrack("notif_allowed");
       try { localStorage.setItem(PUSH_LS_KEY, "on"); } catch (e) {}
       syncAppBadge();
     } catch (e) {
@@ -5991,7 +4959,6 @@ const RAW = String.raw`<!doctype html>
       // denial iOS won't re-prompt for — Settings > Notifications is the
       // only way back in that case). Anything else is a real bug.
       if (e && e.name === "NotAllowedError") {
-        nrTrack("notif_blocked");
         pushError = t("Notifications are blocked for this app — enable them in iPhone Settings → Notifications → Nearune, then try again.");
       } else {
         pushError = t("Couldn't enable reminders") + ": " + ((e && e.message) || String(e));
@@ -6084,8 +5051,6 @@ const RAW = String.raw`<!doctype html>
   // because tTemplate's translation pass runs on the whole template text.
   function travelStatusLabel(my, today) {
     if (!my.travelLocation) return t("✈️ Traveling? Set a location");
-    if (my.travelUntil && my.travelUntil < today) return t("✈️ Traveling? Set a location");
-    if (!my.travelFrom && !travelActive(my, today)) return t("✈️ Traveling? Set a location");
     if (travelActive(my, today)) {
       return my.travelUntil
         ? tTemplate("✈️ Showing as traveling to {place} until {date} — edit", { place: my.travelLocation, date: formatShortDate(my.travelUntil) })
@@ -6107,12 +5072,9 @@ const RAW = String.raw`<!doctype html>
   // registered location. Travel can start immediately or be scheduled
   // ahead of time via the "Starts" date, and — once scheduled — optionally
   // shown to your partner a couple of days before it actually starts.
-  var milBusy = false;
   function travelBlock() {
     var my = state.people && state.people[viewerKey];
     if (!my) return null;
-    // Live-sky look: "Traveling?" always shows; military time sits behind
-    // the ⋯ button (unless it's already on).
     var today = dateKey(new Date());
     var wrap = h("div", {});
     if (travelFormOpen) {
@@ -6177,18 +5139,6 @@ const RAW = String.raw`<!doctype html>
       link.addEventListener("click", openTravelForm);
       row.appendChild(link);
       wrap.appendChild(row);
-      var milOn = !!my.military;
-      if (skyMode() && !skyMoreOpen && !milOn) return wrap;
-      var milRow2 = h("div", { class: "switch-row top-action-row" });
-      var milLink = h("button", { class: "switch-link", text: milBusy ? t("Working…") : milOn ? t("🎖️ Military time is on — turn off") : t("🎖️ In the military? Show my clock in military time") });
-      milLink.disabled = milBusy;
-      milLink.addEventListener("click", async function () {
-        milBusy = true; renderApp();
-        try { await api("/api/military", { who: viewerKey, on: !milOn }); } catch (e) {}
-        milBusy = false; renderApp();
-      });
-      milRow2.appendChild(milLink);
-      wrap.appendChild(milRow2);
     }
     return wrap;
   }
@@ -6298,7 +5248,7 @@ const RAW = String.raw`<!doctype html>
 
   function tickClocks() {
     document.querySelectorAll(".clock-time[data-key]").forEach(function (el) {
-      el.textContent = clockFor(effectiveClockTz(el.getAttribute("data-key")), isMilitaryKey(el.getAttribute("data-key")));
+      el.textContent = clockFor(effectiveClockTz(el.getAttribute("data-key")));
     });
     var cd = document.getElementById("cd-note");
     if (cd) cd.textContent = countdownText();
@@ -6337,9 +5287,7 @@ const RAW = String.raw`<!doctype html>
     // the app was deleted and reinstalled) — there's nothing left on the
     // device to recognize automatically, so this has to be a deliberate,
     // explicit click rather than something auto-detected.
-    // Brand-new visitors land on the rooms page (welcome + "Invite your first
-    // Nearune partner" + "Make a friend"), not straight on the bare form.
-    location.href = "/home";
+    location.href = "/new";
     return true;
   }
 
@@ -6457,35 +5405,24 @@ const RAW = String.raw`<!doctype html>
     if (!w || !w.theme) {
       el.style.background = "";
       document.body.classList.remove("weather-active");
-      ["sky-dawn", "sky-day", "sky-dusk", "sky-night"].forEach(function (c) { document.body.classList.remove(c); });
       document.body.style.removeProperty("--weather-tint");
       return;
     }
     var sky = w.theme.sky;
     var glow = w.theme.glow;
-    // Sunrise and sunset (from WeatherKit's sunrise/sunset times for that
-    // city) put the glow on the horizon at the bottom; day and night keep
-    // it as a soft light from above.
-    var phase = w.phase || (w.isDay ? "day" : "night");
-    if (phase === "dawn" || phase === "dusk") {
-      el.style.background =
-        "radial-gradient(ellipse 120% 45% at 50% 108%, " + glow + "CC, transparent 70%), " +
-        "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 62%, " + glow + " 100%)";
-    } else {
-      el.style.background =
-        "radial-gradient(ellipse 140% 70% at 50% -10%, " + glow + "59, transparent 65%), " +
-        "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
-    }
-    ["sky-dawn", "sky-day", "sky-dusk", "sky-night"].forEach(function (c) { document.body.classList.remove(c); });
-    document.body.classList.add("sky-" + phase);
+    // Full page height (not just a fading sliver near the top) and a
+    // stronger glow, so it reads clearly as "the sky changed" — see the
+    // comment on #weather-sky for why this used to be too subtle.
+    el.style.background =
+      "radial-gradient(ellipse 140% 70% at 50% -10%, " + glow + "59, transparent 65%), " +
+      "linear-gradient(180deg, " + sky[0] + " 0%, " + sky[1] + " 100%)";
     document.body.classList.add("weather-active");
     document.body.style.setProperty("--weather-tint", glow);
     // Night themes' sky gradient is near-black (see weather.ts's THEMES),
     // so text pinned to dark ink (the daytime default) goes nearly
     // invisible against it — switch to a pale ink instead whenever it's
     // nighttime at the OTHER person's location (the sky shown here).
-    // The live-sky look puts dark glass behind text, so text is always white.
-    document.body.style.setProperty("--weather-ink", "#FFFFFF");
+    document.body.style.setProperty("--weather-ink", inkForSky(sky));
   }
 
   async function poll() {
@@ -6505,7 +5442,6 @@ const RAW = String.raw`<!doctype html>
   }
 
   initialLoad();
-  seedProfileFromRooms();
   setInterval(tickClocks, 30000);
   setInterval(poll, POLL_MS);
   setInterval(loadWeather, WEATHER_POLL_MS);
@@ -6613,7 +5549,6 @@ export function buildNewRoomPage(): string {
   button.ghost { display:block; width:100%; background:transparent; color:var(--accent); border:1px solid var(--line); border-radius:999px; padding:13px 22px; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; margin:0 0 12px; }
   .or { text-align:center; color:var(--ink-soft); font-size:0.8rem; margin:0 0 12px; }
   .err { color:var(--danger); font-size:0.85rem; text-align:center; margin:12px 0 0; }
-  .hint { color:var(--ink-soft); font-size:0.88rem; line-height:1.4; margin:-4px 0 12px; }
   .err:empty { display:none; }
   .foot { text-align:center; margin-top:22px; font-size:0.72rem; opacity:0.7; }
   .foot a { color:var(--ink-soft); margin:0 6px; }
@@ -6625,8 +5560,7 @@ export function buildNewRoomPage(): string {
   <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
   <div class="card">
     <h2>Start a room</h2>
-    <p class="hint">Name it anything, or leave it blank and we'll pick one. Next you'll add your city, then invite your person.</p>
-    <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Room name (optional)" aria-label="Room name (optional)">
+    <input id="roomName" type="text" maxlength="24" autocapitalize="words" autocorrect="off" spellcheck="false" placeholder="Room name" aria-label="Room name">
     <button class="main" id="go" type="button">Create room</button>
     <p class="err" id="msg"></p>
   </div>
@@ -6638,14 +5572,14 @@ export function buildNewRoomPage(): string {
     <button class="main" id="openRoom" type="button">Join</button>
     <p class="err" id="roomMsg"></p>
   </div>
-  <p class="foot"><a href="/recover">Find my room</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a><span id="nrSupport" style="display:none"> · <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
+  <p class="foot"><a href="/recover">Find my room</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a></p>
 </div>
 <script>
 function routeFromText(v) {
   v = (v || "").trim();
   if (v.toLowerCase() === "original") {
     try { localStorage.setItem("nearuneMyRoom", ""); } catch (e) {}
-    location.href = "/?legacy=1";
+    location.href = "/";
     return true;
   }
   var inv = v.match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
@@ -6656,12 +5590,7 @@ function routeFromText(v) {
   if (q) { location.href = "/r/" + m[1].toLowerCase() + "/?invite=" + q[1].toLowerCase() + "&token=" + q[2]; return true; }
   var code = m[1].toLowerCase();
   fetch("/api/join-code?code=" + encodeURIComponent(code)).then(function (r) { return r.json(); }).then(function (d) {
-    var dest = (d && d.dest) || ("/r/" + code + "/");
-    if (dest.indexOf("/new?notfound") === 0) {
-      var em = document.getElementById("roomMsg");
-      if (em) { em.textContent = "We couldn't find a room with the code \u201c" + code + "\u201d. Check the spelling and try again."; em.scrollIntoView({ block: "center" }); return; }
-    }
-    location.href = dest;
+    location.href = (d && d.dest) || ("/r/" + code + "/");
   }).catch(function () { location.href = "/r/" + code + "/"; });
   return true;
 }
@@ -6683,23 +5612,12 @@ document.getElementById("pasteInvite").addEventListener("click", function () {
 });
 document.getElementById("go").addEventListener("click", function () {
   var btn = document.getElementById("go");
-  var typedName = (document.getElementById("roomName").value || "").trim();
-  if (typedName && !window.confirm("Your room name will be " + typedName + " and it cannot be changed later. If that name is already taken, two numbers will be added to the end of it. Create this room?")) return;
   btn.disabled = true;
   btn.textContent = "Creating…";
   fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: (document.getElementById("roomName").value || "").trim() }) })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
-      if (res.ok && res.data && res.data.roomId) {
-        try {
-          var nd = localStorage.getItem("nearuneDevice");
-          if (nd && /^[A-Za-z0-9]{16,64}$/.test(nd)) {
-            var np = (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? "app" : "web";
-            fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: nd, step: "room_created", platform: np }) }).catch(function () {});
-          }
-        } catch (e) {}
-        location.href = "/r/" + res.data.roomId; return;
-      }
+      if (res.ok && res.data && res.data.roomId) { location.href = "/r/" + res.data.roomId; return; }
       var msg = res.data && res.data.error === "registrations_paused"
         ? (res.data.message || "We're working to catch up before welcoming more new rooms. Please check back tomorrow.")
         : (res.data && res.data.error === "inappropriate_name"
@@ -6812,7 +5730,7 @@ function legalPageShell(title, bodyHtml) {
     ${bodyHtml}
     <a class="back" href="/new" onclick="if (history.length > 1) { history.back(); return false; }">&larr; Back</a>
   </div>
-  <p class="foot-nav"><a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/support">Support</a><span id="nrSupport" style="display:none"> &nbsp;·&nbsp; <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/iPhone|iPad|iPod/.test(u)&&!/Safari/.test(u);if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></p>
+  <p class="foot-nav"><a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/support">Support</a></p>
 </div>
 </body>
 </html>`;
@@ -6822,7 +5740,7 @@ export function buildPrivacyPage() {
   return legalPageShell(
     "Privacy Policy",
     `<h1>Privacy Policy</h1>
-    <p class="updated">Last updated November 2026</p>
+    <p class="updated">Last updated October 2026</p>
     <p>Nearune is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
 
     <h2>How access works</h2>
@@ -6858,15 +5776,13 @@ export function buildPrivacyPage() {
       <li><strong>Safety screening and place recognition (Anthropic, maker of Claude):</strong> photos and comments you share, and puzzle pictures with their questions and answers, are sent to Anthropic's API to be checked automatically for inappropriate content before they are saved. A puzzle picture with no location may also be sent to suggest where it was taken. Anthropic processes this to return a result; we don't use it for advertising.</li>
       <li><strong>Hosting (Railway):</strong> the service runs on Railway's cloud infrastructure, where room data is stored.</li>
       <li><strong>Notifications (Apple Push Notification service):</strong> a device token is used to deliver reminders if you turn them on.</li>
-      <li><strong>Website analytics (Google Analytics):</strong> only on our download pages (nearune.ai/get and nearune.ai/military), Google Analytics records the visit, device and browser type, approximate location, and the link that brought you there, so we can see which ads and searches help people find Nearune. It isn't used inside rooms or the app, and never sees your answers, photos or voice.</li>
-      <li><strong>Ad measurement (Meta):</strong> the Nearune app (iPhone and Android) uses Meta's software kit to tell Meta that Nearune was installed and opened (and when an in-app tip is made), along with basic device details such as phone model and iOS version, so we can see which of our ads lead to installs. It doesn't use your phone's advertising ID, and it never sends your name, email, answers, photos or voice.</li>
     </ul>
 
     <h2>Reporting and blocking</h2>
     <p>Each person in a room can report their partner's photo, answer or comment, and can block their partner to hide that content from their own screen. Reports are logged for the app's owner to review.</p>
 
     <h2>What we don't do</h2>
-    <p>We don't show ads in Nearune or sell your data. The only outside measurement in the app is the install and app-open count described above for Meta. We don't read your answers except as needed to operate or debug the service.</p>
+    <p>We don't run ads, use ad trackers or analytics pixels, or sell or share your data with third parties for marketing. We don't read your answers except as needed to operate or debug the service.</p>
 
     <h2>Deleting your data</h2>
     <p>Either person in a room can permanently delete that room's data at any time from within the app ("Delete my data"). This removes the room's answers, photos, and puzzle state, and removes both people's entries from the recovery index. Deletion is immediate and can't be undone.</p>
@@ -6915,34 +5831,6 @@ export function buildTermsPage() {
 
     <h2>Contact</h2>
     <p>Questions about these terms: <a href="mailto:support@nearune.ai">support@nearune.ai</a>.</p>`
-  );
-}
-
-
-export function buildChildSafetyPage() {
-  return legalPageShell(
-    "Child Safety Standards",
-    `<h1>Child Safety Standards</h1>
-    <p class="updated">Last updated November 2026</p>
-    <p>Nearune is a private daily question and photo puzzle for two adults who live apart. We have zero tolerance for child sexual abuse and exploitation (CSAE), and we are committed to keeping Nearune free of it.</p>
-
-    <h2>Adults only</h2>
-    <p>Nearune is intended for users 18 and older. It is not directed to children, and we do not knowingly allow minors to use it.</p>
-
-    <h2>Private by design</h2>
-    <p>Nearune has no public feed, no public profiles, and no way to search for or message strangers. Content is shared only inside a private room between the two people who joined it by private invite.</p>
-
-    <h2>Prohibited content and conduct</h2>
-    <p>Any content or behavior that sexually exploits, abuses, or endangers children, including child sexual abuse material (CSAM), grooming, and sexualized content involving minors, is strictly prohibited.</p>
-
-    <h2>Reporting</h2>
-    <p>Use the report and block options next to any photo, answer, or comment in the app, or email <a href="mailto:support@nearune.ai?subject=Child%20safety%20report">support@nearune.ai</a>. We review reports promptly.</p>
-
-    <h2>Our response</h2>
-    <p>We remove violating content, disable the affected rooms, and report apparent CSAM to the National Center for Missing &amp; Exploited Children (NCMEC) and to law enforcement as required by law.</p>
-
-    <h2>Contact for child safety questions</h2>
-    <p>Email <a href="mailto:support@nearune.ai?subject=Child%20safety">support@nearune.ai</a>.</p>`
   );
 }
 

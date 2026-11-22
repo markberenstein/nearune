@@ -80,6 +80,10 @@ export async function computeStats(full = true) {
   // Sign-up funnel for the last 24 hours: people who opened the sign-up form
   // vs. people who finished. Unfinished ones aren't rooms and aren't listed.
   let signupsStarted = 0, signupsFinished = 0;
+  // Which app each signed-up person uses, from their notification sign-up
+  // (iPhone app, Android app, or browser). People with notifications off
+  // aren't counted, so the total can be lower than People.
+  const platform = { ios: 0, android: 0, web: 0 };
   // Where unfinished sign-ups (last 24 hours) stopped, and which form errors
   // they hit. These rooms aren't in the room list, so this is the only place
   // they show up.
@@ -124,6 +128,8 @@ export async function computeStats(full = true) {
     } catch {}
     for (const k of ["mark", "nikita"]) {
       const p = st?.people?.[k]; if (!p) continue;
+      const sub = st?.pushSubs?.[k];
+      if (sub) platform[sub.kind === "apns" ? "ios" : sub.kind === "fcm" ? "android" : "web"]++;
       if (p.voiceId) voiceIds.push({ room: st?.roomNo || rooms, who: String(p.name || k).slice(0, 30), id: String(p.voiceId) });
       const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
       const loc = String(p.location || "").trim();
@@ -144,9 +150,21 @@ export async function computeStats(full = true) {
     const prevWk = new Map<string, any>();
     for (const c of lastFull.cities || []) if (c && c.wk) prevWk.set(Number(c.lat).toFixed(1) + "," + Number(c.lon).toFixed(1), c.wk);
     for (const c of byCity.values()) { const w = prevWk.get(c.lat.toFixed(1) + "," + c.lon.toFixed(1)); if (w) c.wk = w; }
+    // Cities that showed up since the last full run get tested now, so they
+    // don't sit with no WeatherKit result until noon or midnight.
+    if (weatherKitConfigured()) {
+      const fresh = [...byCity.values()].filter((c) => !c.wk);
+      for (let i = 0; i < fresh.length; i += 6) {
+        await Promise.all(fresh.slice(i, i + 6).map(async (c) => {
+          const t0 = Date.now();
+          try { const w = await weatherKitCurrentWeather(c.lat, c.lon); c.wk = { ok: !!w, ms: Date.now() - t0 }; }
+          catch { c.wk = { ok: false, ms: Date.now() - t0 }; }
+        }));
+      }
+    }
     return {
       at: new Date().toISOString(),
-      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors },
+      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors }, platform,
       cities: [...byCity.values()].sort((a, b) => b.n - a.n),
       qa: lastFull.qa,
       weatherkit: lastFull.weatherkit,
@@ -295,7 +313,7 @@ export async function computeStats(full = true) {
   const at = new Date().toISOString();
   lastFull = {
     at,
-    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors },
+    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors }, platform,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,

@@ -31,7 +31,24 @@ export type AdminRoomSummary = {
   closed?: boolean;
   // Feature use in this room (counts only, no content).
   features?: { voice: number; puzzlePhotos: number; puzzleSolved: number; nhieRounds: number; photos: number };
+  // Invite timing (normal rooms only). sentAt = first time the invite went
+  // out (link shared or copied, or emailed). acceptedAt = when the invited
+  // person finished sign-up; null with bothJoined = joined before join times
+  // were recorded (Nov 22, 2026).
+  invite?: { sentAt: string | null; acceptedAt: string | null; bothJoined: boolean };
 };
+
+// "2 h 5 min", "3 days 4 h", "12 min".
+export function adminDuration(ms: number): string {
+  if (!isFinite(ms) || ms < 0) return "";
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "under 1 min";
+  if (m < 60) return m + " min";
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h < 48) return h + " h" + (mm ? " " + mm + " min" : "");
+  const d = Math.floor(h / 24), hh = h % 24;
+  return d + " days" + (hh ? " " + hh + " h" : "");
+}
 
 export function adminEsc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -123,6 +140,23 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
       const where =
         (locs.length ? locs.join("<br>") : "<span class=\"muted\">no location yet</span>") +
         (r.via ? "<br><span class=\"muted\">via " + adminEsc(r.via) + "</span>" : "");
+      // Invite timing: when it went out, when it was accepted, how long it took.
+      const lt = (iso: string) => "<span class=\"local-time\" data-ts=\"" + adminEsc(iso) + "\">" + adminEsc(new Date(iso).toLocaleString("en-US")) + " UTC</span>";
+      const inv = r.invite;
+      let inviteLine = "";
+      if (inv && !r.friend && r.people.length > 0) {
+        const sentPart = inv.sentAt ? "Invite sent " + lt(inv.sentAt) : "Invite sent <span class=\"muted\">(time not recorded)</span>";
+        if (inv.bothJoined) {
+          const accPart = inv.acceptedAt ? "accepted " + lt(inv.acceptedAt) : "accepted <span class=\"muted\">(time not recorded, joined before Nov 22)</span>";
+          const took = inv.sentAt && inv.acceptedAt ? adminDuration(Date.parse(inv.acceptedAt) - Date.parse(inv.sentAt)) : "";
+          inviteLine = sentPart + "<br>" + accPart + (took ? "<br><b>Took " + adminEsc(took) + "</b>" : "");
+        } else if (inv.sentAt) {
+          inviteLine = sentPart + "<br><span class=\"muted\">not accepted yet (waiting " + adminEsc(adminDuration(Date.now() - Date.parse(inv.sentAt))) + ")</span>";
+        } else {
+          inviteLine = "<span class=\"muted\">Invite not sent yet</span>";
+        }
+        inviteLine = "<div class=\"invline\">" + inviteLine + "</div>";
+      }
       const active = r.lastActive ? adminEsc(r.lastActive) : "<span class=\"muted\">no answers yet</span>";
       const status = r.daysAnswered > 0 ? "active" : r.people.length > 0 ? "joined" : "empty";
       // The legacy "main room" (empty roomId) has no delete control here —
@@ -178,9 +212,9 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
         : `<span class="muted">—</span>`);
       return `<tr${r.roomId && r.people.length === 0 && !r.friend ? ' class="unset-row"' : ""}>
         <td data-sort="${r.roomNo || 0}">${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
-        <td data-sort="${status === "active" ? 3 : status === "joined" ? 2 : 1}">${`<span class="pill pill-${status}">${status}</span>`}${flags}</td>
+        <td data-sort="${status === "active" ? 3 : status === "joined" ? 2 : 1}">${`<span class="pill pill-${status}">${status}</span>`}${r.invite && r.invite.bothJoined ? ` <span class="pill pill-both">Both joined</span>` : ""}${flags}</td>
         <td data-sort="${r.createdAt ? Date.parse(r.createdAt) || 0 : 0}">${created}</td>
-        <td data-sort="${adminEsc(r.people.map((p) => p.name).join(", ").toLowerCase())}">${people}</td>
+        <td data-sort="${adminEsc(r.people.map((p) => p.name).join(", ").toLowerCase())}">${people}${inviteLine}</td>
         <td class="where" data-sort="${adminEsc(r.people.map((p) => p.location || "").filter(Boolean).join(", ").toLowerCase())}">${where}</td>
         <td data-sort="${r.lastActive ? Date.parse(r.lastActive) || 0 : 0}">${active}</td>
         <td data-sort="${r.daysAnswered}">${r.daysAnswered}</td>
@@ -224,6 +258,9 @@ ${ADMIN_HEAD}
   .pill-active { background:#DCEFD9; color:#2F6B2A; }
   .pill-joined { background:#F5E6C8; color:#8A6A1E; }
   .pill-empty { background:var(--line); color:var(--ink-soft); }
+  .pill-both { background:#1F7A4D; color:#FFFFFF; }
+  .invline { margin-top:6px; font-size:0.78rem; line-height:1.45; color:var(--ink-soft); }
+  .invline b { color:var(--ink); font-weight:700; }
   @media (prefers-color-scheme: dark) {
     .pill-active { background:#1E3A1B; color:#8FD98A; }
     .pill-joined { background:#3A2E12; color:#E8B75A; }

@@ -65,6 +65,10 @@ export type PersonProfile = {
   // same idea as hasVoice but a timestamp instead of a boolean since the
   // client needs it to know when to refetch a replaced photo.
   photoAt?: string;
+  // ISO time this person finished sign-up (first time only). For the
+  // invited person this is when the invite was accepted. Missing on people
+  // who signed up before Nov 22, 2026.
+  joinedAt?: string;
   // Optional short comment the sharer wrote under their photo.
   photoCaption?: string;
   // Set when the shared item is a video (stored at storage.ts's videoKey;
@@ -157,6 +161,9 @@ export type State = {
   pendingInviteAt?: Partial<Record<PersonKey, string>>;
   // ISO time the inviter was last sent the "still waiting" push (persisted).
   inviteNudgeAt?: string;
+  // ISO time the administrator last sent the inviter a reminder from the
+  // admin Home page (persisted; limits it to once every 20 hours).
+  adminInviteRemindAt?: string;
   // How many "still waiting" pushes the inviter has had for the current
   // invite link (capped at 3), and which link (token) that count is for.
   inviteNudgeCount?: number;

@@ -153,6 +153,14 @@ Bun.serve({
             flagged: (state.flags || []).length,
             adminJoin: state.origin === "friend" && state.friendDevices?.mark === "admin" && !state.closed && !state.people?.mark && state.pendingInvite?.mark?.token
               ? "/j/" + id + "/" + state.pendingInvite.mark.token : undefined,
+            invite: (() => {
+              const fn: any = (state as any).funnel || {};
+              const sentTimes = [fn.invite_shared, fn.invite_emailed].filter((t) => typeof t === "string" && isFinite(Date.parse(t))).sort();
+              const conf = (["mark", "nikita"] as PersonKey[]).filter((k) => state.people?.[k]?.confirmed);
+              const joins = conf.map((k) => (state.people![k] as any).joinedAt).filter((t: any) => typeof t === "string" && isFinite(Date.parse(t))).sort();
+              const bothJoined = conf.length === 2;
+              return { sentAt: sentTimes[0] || null, acceptedAt: bothJoined && joins.length ? joins[joins.length - 1] : null, bothJoined };
+            })(),
             remindable: (["mark", "nikita"] as PersonKey[])
               .filter((k) => state.people?.[k] && state.people[k]!.emailVerified === false && !!state.pendingConfirm?.[k]?.email)
               .map((k) => ({ who: k, name: state.people![k]!.name, reminders: state.pendingConfirm![k]!.reminders || 0, remindedAt: state.pendingConfirm![k]!.remindedAt || null })),
@@ -310,6 +318,45 @@ Bun.serve({
         }
       }
       return Response.redirect(url.origin + "/rooms?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + lmsg, 303);
+    }
+
+    // Home "Remind" button: sends one notification to the person who set up
+    // the room, through the main app. The Home page knows rooms by number
+    // only, so the room is looked up here.
+    if (req.method === "POST" && url.pathname === "/invite-remind") {
+      if (!checkSecret(url)) return new Response("Not found", { status: 404 });
+      let roomNo = 0;
+      try { roomNo = Number((await req.formData()).get("roomNo")) || 0; } catch {}
+      let imsg = "invite_failed";
+      const iApp = (Bun.env.APP_URL || "").replace(/\/$/, "");
+      const iCron = Bun.env.CRON_SECRET || "";
+      if (!iApp || !iCron) imsg = "not_configured";
+      else if (roomNo > 0) {
+        let rid = "";
+        for (const id of await listRoomIds()) {
+          if (!id) continue;
+          try { dropCachedState(id); const st: any = await loadState(id); if (Number(st.roomNo) === roomNo) { rid = id; break; } } catch {}
+        }
+        if (!rid) imsg = "invite_nothing";
+        else {
+          try {
+            const r = await fetch(iApp + "/api/admin/invite-remind", {
+              method: "POST",
+              headers: { "content-type": "application/json", "x-cron-secret": iCron },
+              body: JSON.stringify({ roomId: rid }),
+            });
+            const d: any = await r.json().catch(() => ({}));
+            imsg = d && d.ok ? "invite_reminded"
+              : d && d.error === "too_soon" ? "invite_too_soon"
+              : d && d.error === "no_push" ? "invite_no_push"
+              : d && d.error === "nothing_pending" ? "invite_nothing"
+              : "invite_failed";
+          } catch (err) {
+            console.error("[admin] invite remind failed", err);
+          }
+        }
+      }
+      return Response.redirect(url.origin + "/?secret=" + encodeURIComponent(url.searchParams.get("secret") || "") + "&msg=" + imsg, 303);
     }
 
     if (req.method === "POST" && url.pathname === "/remind-room") {

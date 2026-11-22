@@ -771,10 +771,11 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (st.adminInviteRemindAt && Date.now() - Date.parse(st.adminInviteRemindAt) < 20 * 60 * 60 * 1000) return json({ error: "too_soon" }, { status: 429 });
       const f = st.funnel || {};
       const sent = !!(f.invite_shared || f.invite_emailed);
-      const title = sent ? "They haven't joined yet" : "Your invite is ready to send";
+      const wA = invitedLabel(st.relationship);
+      const title = sent ? cap(wA) + " hasn't seen today's question yet" : "Who do you wish you talked to more?";
       const body = sent
-        ? "A quick message from you can help. Tap to send them your Nearune link again."
-        : "Your room is set up. Send the link to the person you want to share it with, and your first question opens for you both.";
+        ? "A quick note from you can help. Tap to send your link again, so you can start answering together."
+        : "Your room is ready. Send it to them, and today's question opens for you both.";
       const res = await sendPush(sub, { title, body, tag: "invite-nudge", url: "/r/" + rid + "/?resend=1" } as any);
       console.log("[invite-remind] room=" + rid + " ok=" + res.ok);
       if (res.gone) await saveState(rid, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
@@ -2446,18 +2447,24 @@ function inviteLive(inv: { at: string }): boolean {
 // copied, or emailed), they're written to someone who DID send it and is
 // waiting on the person they invited. If it never went out, they're about
 // sending it for the first time. Day 3 says how many hours are left.
-type InviteNudge = { title: (h: number) => string; body: (h: number) => string };
+type InviteNudge = { title: (h: number, w: string) => string; body: (h: number, w: string) => string };
+// Reminders name the person, not the app: "your partner", "your friend".
+// w is that phrase; cap() starts a sentence with it.
+function invitedLabel(rel: string | undefined): string {
+  return rel === "significant_other" ? "your partner" : rel === "family" ? "your family member" : rel === "friend" ? "your friend" : "the person you invited";
+}
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 const INVITE_NUDGE_AFTER = [24 * 60 * 60 * 1000, 48 * 60 * 60 * 1000, 60 * 60 * 60 * 1000];
 const hrs = (h: number) => h + (h === 1 ? " hour" : " hours");
 const INVITE_NUDGES_SENT: InviteNudge[] = [
-  { title: () => "They haven't joined yet", body: () => "You sent your Nearune invite yesterday. A quick nudge from you might help. Tap to send them the link again." },
-  { title: () => "Still waiting for them to join", body: () => "It's been 2 days since you sent your invite. Send them a friendly reminder with your link." },
-  { title: (h) => "Your invite expires in " + hrs(h), body: () => "The person you invited hasn't joined yet. Send them one last reminder so they don't miss it." },
+  { title: (_h, w) => cap(w) + " hasn't seen today's question yet", body: () => "A quick note from you can help. Tap to send your link again, so you can start answering together." },
+  { title: (_h, w) => "Still waiting on " + w, body: () => "It's been 2 days. Send them a little note with your link. One question a day keeps you close." },
+  { title: (h) => "Your invite expires in " + hrs(h), body: (_h, w) => cap(w) + " hasn't joined yet. Send one last note so you don't miss starting together." },
 ];
 const INVITE_NUDGES_UNSENT: InviteNudge[] = [
-  { title: () => "Your invite is ready to send", body: () => "Your room is set up. Send the link to the person you want to share it with, and your first question opens for you both." },
-  { title: () => "Who's joining your Nearune?", body: () => "Your invite link hasn't gone out yet. Send it with one tap so the person you want can join your room." },
-  { title: (h) => "Your invite link expires in " + hrs(h), body: () => "Send it now so they can still join. After that, open Nearune for a fresh link." },
+  { title: () => "Who do you wish you talked to more?", body: () => "Your room is ready. Send it to them, and today's question opens for you both." },
+  { title: (_h, w) => w === "the person you invited" ? "Today's question is waiting for someone you miss" : "Today's question is waiting for " + w, body: () => "Send your link with one tap, so you can start answering together." },
+  { title: (h) => "Your invite link expires in " + hrs(h), body: () => "Send it to someone you'd like to be closer to. After that, open Nearune for a fresh link." },
 ];
 function localHour(tz: string | undefined): number {
   try { return Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: tz || "America/Los_Angeles" }).format(new Date())); } catch { return 12; }
@@ -2496,7 +2503,8 @@ async function inviteSweep(): Promise<void> {
             const inv0 = st.people && st.people[inviterKey];
             const h0 = localHour(inv0 && inv0.tz);
             if (h0 >= 9 && h0 < 21) {
-              const r0 = await sendPush(sub, { title: "They haven't joined yet", body: "You sent your Nearune invite about an hour ago. A quick message from you can help. Tap to send the link again.", tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
+              const w0 = invitedLabel(st.relationship);
+              const r0 = await sendPush(sub, { title: cap(w0) + " hasn't joined yet", body: "Today's question is waiting for you both. A quick note from you can help. Tap to send your link again.", tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
               if (r0.ok) {
                 console.log("[invite-nudge] room=" + (id || "main") + " 1h");
                 await saveState(id, (s) => { s.inviteHourNudgeToken = inv.token; });
@@ -2515,7 +2523,8 @@ async function inviteSweep(): Promise<void> {
         const f = st.funnel || {};
         const wasSent = !!(f.invite_shared || f.invite_emailed || inv.instagram || !inv.link);
         const nudge = (wasSent ? INVITE_NUDGES_SENT : INVITE_NUDGES_UNSENT)[count];
-        const res = await sendPush(sub, { title: nudge.title(hoursLeft), body: nudge.body(hoursLeft), tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
+        const wN = invitedLabel(st.relationship);
+        const res = await sendPush(sub, { title: nudge.title(hoursLeft, wN), body: nudge.body(hoursLeft, wN), tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
         if (res.ok) {
           console.log("[invite-nudge] room=" + (id || "main") + " #" + (count + 1));
           await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = count + 1; s.inviteNudgeToken = inv.token; });

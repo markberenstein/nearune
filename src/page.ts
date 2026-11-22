@@ -367,6 +367,18 @@ const RAW = String.raw`<!doctype html>
   }
   .puzzle-setup input[type="date"] { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; box-sizing: border-box; }
   .puzzle-setup input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .mud-wrap { position: relative; }
+  .mud-room { background: linear-gradient(180deg, #DCE6F2 0%, #EEE7DE 100%); border-radius: 22px; padding: 20px 18px 54px; filter: grayscale(0.85) blur(1.2px); opacity: 0.62; pointer-events: none; user-select: none; }
+  .mud-title { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 1.25rem; text-align: center; margin-bottom: 14px; }
+  .mud-clocks { display: flex; align-items: center; justify-content: center; gap: 16px; }
+  .mud-clock { display: flex; flex-direction: column; align-items: center; min-width: 90px; }
+  .mud-clock b { font-family: 'Manrope', sans-serif; font-size: 1.5rem; font-weight: 800; }
+  .mud-lbl { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; }
+  .mud-plane { font-size: 1.1rem; opacity: 0.7; }
+  .mud-q { margin-top: 16px; background: rgba(255,255,255,0.7); border-radius: 16px; padding: 12px 14px; }
+  .mud-q p { margin: 4px 0 8px; font-weight: 700; font-size: 1.02rem; }
+  .mud-lock { font-size: 0.85rem; opacity: 0.8; }
+  .card.mud-sheet { position: relative; margin-top: -38px; border-radius: 24px 24px 18px 18px; box-shadow: 0 -10px 30px rgba(60,40,20,0.16); }
   .reg-top { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 4px 0 18px; }
   .reg-top img { width: 52px; height: 52px; border-radius: 13px; display: block; box-shadow: 0 6px 18px rgba(80,50,30,0.12); }
   .reg-top .reg-name { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 1.7rem; letter-spacing: -0.01em; }
@@ -3468,12 +3480,53 @@ const RAW = String.raw`<!doctype html>
     return sel;
   }
 
+  // "Mud room": the invited person sees the room they're joining, greyed
+  // out behind the join card (whose room it is, both clocks, today's
+  // question). Purely visual; joining still happens on the Join tap, so a
+  // half-finished join never leaves a half-joined room behind.
+  var mudClockTimer = null;
+  function mudClockText(tz) {
+    try { return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: tz || undefined }).format(new Date()); } catch (e) { return ""; }
+  }
+  function inviteMudRoom(inviter) {
+    var first = String(inviter.name || "").split(" ")[0] || t("Someone");
+    var city = String(inviter.location || "").split(",")[0].trim();
+    var q = "", answered = false;
+    try {
+      var k = state && state.todayKey;
+      if (k) { q = questionForKey(k) || ""; var a = state.answers && state.answers[k]; answered = !!(a && a[inviteParams.who === "mark" ? "nikita" : "mark"]); }
+    } catch (e) {}
+    var clock = function (label, tz) {
+      return h("div", { class: "mud-clock" }, [h("span", { class: "mud-lbl", text: label }), h("b", { class: "mud-time", "data-tz": tz || "", text: mudClockText(tz) })]);
+    };
+    var kids = [
+      h("div", { class: "mud-title", text: tTemplate("{name}'s room", { name: first }) }),
+      h("div", { class: "mud-clocks" }, [clock(city || first, inviter.tz), h("span", { class: "mud-plane", text: "\u2708\uFE0E" }), clock(t("You"), "")])
+    ];
+    if (q) kids.push(h("div", { class: "mud-q" }, [
+      h("span", { class: "mud-lbl", text: t("Today's question") }),
+      h("p", { text: q }),
+      h("div", { class: "mud-lock", text: "\uD83D\uDD12 " + (answered ? tTemplate("{name} already answered. Join to see it.", { name: first }) : tTemplate("Answer it, then see {name}'s answer.", { name: first })) })
+    ]));
+    if (mudClockTimer) clearInterval(mudClockTimer);
+    mudClockTimer = setInterval(function () {
+      if (!inviteParams) { clearInterval(mudClockTimer); mudClockTimer = null; return; }
+      var els = document.querySelectorAll(".mud-time");
+      for (var i = 0; i < els.length; i++) els[i].textContent = mudClockText(els[i].getAttribute("data-tz"));
+    }, 20000);
+    return h("div", { class: "mud-room", "aria-hidden": "true" }, kids);
+  }
+
   function acceptInviteForm() {
     nrTrack("invite_opened");
-    var card = h("div", { class: "card" }, [
-      h("a", { class: "reg-back", href: "/home", style: "display:inline-block;margin:-6px 0 6px -4px;", text: "\u2039 " + t("Rooms") }),
+    var invOther = inviteParams && (inviteParams.who === "mark" ? "nikita" : "mark");
+    var inviter = state && state.people && invOther && state.people[invOther] && state.people[invOther].confirmed ? state.people[invOther] : null;
+    var invFirst = inviter ? (String(inviter.name || "").split(" ")[0] || "") : "";
+    var card = h("div", { class: "card" + (inviter ? " mud-sheet" : "") }, [
+      inviter ? null : h("a", { class: "reg-back", href: "/home", style: "display:inline-block;margin:-6px 0 6px -4px;", text: "\u2039 " + t("Rooms") }),
       h("div", { class: "eyebrow" }, [h("span", { text: t("You're invited") })]),
-      h("p", { class: "question", text: t("Finish setting up your Nearune.") })
+      h("p", { class: "question", text: invFirst ? tTemplate("Join {name}'s room", { name: invFirst }) : t("Finish setting up your Nearune.") }),
+      invFirst ? h("p", { class: "reg-sub", style: "margin-top:-4px;", text: tTemplate("Add where you are, so you and {name} see each other's time, weather and answers.", { name: invFirst }) }) : null
     ]);
     // In a browser (not the app): lead with the app. Tapping the button also
     // copies this invite link, so it can be pasted on the app's first screen.
@@ -3503,7 +3556,7 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
-    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : t("Join Nearune") });
+    var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : invFirst ? tTemplate("Join {name}'s room", { name: invFirst }) : t("Join Nearune") });
     btn.disabled = regBusy;
     btn.addEventListener("click", function () {
       if (!acceptDraft.location.trim()) { regError = t("Enter the city where you're based."); renderApp(); return; }
@@ -3540,6 +3593,11 @@ const RAW = String.raw`<!doctype html>
     });
     form.appendChild(btn);
     card.appendChild(form);
+    if (inviter) {
+      var mud = null;
+      try { mud = inviteMudRoom(inviter); } catch (e) { mud = null; }
+      if (mud) return regShell(h("div", { class: "mud-wrap" }, [mud, card]));
+    }
     return regShell(card);
   }
 

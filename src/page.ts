@@ -3965,6 +3965,32 @@ const RAW = String.raw`<!doctype html>
     return card;
   }
 
+  // Full-screen "send your invite" step, shown right after sign-up until the
+  // invite goes out. Many new rooms stopped with the link ready but never
+  // sent, and nothing happens in Nearune until the other person joins.
+  // It stays until they send, copy the link, or choose Make a friend.
+  var ENVELOPE_SVG = '<svg viewBox="0 0 84 62" width="84" height="62" aria-hidden="true"><rect x="2" y="2" width="80" height="58" rx="8" fill="#FFF7EC" stroke="#C9A98A" stroke-width="2.5"/><path d="M4 6 L42 34 L80 6" fill="none" stroke="#C9A98A" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+  function sendInviteStep() {
+    if (!state || state.origin === "friend" || !state.relationship || !lastInviteUrl) return null;
+    if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;
+    funnelPing("invite_step");
+    var main = shareLinkButton(lastInviteUrl, t("Send your invite"), "puzzle-upload-btn reg-cta");
+    main.style.cssText = "width:100%;margin-top:4px;";
+    var copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
+    copy.style.cssText = "width:100%;margin-top:10px;";
+    var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("No one in mind? Make a friend instead") });
+    mf.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
+    mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
+    return h("div", { class: "picker-overlay", style: "z-index:50;" }, [
+      h("div", { class: "picker-card" }, [
+        h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' }),
+        h("h2", { text: t("Last step: send your invite") }),
+        h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. Your link works for 3 days, but don't wait to start your Nearune journey.") }),
+        main, copy, mf
+      ])
+    ]);
+  }
+
   // Home screen while your invited partner hasn't joined yet: your own clock,
   // "Pending" (with days since the invite) for them, your own weather and Local
   // Feel, and the invite card. Replaced by the full two-person screen the moment
@@ -4261,6 +4287,8 @@ const RAW = String.raw`<!doctype html>
     } else {
       var invCard = inviteFlow(otherKey);
       app.appendChild(invCard);
+      var invStep = sendInviteStep();
+      if (invStep) app.appendChild(invStep);
     }
     // Today's question sits right under the invite, so there's an obvious
     // next step after sending it.

@@ -161,6 +161,7 @@ export type State = {
   // invite link (capped at 3), and which link (token) that count is for.
   inviteNudgeCount?: number;
   inviteNudgeToken?: string;
+  inviteHourNudgeToken?: string;
   // Permanent room number for the admin page (#1, #2, ...), given once the
   // first person signs up and never changed (see numberRooms in server.ts).
   roomNo?: number;

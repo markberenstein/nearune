@@ -121,7 +121,7 @@ async function roomsCreatedToday(): Promise<number> {
 const FUNNEL_STEPS = new Set([
   "reg_screen", "reg_city", "reg_name", "reg_email", "reg_clicked",
   "reg_err_city", "reg_err_name", "reg_err_relationship", "reg_err_server",
-  "confirm_screen", "invite_screen",
+  "confirm_screen", "invite_screen", "invite_step",
   // The invite actually went out: link copied or shared, or email sent.
   "invite_shared", "invite_emailed",
 ]);
@@ -2357,8 +2357,10 @@ ensurePuzzleMigrated("").catch((err) => console.error("[puzzle-migrate] failed",
 // expires. Then the link is deleted; the next time the inviter opens their
 // room the app makes them a fresh link. Reminders only go out between 9 AM
 // and 9 PM the inviter's time. Not for Make a friend rooms (those close on
-// their own after 24 hours). Checked hourly.
+// their own after 24 hours). Checked every 10 minutes. There's also one
+// reminder 1 hour after the invite was sent if they still haven't joined.
 const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const HOUR_NUDGE_MS = 60 * 60 * 1000;
 function inviteLive(inv: { at: string }): boolean {
   const t = Date.parse(inv.at);
   return !isFinite(t) || Date.now() - t < INVITE_TTL_MS;
@@ -2407,6 +2409,26 @@ async function inviteSweep(): Promise<void> {
         const inviterKey: PersonKey = other === "mark" ? "nikita" : "mark";
         const sub = st.pushSubs && st.pushSubs[inviterKey];
         if (!sub) continue;
+        // One hour after the invite went out with no join yet: one quick
+        // reminder to the inviter, before the day 1/2/3 ones.
+        {
+          const f0 = st.funnel || {};
+          const sentAt = Date.parse(String(f0.invite_shared || f0.invite_emailed || ""));
+          const sinceSent = now - sentAt;
+          if (isFinite(sentAt) && sinceSent >= HOUR_NUDGE_MS && age < INVITE_NUDGE_AFTER[0] && st.inviteHourNudgeToken !== inv.token && !(st.inviteNudgeToken === inv.token && st.inviteNudgeCount)) {
+            const inv0 = st.people && st.people[inviterKey];
+            const h0 = localHour(inv0 && inv0.tz);
+            if (h0 >= 9 && h0 < 21) {
+              const r0 = await sendPush(sub, { title: "They haven't joined yet", body: "You sent your Nearune invite about an hour ago. A quick message from you can help. Tap to send the link again.", tag: "invite-nudge" } as any);
+              if (r0.ok) {
+                console.log("[invite-nudge] room=" + (id || "main") + " 1h");
+                await saveState(id, (s) => { s.inviteHourNudgeToken = inv.token; });
+              }
+              if (r0.gone) await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+              continue;
+            }
+          }
+        }
         const count = st.inviteNudgeToken === inv.token ? (st.inviteNudgeCount || 0) : 0;
         if (count >= INVITE_NUDGE_AFTER.length || age < INVITE_NUDGE_AFTER[count]) continue;
         const inviter = st.people && st.people[inviterKey];
@@ -2429,7 +2451,8 @@ async function inviteSweep(): Promise<void> {
   }
 }
 setTimeout(inviteSweep, 4 * 60 * 1000);
-setInterval(inviteSweep, 60 * 60 * 1000);
+// Every 10 minutes, so the 1-hour reminder goes out close to the hour.
+setInterval(inviteSweep, 10 * 60 * 1000);
 
 // Rooms nobody ever signed up in (someone tapped "Invite your first Nearune
 // partner" and left the form) are removed 24 hours after the last sign-up

@@ -3965,6 +3965,36 @@ const RAW = String.raw`<!doctype html>
     return card;
   }
 
+  // Full-screen "send your invite" step, shown right after sign-up until the
+  // invite goes out. Many new rooms stopped with the link ready but never
+  // sent, and nothing happens in Nearune until the other person joins.
+  // "I'll send it later" hides it until the app is opened again.
+  function inviteLaterKey() { return "nearuneInviteLater:" + (ROOM || "main"); }
+  function sendInviteStep() {
+    if (!state || state.origin === "friend" || !state.relationship || !lastInviteUrl) return null;
+    if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;
+    try { if (sessionStorage.getItem(inviteLaterKey())) return null; } catch (e) {}
+    funnelPing("invite_step");
+    var main = shareLinkButton(lastInviteUrl, t("Send your invite"), "puzzle-upload-btn reg-cta");
+    main.style.cssText = "width:100%;margin-top:4px;";
+    var copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
+    copy.style.cssText = "width:100%;margin-top:10px;";
+    var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("No one in mind? Make a friend instead") });
+    mf.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
+    mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
+    var later = h("button", { class: "switch-link", type: "button", text: t("I'll send it later") });
+    later.style.cssText = "display:block;margin:6px auto 0;font-size:0.85rem;opacity:0.75;";
+    later.addEventListener("click", function () { try { sessionStorage.setItem(inviteLaterKey(), "1"); } catch (e) {} renderApp(); });
+    return h("div", { class: "picker-overlay", style: "z-index:50;" }, [
+      h("div", { class: "picker-card" }, [
+        h("div", { style: "font-size:2.4rem;line-height:1;margin-bottom:10px;", text: "\uD83D\uDC8C" }),
+        h("h2", { text: t("Last step: send your invite") }),
+        h("p", { text: t("Nearune starts when they join. Send your link by text, WhatsApp or any app. It works for 3 days.") }),
+        main, copy, mf, later
+      ])
+    ]);
+  }
+
   // Home screen while your invited partner hasn't joined yet: your own clock,
   // "Pending" (with days since the invite) for them, your own weather and Local
   // Feel, and the invite card. Replaced by the full two-person screen the moment
@@ -4261,6 +4291,8 @@ const RAW = String.raw`<!doctype html>
     } else {
       var invCard = inviteFlow(otherKey);
       app.appendChild(invCard);
+      var invStep = sendInviteStep();
+      if (invStep) app.appendChild(invStep);
     }
     // Today's question sits right under the invite, so there's an obvious
     // next step after sending it.

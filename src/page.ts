@@ -3978,9 +3978,6 @@ const RAW = String.raw`<!doctype html>
     main.style.cssText = "width:100%;margin-top:4px;";
     var copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
     copy.style.cssText = "width:100%;margin-top:10px;";
-    var mail = h("a", { class: "picker-btn", text: "\u2709\uFE0F " + t("Email it"), href: "mailto:?subject=" + encodeURIComponent(t("Join me on Nearune")) + "&body=" + encodeURIComponent(inviteMessage(lastInviteUrl)) });
-    mail.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;";
-    mail.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); });
     var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("No one in mind? Make a friend instead") });
     mf.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
     mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
@@ -3989,7 +3986,7 @@ const RAW = String.raw`<!doctype html>
         h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' }),
         h("h2", { text: t("Last step: send your invite") }),
         h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. It works for 3 days.") }),
-        main, copy, mail, mf
+        main, copy, mf
       ])
     ]);
   }

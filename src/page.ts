@@ -3706,7 +3706,7 @@ const RAW = String.raw`<!doctype html>
     // the city and the phone; who the room is for is asked on the invite
     // card; military time is a setting in the room.
     form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    var nameInputEl = textField(registerDraft.name, usPhone() ? "New phone, who dis?" : "Your name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; } });
+    var nameInputEl = textField(registerDraft.name, "Your name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; } });
     form.appendChild(nameInputEl);
     form.appendChild(h("div", { class: "reg-label", text: t("Your city") }));
     lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); if (v && regErrField === "city") { regErrField = ""; regError = ""; } suggestLanguageFromLocation(registerDraft, v); });

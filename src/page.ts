@@ -3985,7 +3985,7 @@ const RAW = String.raw`<!doctype html>
       h("div", { class: "picker-card" }, [
         h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' }),
         h("h2", { text: t("Last step: send your invite") }),
-        h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. It works for 3 days.") }),
+        h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. Your link is active for 3 days.") }),
         main, copy, mf
       ])
     ]);

@@ -35,8 +35,12 @@ function previewBlock(p: InvitePreview, who: string): string {
 export function buildInvitePage(opts: { origin: string; inviter: string; roomId: string; dest: string; preview?: InvitePreview | null }): string {
   const appStoreUrl = Bun.env.APP_STORE_URL || DEFAULT_APP_STORE_URL;
   const who = opts.inviter ? esc(opts.inviter) : "Someone";
-  const title = who + " invited you to Nearune";
-  const desc = "One question a day, just for the two of you. Download the app to join.";
+  // Preview card wording reads as reaching out, not as a request to install
+  // an app: who wants to stay close, and the question waiting for them.
+  const title = opts.inviter ? who + " wants to stay close with you" : "Someone wants to stay close with you";
+  const desc = opts.preview && opts.preview.question
+    ? (opts.preview.isToday ? "Today's question" : "A question for you two") + ": \u201c" + esc(opts.preview.question) + "\u201d Answer it, then see " + (opts.inviter ? who + "'s" : "their") + " answer."
+    : "One question a day, just for the two of you. Answer it, then see each other's answers.";
   const dest = esc(opts.dest);
   return `<!doctype html>
 <html lang="en">

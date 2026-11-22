@@ -3814,8 +3814,15 @@ const RAW = String.raw`<!doctype html>
   // partner can still get in by typing it if the link gets lost.
   // Just the link: iMessage and WhatsApp only turn a message into a preview
   // card (logo + "Mark invited you to Nearune") when the link is all it holds.
+  // What the Copy link button puts on the clipboard: a short note from the
+  // sender, today's question, then the link. (The share sheet still sends the
+  // bare link; Messages shows the invite page's preview card under it.)
   function inviteMessage(url) {
-    return url;
+    var q = "";
+    try { if (state && state.todayKey) q = questionForKey(state.todayKey) || ""; } catch (e) {}
+    return t("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
+      (q ? "\n\n" + t("Today's question:") + " \u201c" + q + "\u201d" : "") +
+      "\n\n" + t("Join me here:") + " " + url;
   }
   // Today's question rides along with the invite so the invite page can
   // show it ("Here's today's question"). The server only shows it if it's
@@ -4120,8 +4127,8 @@ const RAW = String.raw`<!doctype html>
     });
     var main, copy = null;
     if (chosen && lastInviteUrl) {
-      main = shareLinkButton(lastInviteUrl, t("Send your invite"), "puzzle-upload-btn reg-cta");
-      copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
+      main = shareLinkButton(lastInviteUrl, t("Send it to them"), "puzzle-upload-btn reg-cta");
+      copy = copyLinkButton(lastInviteUrl, t("Copy message and link"), "picker-btn");
       copy.style.cssText = "width:100%;margin-top:10px;";
     } else {
       main = h("button", { type: "button", class: "puzzle-upload-btn reg-cta", text: chosen ? t("Getting your link ready…") : t("Send your invite") });
@@ -4134,12 +4141,12 @@ const RAW = String.raw`<!doctype html>
     mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
     var kids = [
       envelope,
-      h("h2", { text: t("Last step: send your invite") }),
-      h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. Your link works for 3 days, but don't wait to start your Nearune journey.") }),
-      h("div", { class: "reg-label", style: "margin-top:14px;text-align:center;", text: t("Who are you inviting?") }),
+      h("h2", { text: t("Who do you wish you talked to more?") }),
+      h("p", { text: t("Send them your room. Each day you both answer one question and see each other's answers, wherever you are. Your link works for 3 days.") }),
+      h("div", { class: "reg-label", style: "margin-top:14px;text-align:center;", text: t("Who is it for?") }),
       chips
     ];
-    if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who you're inviting first. It sets your daily questions.") }));
+    if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
     kids.push(main);
     if (copy) kids.push(copy);
     kids.push(mf);

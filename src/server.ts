@@ -2,7 +2,7 @@
 // as the single-file version always was), "/r/<roomId>" is any other room,
 // and "/new" lets anyone spin up a fresh private room for themselves.
 
-import { roomExists } from "./storage";
+import { roomExists, readSideFile, writeSideFile } from "./storage";
 import { screenText } from "./moderation";
 import { startStatsSchedule, refreshStats } from "./stats";
 import { isPerson, type PersonKey, type State } from "./types";
@@ -59,10 +59,31 @@ import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDe
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
-// Deferred invites: network address -> invite destination, held in memory
-// for 48 hours (see /api/deferred-invite). Cleared on restart; never written.
+// Deferred invites: network -> invite destination for 48 hours (see
+// /api/deferred-invite). Saved so an app update doesn't drop them; the
+// network address itself is never stored, only a one-way hash of it.
 const deferredInvites = new Map<string, { dest: string; at: number }>();
-setInterval(() => { const cut = Date.now() - 48 * 60 * 60 * 1000; for (const [k, v] of deferredInvites) if (v.at < cut) deferredInvites.delete(k); }, 10 * 60 * 1000);
+const DEFERRED_FILE = "side/deferred-invites.json";
+function deferredKey(ip: string): string {
+  return new Bun.CryptoHasher("sha256").update((Bun.env.EMAIL_HASH_SECRET || "nearune") + "|deferred|" + ip).digest("hex").slice(0, 32);
+}
+let deferredSaveTimer: any = null;
+function saveDeferredSoon() {
+  if (deferredSaveTimer) return;
+  deferredSaveTimer = setTimeout(() => {
+    deferredSaveTimer = null;
+    writeSideFile(DEFERRED_FILE, JSON.stringify(Object.fromEntries(deferredInvites))).catch(() => {});
+  }, 2000);
+}
+readSideFile(DEFERRED_FILE).then((t) => {
+  if (!t) return;
+  try {
+    const cut = Date.now() - 48 * 60 * 60 * 1000;
+    const o = JSON.parse(t);
+    for (const k of Object.keys(o)) if (o[k] && o[k].at > cut && typeof o[k].dest === "string" && !deferredInvites.has(k)) deferredInvites.set(k, o[k]);
+  } catch {}
+}).catch(() => {});
+setInterval(() => { const cut = Date.now() - 48 * 60 * 60 * 1000; let ch = false; for (const [k, v] of deferredInvites) if (v.at < cut) { deferredInvites.delete(k); ch = true; } if (ch) saveDeferredSoon(); }, 10 * 60 * 1000);
 
 // Vulgar / NSFW screen for text people write. Returns a Response to send back
 // when the text is rejected (friend rooms), otherwise null. Every hit is
@@ -312,13 +333,14 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const db = await readJson(req);
       const dest = typeof db?.dest === "string" ? db.dest : "";
       if (!/^\/r\/[a-z0-9]{1,40}\/\?invite=(mark|nikita)&token=[a-zA-Z0-9-]{6,64}$/.test(dest)) return json({ ok: false }, { status: 400 });
-      deferredInvites.set(clientIp(req, server), { dest, at: Date.now() });
+      deferredInvites.set(deferredKey(clientIp(req, server)), { dest, at: Date.now() });
+      saveDeferredSoon();
       return json({ ok: true });
     }
     if (req.method === "GET" && url.pathname === "/api/deferred-invite") {
-      const ip = clientIp(req, server);
-      const hit = deferredInvites.get(ip);
-      if (hit && Date.now() - hit.at < 48 * HOUR) { deferredInvites.delete(ip); return json({ dest: hit.dest }); }
+      const dk = deferredKey(clientIp(req, server));
+      const hit = deferredInvites.get(dk);
+      if (hit && Date.now() - hit.at < 48 * HOUR) { deferredInvites.delete(dk); saveDeferredSoon(); return json({ dest: hit.dest }); }
       return json({ dest: null });
     }
 

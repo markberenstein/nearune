@@ -22,6 +22,7 @@ export const FUNNEL_STEPS: { key: string; label: string; group: string }[] = [
   { key: "signed_up", label: "Signed up in a room", group: "Getting started" },
   { key: "invite_sent", label: "Shared an invite (inviter)", group: "Invites" },
   { key: "invite_opened", label: "Opened an invite (invited partner)", group: "Invites" },
+  { key: "invite_accept", label: "Tapped Accept invite", group: "Invites" },
   { key: "invite_to_store", label: "Went to the App Store from an invite", group: "Invites" },
   { key: "invite_joined", label: "Joined from an invite", group: "Invites" },
   { key: "partner_joined", label: "Partner / match joined", group: "Invites" },

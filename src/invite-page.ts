@@ -59,10 +59,10 @@ export function buildInvitePage(opts: { origin: string; inviter: string; roomId:
 @media (prefers-color-scheme: dark){:root{--cream:#14171F;--ink:#F2EFE9;--muted:#A9AAB8;--line:#2B3040;--card:#1D2130;--rust:#E8B75A}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:28px;box-shadow:0 14px 40px rgba(60,35,20,.12);padding:34px 24px 28px;max-width:400px;width:100%;text-align:center}
-.logo{width:104px;height:104px;border-radius:26px;display:block;margin:0 auto 14px;box-shadow:0 10px 26px rgba(60,35,20,.22)}
-.name{font-size:2.1rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
-.sub{color:var(--muted);font-size:1.02rem;margin:0 0 26px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:28px;box-shadow:0 14px 40px rgba(60,35,20,.12);padding:24px 20px 22px;max-width:400px;width:100%;text-align:center}
+.logo{width:64px;height:64px;border-radius:16px;display:block;margin:0 auto 10px;box-shadow:0 10px 26px rgba(60,35,20,.22)}
+.name{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--muted);font-size:1.02rem;margin:0 0 18px}
 .get{font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
 .badges{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 .badge,.badge2{display:inline-block;line-height:0}

@@ -73,7 +73,7 @@ export async function computeStats(full = true) {
   // (the closest single number to "active users").
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const voiceIds: { room: number; who: string; id: string }[] = [];
-  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; furthest: string; funnel: Record<string, string>; people: { name: string; location: string; confirmed: boolean }[]; bothWeek?: boolean }[] = [];
+  const roomList: { n: number; created: string | null; status: string; answeredDays: number; lastAnswer: string | null; furthest: string; funnel: Record<string, string>; people: { name: string; location: string; confirmed: boolean; notify?: boolean }[]; bothWeek?: boolean; remindedAt?: string | null }[] = [];
   const locByCountry = new Map<string, string>();
   const newsLocs = new Set<string>();
   const byCity = new Map<string, { city: string; country: string; region?: string; tz?: string; lat: number; lon: number; n: number; people: { name: string; partner: string; partnerLoc: string }[]; wk?: { ok: boolean; ms: number | null } }>();
@@ -123,7 +123,8 @@ export async function computeStats(full = true) {
         lastAnswer: days.length ? days[days.length - 1] : null,
         furthest: furthestStep(st, ppl, days.length),
         funnel: (st?.funnel && typeof st.funnel === "object") ? st.funnel : {},
-        people: ppl.map((p: any) => ({ name: String(p.name || "(no name)").slice(0, 40), location: String(p.location || "").slice(0, 60), confirmed: !!p.confirmed })),
+        people: ["mark", "nikita"].filter((k) => st?.people?.[k]).map((k) => { const p: any = st.people[k]; return { name: String(p.name || "(no name)").slice(0, 40), location: String(p.location || "").slice(0, 60), confirmed: !!p.confirmed, notify: !!st?.pushSubs?.[k] }; }),
+        remindedAt: st?.adminInviteRemindAt || null,
       });
     } catch {}
     for (const k of ["mark", "nikita"]) {

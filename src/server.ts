@@ -753,6 +753,36 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json({ error: res }, { status: 500 });
     }
 
+    // Admin Home "Remind" button: one notification to the person who set up
+    // the room (the inviter), about sending or re-sending their invite. Same
+    // wording as the automatic invite reminders. At most once every 20 hours.
+    if (req.method === "POST" && url.pathname === "/api/admin/invite-remind") {
+      const secret = Bun.env.CRON_SECRET;
+      if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
+      const b = await readJson(req);
+      const rid = typeof b?.roomId === "string" ? b.roomId : "";
+      if (!rid) return json({ error: "invalid" }, { status: 400 });
+      const st: any = await loadState(rid);
+      const keys = (["mark", "nikita"] as PersonKey[]).filter((k) => st.people && st.people[k] && st.people[k].confirmed);
+      if (st.closed || st.origin === "friend" || keys.length !== 1) return json({ error: "nothing_pending" }, { status: 409 });
+      const inviterKey = keys[0];
+      const sub = st.pushSubs && st.pushSubs[inviterKey];
+      if (!sub) return json({ error: "no_push" }, { status: 409 });
+      if (st.adminInviteRemindAt && Date.now() - Date.parse(st.adminInviteRemindAt) < 20 * 60 * 60 * 1000) return json({ error: "too_soon" }, { status: 429 });
+      const f = st.funnel || {};
+      const sent = !!(f.invite_shared || f.invite_emailed);
+      const title = sent ? "They haven't joined yet" : "Your invite is ready to send";
+      const body = sent
+        ? "A quick message from you can help. Tap to send them your Nearune link again."
+        : "Your room is set up. Send the link to the person you want to share it with, and your first question opens for you both.";
+      const res = await sendPush(sub, { title, body, tag: "invite-nudge", url: "/r/" + rid + "/?resend=1" } as any);
+      console.log("[invite-remind] room=" + rid + " ok=" + res.ok);
+      if (res.gone) await saveState(rid, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+      if (!res.ok) return json({ error: res.gone ? "no_push" : "send_failed" }, { status: 502 });
+      await saveState(rid, (s) => { s.adminInviteRemindAt = new Date().toISOString(); });
+      return json({ ok: true });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/admin/remind") {
       const secret = Bun.env.CRON_SECRET;
       if (!secret || (req.headers.get("x-cron-secret") || "") !== secret) return json({ error: "forbidden" }, { status: 403 });
@@ -1389,7 +1419,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const tzH = (await resolveTimezoneFromLocation(location)) || browserTz;
         const stateH = await saveState(roomId, (s) => {
           if (!s.people) s.people = {};
-          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, ...(handle ? { instagram: handle } : {}), ...(military ? { military: true } : {}) };
+          s.people[who] = { name, location, language, tz: tzH || undefined, confirmed: true, joinedAt: (s.people[who] && s.people[who]!.joinedAt) || new Date().toISOString(), ...(handle ? { instagram: handle } : {}), ...(military ? { military: true } : {}) };
           if (s.pendingConfirm) delete s.pendingConfirm[who];
           if (relationship && !s.relationship) s.relationship = relationship;
         });
@@ -1425,7 +1455,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const emailHash = await hashEmail(email);
       const state = await saveState(roomId, (s) => {
         if (!s.people) s.people = {};
-        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash, ...(military ? { military: true } : {}) };
+        s.people[who] = { name, location, language, tz: tz || undefined, confirmed: true, emailVerified: false, emailHash, joinedAt: (s.people[who] && s.people[who]!.joinedAt) || new Date().toISOString(), ...(military ? { military: true } : {}) };
         if (!s.pendingConfirm) s.pendingConfirm = {};
         const prevPc = s.pendingConfirm[who];
         s.pendingConfirm[who] = {

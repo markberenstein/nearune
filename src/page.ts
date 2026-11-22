@@ -4011,9 +4011,48 @@ const RAW = String.raw`<!doctype html>
   // It stays until they send, copy the link, or choose Make a friend.
   var ENVELOPE_SVG = '<svg viewBox="0 0 84 62" width="84" height="62" aria-hidden="true"><rect x="2" y="2" width="80" height="58" rx="8" fill="#FFF7EC" stroke="#C9A98A" stroke-width="2.5"/><path d="M4 6 L42 34 L80 6" fill="none" stroke="#C9A98A" stroke-width="2.5" stroke-linejoin="round"/></svg>';
   function sendInviteStep() {
-    if (!state || state.origin === "friend" || !state.relationship || !lastInviteUrl) return null;
+    if (!state || state.origin === "friend") return null;
     if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;
     funnelPing("invite_step");
+    var envelope = h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' });
+    // Step 1 on the same card: who the invite is for (it picks the daily
+    // questions). Both sign-ups on Nov 22 stopped on this choice before the
+    // card ever showed, so it now lives here.
+    if (!state.relationship) {
+      var chips = h("div", { class: "reg-chips", style: "justify-content:center;margin-top:6px;" });
+      RELATIONSHIPS.forEach(function (pair) {
+        var chip = h("button", { type: "button", class: "reg-chip", text: t(pair[1]) });
+        chip.addEventListener("click", function () {
+          chip.disabled = true;
+          fetch(RP + "/api/relationship", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, relationship: pair[0] }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d && d.people) state = d; renderApp(); })
+            .catch(function () { chip.disabled = false; });
+        });
+        chips.appendChild(chip);
+      });
+      var mf1 = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("No one in mind? Make a friend instead") });
+      mf1.style.cssText = "display:block;margin:16px auto 0;font-size:0.9rem;";
+      mf1.addEventListener("click", function () { location.href = "/home?friend=1"; });
+      return h("div", { class: "picker-overlay", style: "z-index:50;" }, [
+        h("div", { class: "picker-card" }, [
+          envelope,
+          h("h2", { text: t("Who are you inviting?") }),
+          h("p", { text: t("Pick one. It sets the kind of daily questions you two get.") }),
+          chips, mf1
+        ])
+      ]);
+    }
+    // Link still being made (a second or two after the choice).
+    if (!lastInviteUrl) {
+      return h("div", { class: "picker-overlay", style: "z-index:50;" }, [
+        h("div", { class: "picker-card" }, [
+          envelope,
+          h("h2", { text: t("Last step: send your invite") }),
+          h("p", { text: t("Getting your invite link ready…") })
+        ])
+      ]);
+    }
     var main = shareLinkButton(lastInviteUrl, t("Send your invite"), "puzzle-upload-btn reg-cta");
     main.style.cssText = "width:100%;margin-top:4px;";
     var copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
@@ -4023,7 +4062,7 @@ const RAW = String.raw`<!doctype html>
     mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
     return h("div", { class: "picker-overlay", style: "z-index:50;" }, [
       h("div", { class: "picker-card" }, [
-        h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' }),
+        envelope,
         h("h2", { text: t("Last step: send your invite") }),
         h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. Your link works for 3 days, but don't wait to start your Nearune journey.") }),
         main, copy, mf

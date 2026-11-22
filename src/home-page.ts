@@ -149,6 +149,22 @@ export function buildHomePage(): string {
   } catch (e) {}
   jset(LS_ROOMS, rooms);
 
+  // Tapping a notification that carries a page (e.g. an invite reminder)
+  // opens that page in the app.
+  (function () {
+    try {
+      var PNt = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+      if (!PNt || !PNt.addListener) return;
+      PNt.addListener("pushNotificationActionPerformed", function (a) {
+        try {
+          var d = (a && a.notification && a.notification.data) || {};
+          var u = typeof d.url === "string" ? d.url : "";
+          if (u.charAt(0) === "/" && u.charAt(1) !== "/" && (location.pathname + location.search) !== u) location.href = u;
+        } catch (e) {}
+      });
+    } catch (e) {}
+  })();
+
   // Brand-new install that came from an invite link opened in Safari: the
   // server held the invite for this network for 2 hours. Ask once.
   (function () {

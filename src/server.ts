@@ -2466,7 +2466,7 @@ async function inviteSweep(): Promise<void> {
             const inv0 = st.people && st.people[inviterKey];
             const h0 = localHour(inv0 && inv0.tz);
             if (h0 >= 9 && h0 < 21) {
-              const r0 = await sendPush(sub, { title: "They haven't joined yet", body: "You sent your Nearune invite about an hour ago. A quick message from you can help. Tap to send the link again.", tag: "invite-nudge" } as any);
+              const r0 = await sendPush(sub, { title: "They haven't joined yet", body: "You sent your Nearune invite about an hour ago. A quick message from you can help. Tap to send the link again.", tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
               if (r0.ok) {
                 console.log("[invite-nudge] room=" + (id || "main") + " 1h");
                 await saveState(id, (s) => { s.inviteHourNudgeToken = inv.token; });
@@ -2485,7 +2485,7 @@ async function inviteSweep(): Promise<void> {
         const f = st.funnel || {};
         const wasSent = !!(f.invite_shared || f.invite_emailed || inv.instagram || !inv.link);
         const nudge = (wasSent ? INVITE_NUDGES_SENT : INVITE_NUDGES_UNSENT)[count];
-        const res = await sendPush(sub, { title: nudge.title(hoursLeft), body: nudge.body(hoursLeft), tag: "invite-nudge" } as any);
+        const res = await sendPush(sub, { title: nudge.title(hoursLeft), body: nudge.body(hoursLeft), tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
         if (res.ok) {
           console.log("[invite-nudge] room=" + (id || "main") + " #" + (count + 1));
           await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = count + 1; s.inviteNudgeToken = inv.token; });

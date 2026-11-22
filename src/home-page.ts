@@ -158,9 +158,34 @@ export function buildHomePage(): string {
       localStorage.setItem("nearuneDeferredChecked", "1");
       fetch("/api/deferred-invite").then(function (r) { return r.json(); }).then(function (d) {
         if (d && typeof d.dest === "string" && d.dest.indexOf("/r/") === 0) location.href = d.dest;
-      }).catch(function () {});
+        else showInvitePaste();
+      }).catch(function () { showInvitePaste(); });
     } catch (e) {}
   })();
+
+  // Backup for a new install that came from an invite but couldn't be
+  // matched to it (switched from Wi-Fi to cellular, etc.): the invite page
+  // copied the link, so one tap pastes it and opens the invite.
+  function showInvitePaste() {
+    try {
+      var wel = document.getElementById("welcome");
+      if (!wel || document.getElementById("invPaste")) return;
+      var box = el("div", { id: "invPaste", style: "margin:14px auto;max-width:420px;color:#1F1A17;background:#FFF7EC;border:1px solid #E8D9C8;border-radius:18px;padding:14px;text-align:center" });
+      box.appendChild(el("p", { style: "margin:0 0 10px;font-weight:700", text: "Got an invite?" }));
+      var b = el("button", { type: "button", style: "background:#A8522A;color:#fff;border:0;border-radius:999px;padding:12px 22px;font-weight:800;font-size:1rem;font-family:inherit", text: "Paste your invite link" });
+      var note = el("p", { style: "margin:8px 0 0;font-size:.85rem;color:#6F6054", text: "Or type the room code from the invite under Join a room." });
+      b.addEventListener("click", function () {
+        var go = function (t) {
+          var m = String(t || "").match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
+          if (m) { location.href = "/j/" + m[1].toLowerCase() + "/" + m[2]; return; }
+          note.textContent = "That isn't a Nearune invite link. Ask them to send it again, or type the room code under Join a room.";
+        };
+        try { navigator.clipboard.readText().then(go, function () { go(""); }); } catch (e) { go(""); }
+      });
+      box.appendChild(b); box.appendChild(note);
+      wel.parentNode.insertBefore(box, wel.nextSibling);
+    } catch (e) {}
+  }
 
   function saveRooms() { jset(LS_ROOMS, rooms); }
   function removeRoom(id) {

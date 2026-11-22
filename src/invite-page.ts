@@ -79,6 +79,9 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
 .q .lbl{color:rgba(255,255,255,.8)}
 .q p{margin:6px 0 0;font-size:1.08rem;font-weight:700;line-height:1.3}
 .ans{margin-top:10px;font-size:.85rem;opacity:.9}
+.accept{display:block;width:100%;background:var(--rust);color:#fff;text-decoration:none;font-weight:800;font-size:1.15rem;padding:16px;border-radius:999px;box-shadow:0 8px 20px rgba(168,82,42,.3)}
+.acc-note{color:var(--muted);font-size:.85rem;margin:10px 0 0}
+.badge img,.badge2 img{height:40px!important}
 .code{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}
 .code b{display:block;color:var(--ink);font-size:1.15rem;margin-top:2px;word-break:break-all}
 </style>
@@ -89,13 +92,14 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
   <h1 class="name">Nearune</h1>
   <p class="sub">${who} invited you</p>
   ${opts.preview ? previewBlock(opts.preview, who) : ""}
-  <p class="get">Download the app</p>
+  <a class="accept" id="acceptBtn" href="${esc(appStoreUrl)}">Accept invite</a>
+  <p class="acc-note" id="accNote">Opens the App Store to get Nearune. Then open it and you're in ${who === "Someone" ? "the room" : who + "'s room"}.</p>
+  <p class="get" style="margin-top:18px">Or get the app here</p>
   <div class="badges">
     <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
     <a class="badge2" href="https://play.google.com/store/apps/details?id=com.nearune.app" aria-label="Get Nearune on Google Play"><img src="/google-play-badge.svg" alt="Get it on Google Play"></a>
   </div>
-  <p class="sub" style="margin:14px 0 0;font-size:.9rem">After it installs, open Nearune and it takes you straight to ${who === "Someone" ? "your invite" : who + "'s invite"}.</p>
-  <div><a class="web" href="${dest}">No iPhone? Continue in your browser</a></div>
+  <div><a class="web" href="${dest}">Don't want the app? Continue in your browser</a></div>
   ${opts.roomId ? '<div class="code">Room code<b>' + esc(opts.roomId) + "</b></div>" : ""}
 </main>
 <script>
@@ -114,6 +118,18 @@ try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capaci
   tick(); setInterval(tick, 30000);
 })();
 </script>
+<script>
+// Accept invite goes to the right store for this phone; on a computer it
+// continues in the browser.
+(function () {
+  var ua = navigator.userAgent || "";
+  var a = document.getElementById("acceptBtn"), n = document.getElementById("accNote");
+  var isAndroid = /Android/i.test(ua);
+  var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (isAndroid) { a.href = "https://play.google.com/store/apps/details?id=com.nearune.app"; n.textContent = n.textContent.replace("the App Store", "Google Play"); }
+  else if (!isIOS) { a.href = ${JSON.stringify(opts.dest).replace(/</g, "\\u003c")}; n.textContent = "Opens Nearune in your browser."; a.setAttribute("data-web", "1"); }
+})();
+</script>
 <script>var DEST = ${JSON.stringify(opts.dest).replace(/</g, "\\u003c")};</script>
 <script>
 // Anonymous funnel: the invited partner opened the invite, and whether they
@@ -130,9 +146,9 @@ try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capaci
       try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: d, step: step, platform: "web" }) }).catch(function () {}); } catch (e) {}
     };
     send("open"); send("invite_opened");
-    var bs = document.querySelectorAll("a.badge, a.badge2");
+    var bs = document.querySelectorAll("a.badge, a.badge2, a.accept:not([data-web])");
     for (var bi = 0; bi < bs.length; bi++) bs[bi].addEventListener("click", function () {
-      send("invite_to_store");
+      send(this.classList && this.classList.contains("accept") ? "invite_accept" : "invite_to_store");
       // Hold this invite so the app opens straight to it after install.
       try { fetch("/api/deferred-invite", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ dest: DEST }) }).catch(function () {}); } catch (e) {}
       try { if (navigator.clipboard) navigator.clipboard.writeText(location.href).catch(function () {}); } catch (e) {}

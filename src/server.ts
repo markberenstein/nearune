@@ -126,6 +126,27 @@ function notifyRoomMilestone(n: number): void {
     .catch((e) => console.error("[slack] milestone post error", e));
 }
 
+// Slack note to #nearune-app (the SLACK_WEBHOOK_URL webhook) when someone's
+// sign-up is turned away because their city is in a blocked country. The
+// phone retries a few times, so one note per room and country per 30 minutes.
+const signupBlockedSent = new Map<string, number>();
+function notifySignupBlocked(room: string, country: string, via: string): void {
+  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  if (!hook) return;
+  const k = room + "|" + country;
+  const last = signupBlockedSent.get(k) || 0;
+  if (Date.now() - last < 30 * 60 * 1000) return;
+  signupBlockedSent.set(k, Date.now());
+  if (signupBlockedSent.size > 500) signupBlockedSent.clear();
+  let countryName = country || "a blocked country";
+  try { if (country) countryName = (new Intl.DisplayNames(["en"], { type: "region" }).of(country) || country) + " (" + country + ")"; } catch {}
+  const when = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date());
+  const text = ":no_entry: Nearune sign-up blocked: city is in " + countryName + ". Room " + room + ", " + via + ", " + when + " PT.";
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] signup-blocked post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] signup-blocked post error", e));
+}
+
 async function roomsCreatedToday(): Promise<number> {
   const day = pacificDay(new Date());
   if (regToday.day !== day) {
@@ -203,7 +224,9 @@ function logSignupFailure(req: Request, pathname: string, res: Response): void {
     const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
     const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
     res.clone().json().then((b: any) => {
-      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " error=" + ((b && b.error) || "?") + " via=" + device + " " + kind + " " + lang);
+      const country = b && typeof b.country === "string" ? b.country.slice(0, 2) : "";
+      console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " error=" + ((b && b.error) || "?") + (country ? " country=" + country : "") + " via=" + device + " " + kind + " " + lang);
+      if (b && b.error === "region_unavailable") notifySignupBlocked(roomId || "main", country, device + " " + kind + " " + lang);
     }).catch(() => {
       console.log("[signup-fail] room=" + (roomId || "main") + " step=" + step + " status=" + res.status + " via=" + device + " " + kind + " " + lang);
     });
@@ -450,7 +473,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const pLang = typeof fp.language === "string" ? fp.language.trim().slice(0, 40) : "";
         const pTz = typeof fp.tz === "string" ? fp.tz.trim().slice(0, 60) : "";
         if (!pName || !pLoc || !pLang) return json({ error: "profile_required" }, { status: 400 });
-        if (await isBlockedLocation(pLoc)) return json({ error: "region_unavailable" }, { status: 403 });
+        const pBlocked = await isBlockedLocation(pLoc);
+        if (pBlocked) return json({ error: "region_unavailable", country: pBlocked }, { status: 403 });
         if (!(await isCityLevelLocation(pLoc))) return json({ error: "city_required" }, { status: 400 });
         const resolvedTz = await resolveTimezoneFromLocation(pLoc);
         profile = { name: pName, location: pLoc, language: pLang, ...((resolvedTz || pTz) ? { tz: resolvedTz || pTz } : {}) };
@@ -1274,7 +1298,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { who } = body || {};
       if (!isPerson(who)) return json({ error: "invalid" }, { status: 400 });
       let location = typeof body?.location === "string" ? body.location.trim().slice(0, 80) : "";
-      if (location && await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      const locBlocked = location ? await isBlockedLocation(location) : "";
+      if (locBlocked) return json({ error: "region_unavailable", country: locBlocked }, { status: 403 });
       if (location && !(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       if (location) location = await canonicalPlaceLabel(location);
       const asDateKey = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
@@ -1401,7 +1426,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!isPerson(who) || !name || (contact && !email && !handle)) {
         return json({ error: "invalid" }, { status: 400 });
       }
-      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      const locBlocked = await isBlockedLocation(location);
+      if (locBlocked) return json({ error: "region_unavailable", country: locBlocked }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       // Optional room name typed by the first person on the setup screen.
       if ((await applySignupRoomName(roomId, body?.roomName)) === "blocked") {
@@ -1643,7 +1669,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const language = typeof body?.language === "string" ? body.language.trim().slice(0, 40) : "";
       const browserTz = typeof body?.tz === "string" ? body.tz.trim().slice(0, 60) : "";
       if (!token || !name) return json({ error: "invalid" }, { status: 400 });
-      if (await isBlockedLocation(location)) return json({ error: "region_unavailable" }, { status: 403 });
+      const locBlocked = await isBlockedLocation(location);
+      if (locBlocked) return json({ error: "region_unavailable", country: locBlocked }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;

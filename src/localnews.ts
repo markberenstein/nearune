@@ -136,7 +136,9 @@ const BAD_HEADLINE = /\b(dies|died|dead|death|killed|kill|murder|shooting|shot|s
 
 // Asks Claude Haiku to pick the single most delightful, genuinely quirky
 // story from the candidates (or none). Returns an index, or null.
-async function pickQuirkiest(place: string, headlines: string[], strict = true): Promise<number | null> {
+// strict = must be genuinely fun; false = lightest pleasant story; "any" = the
+// last resort for small towns: any everyday local story that isn't grim.
+async function pickQuirkiest(place: string, headlines: string[], strict: boolean | "any" = true): Promise<number | null> {
   const key = Bun.env.ANTHROPIC_API_KEY;
   if (!key || headlines.length === 0) return null;
   try {
@@ -151,7 +153,9 @@ async function pickQuirkiest(place: string, headlines: string[], strict = true):
           "Choose the headline that is funniest: absurd, deadpan, delightfully odd or a charming local mishap, with a wink of humor. Prefer humor over merely sweet; heartwarming is the tiebreaker. It must be about something that actually happened near " + place + ". " +
           "It must be in " + place + " itself: if the headline or the outlet suggests a different city with the same name (for example Fremont, Washington versus Fremont, California) or a city far from " + place + ", do not choose it. If no headline is clearly from " + place + ", reply NONE. " +
           "It must be lighthearted and safe: no death, injury, crime, politics, disasters, ads, listicles, sports results or weather alerts. " +
-          (strict
+          (strict === "any"
+            ? "Nothing fun turned up today, so the bar is lower: everyday community news is fine (a new shop, a school or library event, a local team, a town project). Still never grim, political, crime, a disaster or an ad. Reply with only the number of the most pleasant headline, or NONE only if every headline is grim, political or an ad, or none is clearly from " + place + "."
+            : strict
             ? "Reply with only the number of the best headline, or NONE if none is genuinely fun or clearly from " + place + "."
             : "Reply with only the number of the lightest, most pleasant headline. Reply NONE if every headline is grim, political or an ad, or if none is clearly from " + place + "."),
         messages: [{ role: "user", content: headlines.map((h, i) => (i + 1) + ". " + h).join("\n") }],
@@ -546,6 +550,23 @@ export async function topLocalStory(location: string): Promise<LocalStory> {
           if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }
           value = { ...cand, access, near: big, nearV: 2 };
           tierNo = 90 + bi;
+          break;
+        }
+      }
+      // Very last resort, so a small town is never left with no story: from
+      // the big city's last week of news, any pleasant everyday story.
+      if (!value) {
+        const raw = await fetchCandidates(bName + " " + SHORT_EXCLUDE + " when:7d");
+        let pool = raw.filter((c) => !BAD_HEADLINE.test(c.headline) && !PAYWALLED.test(c.source) && !PAYWALLED.test(c.url) && c.headline.length >= 25 && !alreadySeen(c.headline, seen) && namesPlace(c, big, false));
+        for (let attempt = 0; attempt < 3 && pool.length; attempt++) {
+          const pick = await pickQuirkiest(big, pool.map((c) => c.headline + (c.source ? " [" + c.source + "]" : "")), "any");
+          if (pick === null) { console.log("[localnews] " + q + " big city last resort: none usable"); break; }
+          const cand = pool[pick];
+          const access = await checkArticleAccess(cand.url);
+          if (access === "paywalled") { pool = pool.filter((_, i) => i !== pick); continue; }
+          value = { ...cand, access, near: big, nearV: 2 };
+          tierNo = 99;
+          console.log("[localnews] " + q + " -> no fun story today, used a pleasant everyday story from " + big);
           break;
         }
       }

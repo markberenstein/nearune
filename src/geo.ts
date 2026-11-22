@@ -308,16 +308,18 @@ export async function isCityLevelLocation(location: string): Promise<boolean> {
   return ok;
 }
 
-const blockedCache = new Map<string, boolean>();
-export async function isBlockedLocation(location: string): Promise<boolean> {
+// Returns the blocked country's code (like "IR") when the place is in a
+// blocked country, or "" when it isn't (so it still works as true/false).
+const blockedCache = new Map<string, string>();
+export async function isBlockedLocation(location: string): Promise<string> {
   const blocked = (Bun.env.BLOCKED_COUNTRIES ?? "BT,IR,KP").split(",").map((c) => c.trim().toLowerCase()).filter(Boolean);
   const q = (location || "").trim();
-  if (!blocked.length || !q) return false;
+  if (!blocked.length || !q) return "";
   const ck = blocked.join(",") + "|" + q.toLowerCase();
   const hit = blockedCache.get(ck);
   if (hit !== undefined) return hit;
   const cc = await resolveCountryCode(q).catch(() => null);
-  const res = !!cc && blocked.includes(cc.toLowerCase());
+  const res = cc && blocked.includes(cc.toLowerCase()) ? cc.toUpperCase() : "";
   // Only cache successful lookups so a failed geocode is retried (fails open meanwhile).
   if (cc) { if (blockedCache.size > 1000) blockedCache.clear(); blockedCache.set(ck, res); }
   return res;

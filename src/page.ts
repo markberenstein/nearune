@@ -3556,6 +3556,15 @@ const RAW = String.raw`<!doctype html>
     if (lastConfirmEmail) return lastConfirmEmail;
     try { return localStorage.getItem(confirmEmailKey()) || ""; } catch (e) { return ""; }
   }
+  // US phone: English (US) language and a US time zone. Gets the playful
+  // name hint; everyone else gets a plain one that translates cleanly.
+  function usPhone() {
+    try {
+      var lang = (navigator.language || "").toLowerCase();
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      return lang === "en-us" && /^(America\/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Boise|Detroit|Indiana|Kentucky|North_Dakota|Menominee|Juneau|Sitka|Nome|Adak|Metlakatla|Yakutat)|Pacific\/Honolulu)/.test(tz);
+    } catch (e) { return false; }
+  }
   // City from the phone's time zone, e.g. "Asia/Kolkata" -> "Kolkata".
   // Only a fallback for when the connection lookup finds nothing.
   function tzCityGuess() {
@@ -3681,7 +3690,7 @@ const RAW = String.raw`<!doctype html>
     // the city and the phone; who the room is for is asked on the invite
     // card; military time is a setting in the room.
     form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    var nameInputEl = textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; } });
+    var nameInputEl = textField(registerDraft.name, usPhone() ? "New phone, who dis?" : "Your name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; } });
     form.appendChild(nameInputEl);
     form.appendChild(h("div", { class: "reg-label", text: t("Your city") }));
     lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); if (v && regErrField === "city") { regErrField = ""; regError = ""; } suggestLanguageFromLocation(registerDraft, v); });

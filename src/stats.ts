@@ -7,7 +7,7 @@ import { topLocalStory, storyFits } from "./localnews";
 // recount rooms and people and carry the checks over from the last full run,
 // so every line has the same keys; "full" says which kind it is and "fullAt"
 // when the carried-over checks ran.
-import { listRoomIds, loadState, writeSideFile } from "./storage";
+import { listRoomIds, loadState, readSideFile, writeSideFile } from "./storage";
 import { resolveCoords, resolveCountryCode } from "./geo";
 import { topSongs, previewClip, trackRef } from "./music";
 import { runQa } from "./qa";
@@ -308,6 +308,16 @@ export function refreshStats(full = true): Promise<any> {
       const j = JSON.stringify(d);
       console.log("[stats] " + j);
       try { await writeSideFile("admin-stats.json", j); } catch (e: any) { console.log("[stats] save failed " + (e?.message || e)); }
+      // Hourly count history for the admin Home tab (change since yesterday and
+      // the little trend lines). Small records only, last 14 days.
+      try {
+        let hist: any[] = [];
+        try { const raw = await readSideFile("admin-stats-history.json"); const p = raw ? JSON.parse(raw) : []; if (Array.isArray(p)) hist = p; } catch {}
+        const cutoff = Date.now() - 14 * 86400000;
+        hist = hist.filter((h) => h && h.at && Date.parse(h.at) >= cutoff);
+        hist.push({ at: d.at, rooms: d.rooms, activeRooms: d.activeRooms, answeredRooms: d.answeredRooms, bothWeekRooms: d.bothWeekRooms, people: d.people });
+        await writeSideFile("admin-stats-history.json", JSON.stringify(hist.slice(-400)));
+      } catch (e: any) { console.log("[stats] history save failed " + (e?.message || e)); }
       return d;
     })().finally(() => { running = null; });
   }

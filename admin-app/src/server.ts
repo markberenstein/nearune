@@ -86,8 +86,10 @@ Bun.serve({
     if (req.method === "GET" && url.pathname === "/") {
       if (!checkSecret(url)) return new Response("Not found", { status: 404 });
       let raw: string | null = null;
+      let histRaw: string | null = null;
       try { raw = await readSideFile("admin-stats.json"); } catch (err) { console.error("[admin] stats read failed", err); }
-      return new Response(buildAdminHome(raw, url.searchParams.get("secret") || "", url.searchParams.get("msg") || ""), {
+      try { histRaw = await readSideFile("admin-stats-history.json"); } catch (err) { console.error("[admin] stats history read failed", err); }
+      return new Response(buildAdminHome(raw, url.searchParams.get("secret") || "", url.searchParams.get("msg") || "", histRaw), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }

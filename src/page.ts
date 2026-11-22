@@ -3401,7 +3401,7 @@ const RAW = String.raw`<!doctype html>
     }, 600);
   }
   var inviteEmailDraft = "";
-  var regBusy = false, regError = "", showRegisterForm = false, showInviteForm = false;
+  var regBusy = false, regError = "", regErrField = "", showRegisterForm = false, showInviteForm = false;
   var showDeleteConfirm = false, deleteConfirmText = "", deleteBusy = false, deleteError = "";
 
   function textField(value, placeholder, onInput) {
@@ -3556,12 +3556,38 @@ const RAW = String.raw`<!doctype html>
     if (lastConfirmEmail) return lastConfirmEmail;
     try { return localStorage.getItem(confirmEmailKey()) || ""; } catch (e) { return ""; }
   }
+  // US phone: English (US) language and a US time zone. Gets the playful
+  // name hint; everyone else gets a plain one that translates cleanly.
+  function usPhone() {
+    try {
+      var lang = (navigator.language || "").toLowerCase();
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      return lang === "en-us" && /^(America\/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Boise|Detroit|Indiana|Kentucky|North_Dakota|Menominee|Juneau|Sitka|Nome|Adak|Metlakatla|Yakutat)|Pacific\/Honolulu)/.test(tz);
+    } catch (e) { return false; }
+  }
+  // City from the phone's time zone, e.g. "Asia/Kolkata" -> "Kolkata".
+  // Only a fallback for when the connection lookup finds nothing.
+  function tzCityGuess() {
+    try {
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      if (!tz || tz.indexOf("/") < 0 || /^(Etc|UTC|GMT)/.test(tz)) return "";
+      var city = tz.split("/").pop().replace(/_/g, " ");
+      if (city === "Calcutta") city = "Kolkata";
+      if (city === "Saigon") city = "Ho Chi Minh City";
+      if (city === "Kiev") city = "Kyiv";
+      return city;
+    } catch (e) { return ""; }
+  }
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     funnelPing("reg_clicked");
-    if (!registerDraft.location.trim()) { funnelPing("reg_err_city"); regError = t("Enter the city where you're based."); renderApp(); return; }
-    if (locCityBlocks) { funnelPing("reg_err_city"); regError = locCityError; renderApp(); return; }
-    if (!name) { funnelPing("reg_err_name"); regError = t("Enter your name."); renderApp(); return; }
+    // Blank fields: name first (it's the top box), then city. The empty box
+    // gets a red outline and focus, and the button says what's missing, so a
+    // tap on Continue never looks like nothing happened.
+    regErrField = "";
+    if (!name) { funnelPing("reg_err_name"); regErrField = "name"; regError = t("Enter your name."); renderApp(); return; }
+    if (!registerDraft.location.trim()) { funnelPing("reg_err_city"); regErrField = "city"; regError = t("Enter the city where you're based."); renderApp(); return; }
+    if (locCityBlocks) { funnelPing("reg_err_city"); regErrField = "city"; regError = locCityError; renderApp(); return; }
     // Only the first registrant's choice is asked for (see
     // registrationFlow()) and only their choice is ever saved (the server
     // ignores a relationship on a room that already has one) — so this is
@@ -3664,21 +3690,28 @@ const RAW = String.raw`<!doctype html>
     // the city and the phone; who the room is for is asked on the invite
     // card; military time is a setting in the room.
     form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    form.appendChild(textField(registerDraft.name, "Preferred name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); }));
+    var nameInputEl = textField(registerDraft.name, usPhone() ? "New phone, who dis?" : "Your name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; } });
+    form.appendChild(nameInputEl);
     form.appendChild(h("div", { class: "reg-label", text: t("Your city") }));
-    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); suggestLanguageFromLocation(registerDraft, v); });
+    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); if (v && regErrField === "city") { regErrField = ""; regError = ""; } suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
     if (!registerDraft.location && !registerDraft.ipCityTried) {
       registerDraft.ipCityTried = true;
+      var fillCity = function (label) {
+        if (!label || registerDraft.location || registerDraft.locationTouched) return;
+        registerDraft.location = label;
+        if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = label;
+        suggestLanguageFromLocation(registerDraft, label);
+      };
+      // If the connection lookup comes back empty, fall back to the city in
+      // the phone's time zone (America/Los_Angeles -> Los Angeles). It can
+      // still be changed; it just means the box is rarely blank.
       fetch("/api/ip-city").then(function (r) { return r.json(); }).then(function (d) {
-        if (!d || !d.label || registerDraft.location || registerDraft.locationTouched) return;
-        registerDraft.location = d.label;
-        if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = d.label;
-        suggestLanguageFromLocation(registerDraft, d.label);
-      }).catch(function () {});
+        fillCity((d && d.label) || tzCityGuess());
+      }).catch(function () { fillCity(tzCityGuess()); });
     }
     if (registerDraft.showLanguage) {
       form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
@@ -3703,7 +3736,14 @@ const RAW = String.raw`<!doctype html>
       form.appendChild(more);
     }
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
-    var btn = h("button", { class: "puzzle-upload-btn reg-cta", text: regBusy ? t("Just a moment…") : t("Continue") });
+    var errEl = regErrField === "name" ? nameInputEl : regErrField === "city" ? lastLocInputEl : null;
+    if (errEl) {
+      errEl.style.borderColor = "#B3361F";
+      errEl.style.boxShadow = "0 0 0 3px rgba(179,54,31,0.18)";
+      setTimeout(function () { try { errEl.focus(); errEl.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {} }, 60);
+    }
+    var btnLabel = regBusy ? t("Just a moment…") : regErrField === "name" ? t("Add your name to continue") : regErrField === "city" ? t("Add your city to continue") : t("Continue");
+    var btn = h("button", { class: "puzzle-upload-btn reg-cta", text: btnLabel });
     btn.disabled = regBusy;
     btn.addEventListener("click", submitRegister);
     form.appendChild(btn);

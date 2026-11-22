@@ -93,6 +93,9 @@ export type PushPayload = {
   body?: string;
   badge: number; // 0 clears the badge
   tag?: string; // collapses repeats of the same notification type
+  // Page to open when the notification is tapped (same-site path, e.g.
+  // "/r/room/?resend=1"). Optional; without it the app opens as usual.
+  url?: string;
   // A background push that only updates the badge — no visible alert or
   // sound. Used to keep a native badge in sync (e.g. clear it to 0) for
   // someone who already answered today, where a "your turn" banner would
@@ -196,6 +199,7 @@ function sendApnsPushToHost(
         aps: payload.silent
           ? { badge: payload.badge }
           : { alert: { title: payload.title, body: payload.body }, badge: payload.badge, sound: "default" },
+        ...(payload.url ? { url: payload.url } : {}),
       })
     );
   });
@@ -259,6 +263,7 @@ async function sendFcmPush(deviceToken: string, payload: PushPayload): Promise<{
         message: {
           token: deviceToken,
           notification: { title: payload.title || "Nearune", body: payload.body || "" },
+          ...(payload.url ? { data: { url: payload.url } } : {}),
           android: {
             priority: "HIGH",
             notification: { channel_id: "nearune", ...(payload.tag ? { tag: payload.tag.slice(0, 64) } : {}) },

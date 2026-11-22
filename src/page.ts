@@ -1391,7 +1391,7 @@ const RAW = String.raw`<!doctype html>
       viewerKey = viewerParam;
       localStorage.setItem(VIEWER_LS_KEY, viewerParam);
       if (ROOM) localStorage.setItem(MY_ROOM_LS_KEY, ROOM);
-      var cleanUrl = location.pathname;
+      var cleanUrl = location.pathname + (/[?&]resend=1/.test(location.search) ? "?resend=1" : "");
       history.replaceState(null, "", cleanUrl);
     }
   } catch (e) {}
@@ -3185,6 +3185,22 @@ const RAW = String.raw`<!doctype html>
       if (CapApp.getLaunchUrl) CapApp.getLaunchUrl().then(function (r) { if (r && r.url) handleAppUrl(r.url, true); }, function () {});
     } catch (e) {}
   })();
+
+  // Tapping a notification that carries a page (e.g. an invite reminder)
+  // opens that page in the app.
+  (function () {
+    try {
+      var PNt = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+      if (!PNt || !PNt.addListener) return;
+      PNt.addListener("pushNotificationActionPerformed", function (a) {
+        try {
+          var d = (a && a.notification && a.notification.data) || {};
+          var u = typeof d.url === "string" ? d.url : "";
+          if (u.charAt(0) === "/" && u.charAt(1) !== "/" && (location.pathname + location.search) !== u) location.href = u;
+        } catch (e) {}
+      });
+    } catch (e) {}
+  })();
   var registerDraft = { name: "", email: "", location: "", language: "", languageTouched: false, relationship: "", military: false, roomName: "" };
   var acceptDraft = { name: "", location: "", language: "", languageTouched: false };
   // Name, city and language from an earlier sign-up on this device (kept only
@@ -4020,6 +4036,62 @@ const RAW = String.raw`<!doctype html>
   // sent, and nothing happens in Nearune until the other person joins.
   // It stays until they send, copy the link, or choose Make a friend.
   var ENVELOPE_SVG = '<svg viewBox="0 0 84 62" width="84" height="62" aria-hidden="true"><rect x="2" y="2" width="80" height="58" rx="8" fill="#FFF7EC" stroke="#C9A98A" stroke-width="2.5"/><path d="M4 6 L42 34 L80 6" fill="none" stroke="#C9A98A" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+  // "Send it again": opened from an invite reminder (?resend=1). Matches
+  // how the invite first went out: email -> one tap re-emails it (when this
+  // phone remembers the address); Instagram -> "Send to @handle"; link ->
+  // the share sheet, where their recent chat is usually at the top.
+  var resendOpen = /[?&]resend=1/.test(location.search);
+  var resendBusy = false, resendDone = "";
+  function closeResend() {
+    resendOpen = false;
+    try { history.replaceState(null, "", location.pathname + location.search.replace(/[?&]resend=1/, "").replace(/^&/, "?")); } catch (e) {}
+    renderApp();
+  }
+  function resendCard() {
+    if (!resendOpen || !state || state.origin === "friend" || !viewerKey || !isConfirmedKey(viewerKey)) return null;
+    var other = viewerKey === "mark" ? "nikita" : "mark";
+    if (state.people && state.people[other] && state.people[other].confirmed) { resendOpen = false; return null; }
+    if (!state.relationship) return null; // the send card above handles this
+    var envelope = h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "rsSky").replace(/wmHeartClip/g, "rsHeartClip") + '</div>' });
+    var handle = state.pendingInviteHandle && state.pendingInviteHandle[other];
+    var email = sentInviteEmail();
+    var kids = [envelope, h("h2", { text: t("They haven't joined yet") }),
+      h("p", { text: t("Send your invite again. They'll see today's question and a button to join.") })];
+    if (resendDone) {
+      kids.push(h("p", { style: "font-weight:700;margin-top:10px;", text: resendDone }));
+    } else if (email) {
+      var eb = h("button", { type: "button", class: "puzzle-upload-btn reg-cta", text: resendBusy ? t("Sending…") : t("Email it again to ") + email });
+      eb.style.cssText = "width:100%;margin-top:8px;";
+      eb.addEventListener("click", function () {
+        if (resendBusy) return; resendBusy = true; renderApp();
+        fetch(RP + "/api/invite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(withInviteQuestion({ who: viewerKey, contact: email })) })
+          .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+          .then(function (res) {
+            resendBusy = false;
+            if (res.ok) { if (res.data && res.data.people) state = res.data; nrTrack("invite_sent"); markInviteShared(); resendDone = t("Sent! We emailed your invite to ") + email + "."; }
+            else resendDone = t("Couldn't send the email. Try sharing the link instead.");
+            renderApp();
+          }).catch(function () { resendBusy = false; resendDone = t("Couldn't send the email. Try sharing the link instead."); renderApp(); });
+      });
+      kids.push(eb);
+      if (lastInviteUrl) { var sl = shareLinkButton(lastInviteUrl, t("Or share the link"), "picker-btn"); sl.style.cssText = "width:100%;margin-top:10px;"; kids.push(sl); }
+    } else if (lastInviteUrl) {
+      var sb = shareLinkButton(lastInviteUrl, handle ? t("Send to @") + handle : t("Send your invite again"), "puzzle-upload-btn reg-cta");
+      sb.style.cssText = "width:100%;margin-top:8px;";
+      sb.addEventListener("click", function () { setTimeout(closeResend, 800); });
+      kids.push(sb);
+      var cp = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn"); cp.style.cssText = "width:100%;margin-top:10px;"; kids.push(cp);
+    } else {
+      if (!regBusy && !inviteAutoTried) { inviteAutoTried = true; setTimeout(submitInviteLink, 0); }
+      kids.push(h("p", { text: t("Getting your invite link ready…") }));
+    }
+    var nn = h("button", { class: "switch-link", type: "button", text: resendDone ? t("Done") : t("Not now") });
+    nn.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
+    nn.addEventListener("click", closeResend);
+    kids.push(nn);
+    return h("div", { class: "picker-overlay", style: "z-index:51;" }, [h("div", { class: "picker-card" }, kids)]);
+  }
+
   var inviteStepNeedsWho = false;
   function sendInviteStep() {
     if (!state || state.origin === "friend") return null;
@@ -4373,6 +4445,8 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(invCard);
       var invStep = sendInviteStep();
       if (invStep) app.appendChild(invStep);
+      var rsCard = invStep ? null : resendCard();
+      if (rsCard) app.appendChild(rsCard);
     }
     // Today's question sits right under the invite, so there's an obvious
     // next step after sending it.
@@ -6751,6 +6825,7 @@ self.addEventListener("push", function (event) {
   work.push(self.registration.showNotification(title, {
     body: body,
     tag: tag,
+    data: { url: typeof data.url === "string" && data.url.charAt(0) === "/" ? data.url : "" },
     icon: "/apple-touch-icon.png",
     badge: "/favicon.png"
   }));
@@ -6758,12 +6833,16 @@ self.addEventListener("push", function (event) {
 });
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
+  var target = (event.notification.data && event.notification.data.url) || "";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clientList) {
       for (var i = 0; i < clientList.length; i++) {
-        if ("focus" in clientList[i]) return clientList[i].focus();
+        if ("focus" in clientList[i]) {
+          if (target && "navigate" in clientList[i]) clientList[i].navigate(target);
+          return clientList[i].focus();
+        }
       }
-      if (self.clients.openWindow) return self.clients.openWindow("/");
+      if (self.clients.openWindow) return self.clients.openWindow(target || "/");
     })
   );
 });

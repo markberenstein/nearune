@@ -4010,26 +4010,60 @@ const RAW = String.raw`<!doctype html>
   // sent, and nothing happens in Nearune until the other person joins.
   // It stays until they send, copy the link, or choose Make a friend.
   var ENVELOPE_SVG = '<svg viewBox="0 0 84 62" width="84" height="62" aria-hidden="true"><rect x="2" y="2" width="80" height="58" rx="8" fill="#FFF7EC" stroke="#C9A98A" stroke-width="2.5"/><path d="M4 6 L42 34 L80 6" fill="none" stroke="#C9A98A" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+  var inviteStepNeedsWho = false;
   function sendInviteStep() {
-    if (!state || state.origin === "friend" || !state.relationship || !lastInviteUrl) return null;
+    if (!state || state.origin === "friend") return null;
     if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;
     funnelPing("invite_step");
-    var main = shareLinkButton(lastInviteUrl, t("Send your invite"), "puzzle-upload-btn reg-cta");
-    main.style.cssText = "width:100%;margin-top:4px;";
-    var copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
-    copy.style.cssText = "width:100%;margin-top:10px;";
+    var envelope = h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' });
+    // One card: who the invite is for (it picks the daily questions), then
+    // send. Both sign-ups on Nov 22 stopped on the "who" choice when it was
+    // a separate screen, so it lives on this card now.
+    var chosen = state.relationship || "";
+    var chips = h("div", { class: "reg-chips", style: "justify-content:center;margin-top:6px;" });
+    RELATIONSHIPS.forEach(function (pair) {
+      var on = chosen === pair[0];
+      var chip = h("button", { type: "button", class: "reg-chip", text: (on ? "\u2713 " : "") + t(pair[1]) });
+      if (on) chip.style.cssText = "background:#A8522A;color:#fff;border-color:#A8522A;";
+      if (chosen) { chip.disabled = true; if (!on) chip.style.opacity = "0.45"; }
+      if (!chosen && inviteStepNeedsWho) chip.style.boxShadow = "0 0 0 3px rgba(179,54,31,0.25)";
+      chip.addEventListener("click", function () {
+        chip.disabled = true; inviteStepNeedsWho = false;
+        fetch(RP + "/api/relationship", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, relationship: pair[0] }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d && d.people) state = d; renderApp(); })
+          .catch(function () { chip.disabled = false; });
+      });
+      chips.appendChild(chip);
+    });
+    var main, copy = null;
+    if (chosen && lastInviteUrl) {
+      main = shareLinkButton(lastInviteUrl, t("Send your invite"), "puzzle-upload-btn reg-cta");
+      copy = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn");
+      copy.style.cssText = "width:100%;margin-top:10px;";
+    } else {
+      main = h("button", { type: "button", class: "puzzle-upload-btn reg-cta", text: chosen ? t("Getting your link ready…") : t("Send your invite") });
+      main.style.opacity = "0.55";
+      if (!chosen) main.addEventListener("click", function () { inviteStepNeedsWho = true; renderApp(); });
+    }
+    main.style.width = "100%"; main.style.marginTop = "16px";
     var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("No one in mind? Make a friend instead") });
     mf.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
     mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
-    return h("div", { class: "picker-overlay", style: "z-index:50;" }, [
-      h("div", { class: "picker-card" }, [
-        h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' }),
-        h("h2", { text: t("Last step: send your invite") }),
-        h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. Your link works for 3 days, but don't wait to start your Nearune journey.") }),
-        main, copy, mf
-      ])
-    ]);
+    var kids = [
+      envelope,
+      h("h2", { text: t("Last step: send your invite") }),
+      h("p", { text: t("Your Nearune journey begins when they join. Send your link by text, WhatsApp, any app, or email. Your link works for 3 days, but don't wait to start your Nearune journey.") }),
+      h("div", { class: "reg-label", style: "margin-top:14px;text-align:center;", text: t("Who are you inviting?") }),
+      chips
+    ];
+    if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who you're inviting first. It sets your daily questions.") }));
+    kids.push(main);
+    if (copy) kids.push(copy);
+    kids.push(mf);
+    return h("div", { class: "picker-overlay", style: "z-index:50;" }, [h("div", { class: "picker-card" }, kids)]);
   }
+
 
   // Home screen while your invited partner hasn't joined yet: your own clock,
   // "Pending" (with days since the invite) for them, your own weather and Local

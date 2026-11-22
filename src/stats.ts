@@ -80,6 +80,11 @@ export async function computeStats(full = true) {
   // Sign-up funnel for the last 24 hours: people who opened the sign-up form
   // vs. people who finished. Unfinished ones aren't rooms and aren't listed.
   let signupsStarted = 0, signupsFinished = 0;
+  // Where unfinished sign-ups (last 24 hours) stopped, and which form errors
+  // they hit. These rooms aren't in the room list, so this is the only place
+  // they show up.
+  const abandoned: Record<string, number> = {};
+  const abandonedErrors: Record<string, number> = {};
   const dayAgo = Date.now() - 86400000;
   for (const id of ids) {
     let st: any;
@@ -87,6 +92,12 @@ export async function computeStats(full = true) {
     const signedUp = Object.values(st?.people || {}).some((p: any) => p && p.name);
     const recent = !!(st?.createdAt && Date.parse(st.createdAt) >= dayAgo);
     if (recent) { signupsStarted++; if (signedUp) signupsFinished++; }
+    if (recent && !signedUp) {
+      const step = furthestStep(st, [], 0);
+      abandoned[step] = (abandoned[step] || 0) + 1;
+      const f = (st && st.funnel) || {};
+      for (const k of Object.keys(f)) if (k.startsWith("reg_err_")) abandonedErrors[k.slice(8)] = (abandonedErrors[k.slice(8)] || 0) + 1;
+    }
     if (!signedUp) continue;
     rooms++;
     try { if (Object.values(st?.answers || {}).some((day: any) => day && (day.mark || day.nikita))) answered++; } catch {}
@@ -135,7 +146,7 @@ export async function computeStats(full = true) {
     for (const c of byCity.values()) { const w = prevWk.get(c.lat.toFixed(1) + "," + c.lon.toFixed(1)); if (w) c.wk = w; }
     return {
       at: new Date().toISOString(),
-      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished },
+      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors },
       cities: [...byCity.values()].sort((a, b) => b.n - a.n),
       qa: lastFull.qa,
       weatherkit: lastFull.weatherkit,
@@ -284,7 +295,7 @@ export async function computeStats(full = true) {
   const at = new Date().toISOString();
   lastFull = {
     at,
-    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished },
+    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors },
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,

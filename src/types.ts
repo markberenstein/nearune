@@ -145,7 +145,7 @@ export type State = {
   // a reminder); it is deleted with the whole entry when they confirm, and
   // stripped after 7 days. reminders/remindedAt cap how often we nudge.
   pendingConfirm?: Partial<Record<PersonKey, { token: string; at: string; email?: string; reminders?: number; remindedAt?: string }>>;
-  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string; link?: boolean }>>;
+  pendingInvite?: Partial<Record<PersonKey, { token: string; at: string; instagram?: string; link?: boolean; q?: string; qKey?: string }>>;
   // Server-computed on every response (never persisted, see forClient) —
   // the Instagram handle an invite was addressed to, if it went to a handle
   // rather than an email.

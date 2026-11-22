@@ -10,7 +10,29 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export function buildInvitePage(opts: { origin: string; inviter: string; roomId: string; dest: string }): string {
+export type InvitePreview = { question: string; isToday: boolean; city: string; tz: string; answered: boolean };
+
+// A small look inside the room they're invited to: both clocks, the
+// question waiting for them, and whether the inviter already answered.
+function previewBlock(p: InvitePreview, who: string): string {
+  const city = esc((p.city || "").split(",")[0].trim() || who);
+  const tz = esc(p.tz || "");
+  return `
+  <div class="peek">
+    <div class="clocks">
+      <div class="clock"><span class="lbl">${city}</span><b data-tz="${tz}">&nbsp;</b></div>
+      <span class="plane" aria-hidden="true">&#x2708;&#xFE0E;</span>
+      <div class="clock you"><span class="lbl">You</span><b data-tz="">&nbsp;</b></div>
+    </div>
+    <div class="q">
+      <span class="lbl">${p.isToday ? "Today's question" : "A question for you two"}</span>
+      <p>${esc(p.question)}</p>
+      ${p.answered ? `<div class="ans">&#x1F512; ${who} already answered. Join to see it.</div>` : `<div class="ans">Answer it, then see ${who === "Someone" ? "their" : who + "'s"} answer.</div>`}
+    </div>
+  </div>`;
+}
+
+export function buildInvitePage(opts: { origin: string; inviter: string; roomId: string; dest: string; preview?: InvitePreview | null }): string {
   const appStoreUrl = Bun.env.APP_STORE_URL || DEFAULT_APP_STORE_URL;
   const who = opts.inviter ? esc(opts.inviter) : "Someone";
   const title = who + " invited you to Nearune";
@@ -46,6 +68,17 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
 .badge,.badge2{display:inline-block;line-height:0}
 .badge img,.badge2 img{height:48px;width:auto}
 .web{display:inline-block;margin-top:20px;color:var(--muted);font-size:.9rem;text-decoration:underline}
+.peek{background:var(--cream);border:1px solid var(--line);border-radius:22px;padding:14px;margin:0 0 24px;text-align:left}
+.clocks{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.clock{flex:1 1 0;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 10px;text-align:center}
+.clock.you{border-color:var(--rust)}
+.clock b{display:block;font-size:1.15rem;font-weight:800;margin-top:2px}
+.plane{color:var(--muted);font-size:.9rem}
+.lbl{display:block;font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q{background:var(--rust);color:#fff;border-radius:16px;padding:14px 16px}
+.q .lbl{color:rgba(255,255,255,.8)}
+.q p{margin:6px 0 0;font-size:1.08rem;font-weight:700;line-height:1.3}
+.ans{margin-top:10px;font-size:.85rem;opacity:.9}
 .code{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}
 .code b{display:block;color:var(--ink);font-size:1.15rem;margin-top:2px;word-break:break-all}
 </style>
@@ -55,6 +88,7 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
   <img class="logo" src="/apple-touch-icon.png" alt="Nearune">
   <h1 class="name">Nearune</h1>
   <p class="sub">${who} invited you</p>
+  ${opts.preview ? previewBlock(opts.preview, who) : ""}
   <p class="get">Download the app</p>
   <div class="badges">
     <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
@@ -66,6 +100,19 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
 </main>
 <script>
 try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) location.replace(${JSON.stringify(opts.dest).replace(/</g, "\\u003c")}); } catch (e) {}
+</script>
+<script>
+// Live clocks in the room peek: the inviter's time and the visitor's own.
+(function () {
+  function tick() {
+    var els = document.querySelectorAll(".clock b");
+    for (var i = 0; i < els.length; i++) {
+      var tz = els[i].getAttribute("data-tz");
+      try { els[i].textContent = new Intl.DateTimeFormat(undefined, tz ? { timeZone: tz, hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" }).format(new Date()); } catch (e) {}
+    }
+  }
+  tick(); setInterval(tick, 30000);
+})();
 </script>
 <script>var DEST = ${JSON.stringify(opts.dest).replace(/</g, "\\u003c")};</script>
 <script>

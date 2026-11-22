@@ -3763,7 +3763,7 @@ const RAW = String.raw`<!doctype html>
     if (!email) { regError = t("Enter an email (or Instagram handle) first."); renderApp(); return; }
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, contact: email })
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(withInviteQuestion({ who: viewerKey, contact: email }))
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;
@@ -3801,10 +3801,20 @@ const RAW = String.raw`<!doctype html>
   function inviteMessage(url) {
     return url;
   }
+  // Today's question rides along with the invite so the invite page can
+  // show it ("Here's today's question"). The server only shows it if it's
+  // one of Nearune's own questions.
+  function withInviteQuestion(body) {
+    try {
+      var k = state && state.todayKey;
+      if (k) { body.q = questionForKey(k); body.qKey = k; }
+    } catch (e) {}
+    return body;
+  }
   function submitInviteLink() {
     regBusy = true; regError = ""; renderApp();
     fetch(RP + "/api/invite", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, via: "link" })
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(withInviteQuestion({ who: viewerKey, via: "link" }))
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         regBusy = false;

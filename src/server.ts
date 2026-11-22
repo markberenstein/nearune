@@ -42,6 +42,14 @@ import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEm
 import { APP_STORE_BADGE_B64 } from "./badge";
 import { GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_BADGE_PNG_B64, GOOGLE_PLAY_URL } from "./play-badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildChildSafetyPage, buildManifestJson, buildServiceWorkerJs } from "./page";
+
+// The app's question lists live in the page script; a question sent with an
+// invite is only shown on the invite page if it appears there word for word.
+let knownQuestionSource = "";
+function isKnownQuestion(q: string): boolean {
+  if (!knownQuestionSource) { try { knownQuestionSource = buildPageHtml("", todayKeyPT()); } catch { return false; } }
+  return q.length >= 10 && knownQuestionSource.includes(JSON.stringify(q));
+}
 import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
 import { buildInvitePage } from "./invite-page";
@@ -277,7 +285,16 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       // preview ("Mark invited you to Nearune").
       const sOther = sWho === "mark" ? "nikita" : "mark";
       const sInviter = sState.people && sState.people[sOther] && sState.people[sOther]!.confirmed ? sState.people[sOther]!.name : "";
-      return new Response(buildInvitePage({ origin: publicOrigin, inviter: sInviter, roomId: sRoom, dest }), {
+      // A peek at the room: the inviter's city and clock, today's question,
+      // and whether they've already answered it.
+      const sInv = sWho ? sState.pendingInvite![sWho as PersonKey]! : null;
+      const sToday = todayKeyFor(sState);
+      const sP = sState.people && sState.people[sOther];
+      const sAnswered = !!(sState.answers && sState.answers[sToday] && (sState.answers[sToday] as any)[sOther]);
+      const preview = sInv && sInv.q && sP && sP.confirmed
+        ? { question: sInv.q, isToday: sInv.qKey === sToday, city: effectiveLocation(sP as any, sToday) || "", tz: sP.tz || "", answered: sAnswered && sInv.qKey === sToday }
+        : null;
+      return new Response(buildInvitePage({ origin: publicOrigin, inviter: sInviter, roomId: sRoom, dest, preview }), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }
@@ -1509,13 +1526,21 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const priorLive = !!(priorInvite && priorInvite.token && Date.now() - Date.parse(priorInvite.at) < INVITE_TTL_MS);
       const token = priorLive ? priorInvite!.token : crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       const madeAt = priorLive ? priorInvite!.at : new Date().toISOString();
+      // Today's question for the invite page: only kept if it's one of
+      // Nearune's own questions (never free text from the request).
+      const qRaw = typeof body?.q === "string" ? body.q.trim().slice(0, 300) : "";
+      const qKey = typeof body?.qKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.qKey) ? body.qKey : "";
+      const q = qRaw && qKey && isKnownQuestion(qRaw) ? qRaw : "";
       const state = await saveState(roomId, (s) => {
         if (!s.pendingInvite) s.pendingInvite = {};
-        s.pendingInvite[other] = handle
+        const base: any = handle
           ? { token, at: madeAt, instagram: handle }
           : viaLink
             ? { token, at: madeAt, link: true }
             : { token, at: madeAt };
+        if (q) { base.q = q; base.qKey = qKey; }
+        else if (priorLive && priorInvite!.q) { base.q = priorInvite!.q; base.qKey = priorInvite!.qKey; }
+        s.pendingInvite[other] = base;
       });
       const inviteUrl = roomId
         ? publicOrigin + "/j/" + roomId + "/" + token

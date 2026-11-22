@@ -1015,9 +1015,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
           // poll loop.
           const ownSub = state.pushSubs[who];
           if (ownSub && ownSub.kind === "apns") {
+            // Same words as the line under their answer in the room.
+            const otherKey = (["mark", "nikita"] as PersonKey[]).find((k) => k !== who)!;
+            const otherName = state.people?.[otherKey]?.name;
             sendPush(ownSub, {
               title: "Answer saved",
-              body: "Waiting on your partner to answer today's question.",
+              body: otherName ? "Sent — waiting for " + otherName + " to answer too." : "Sent — they'll see it when they join.",
               badge: count,
               tag: "own-answered",
             })

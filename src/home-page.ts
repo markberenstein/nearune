@@ -40,6 +40,9 @@ export function buildHomePage(): string {
   .box.empty.first .plus, .box.empty.first .big, .box.empty.first .tr { color:var(--on-accent); }
   .box.friend { background:var(--friend); border:none; color:var(--on-friend); }
   .box.friend .x { color:var(--on-friend); }
+  .box.friend.lead { box-shadow:0 0 0 3px var(--accent), var(--shadow); }
+  .box.friend.lead .small { color:var(--on-friend); opacity:0.9; }
+  .box.empty.second .big { font-size:1rem; color:var(--ink); }
   .box.sky { color:#FFFFFF; border:1px solid rgba(255,255,255,0.20); text-shadow:0 1px 8px rgba(0,0,0,0.30); justify-content:flex-end; align-items:flex-start; text-align:left; gap:2px; padding:16px; }
   .box.sky .who { font-size:0.7rem; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .box.sky .time { font-size:1.75rem; font-weight:800; letter-spacing:-0.03em; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -93,7 +96,7 @@ export function buildHomePage(): string {
   <div class="brand"><img src="/apple-touch-icon.png" alt=""><h1>Nearune</h1></div>
   <div class="welcome" id="welcome" hidden>
     <p class="w1">One question a day with someone you care about.</p>
-    <p class="w2">You both answer, then see each other&#39;s answer, plus a peek at their weather, time and local life. Invite your person, or tap <strong>Make a friend</strong> to be matched with someone new.</p>
+    <p class="w2">You both answer, then see each other&#39;s answer, plus a peek at their weather, time and local life. Tap <strong>Make a friend</strong> to be matched with someone new, or invite someone you know.</p>
   </div>
   <div class="grid" id="slots"></div>
   <p class="msg" id="msg"></p>
@@ -430,14 +433,18 @@ export function buildHomePage(): string {
       })
       .catch(function () { creating = false; location.href = "/new"; });
   }
-  function emptyBox(first) {
-    var box = el("a", { class: "box empty" + (first ? " first" : ""), href: "/new", "aria-label": first ? "Invite your first Nearune partner" : "Start a room" });
+  // second: the invite tile shown after Make a friend to someone brand new, plain instead of highlighted
+  function emptyBox(first, second) {
+    var box = el("a", { class: "box empty" + (first ? (second ? " second" : " first") : ""), href: "/new", "aria-label": second ? "Invite someone you know" : first ? "Invite your first Nearune partner" : "Start a room" });
     box.addEventListener("click", function (ev) {
       nrTrack("tap_invite");
       if (first) { ev.preventDefault(); createRoomNow(box); }
     });
     box.appendChild(el("div", { class: "plus", text: "+" }));
-    if (first) {
+    if (second) {
+      box.appendChild(el("div", { class: "big", text: "Invite someone you know" }));
+      addTranslation(box, "Invite someone you know");
+    } else if (first) {
       var big = el("div", { class: "big", text: "Invite your first Nearune partner" });
       box.appendChild(big);
       addTranslation(box, "Invite your first Nearune partner");
@@ -619,7 +626,8 @@ export function buildHomePage(): string {
     document.body.appendChild(bg);
   }
 
-  function friendBox() {
+  // lead: the first, highlighted tile for someone brand new
+  function friendBox(lead) {
     var f = jget(LS_FRIEND, null);
     if (f && f.status === "matched" && !rooms.some(function (r) { return r.id === f.roomId; })) {
       var m = el("a", { class: "box friend", href: "/j/" + f.roomId + "/" + f.token });
@@ -639,10 +647,15 @@ export function buildHomePage(): string {
       w.appendChild(cx);
       return w;
     }
-    var box = el("button", { class: "box friend", type: "button" });
+    var box = el("button", { class: "box friend" + (lead ? " lead" : ""), type: "button" });
     box.appendChild(el("div", { class: "glyph", text: "🤝" }));
     box.appendChild(el("div", { class: "big", text: "Make a friend" }));
     addTranslation(box, "Make a friend");
+    if (lead) {
+      var sub = el("div", { class: "small", text: "Get matched with someone new" });
+      box.appendChild(sub);
+      addTranslation(sub, "Get matched with someone new");
+    }
     box.addEventListener("click", ageSheet);
     return box;
   }
@@ -675,19 +688,34 @@ export function buildHomePage(): string {
     if (wel && !wel.hidden) {
       var w1 = wel.querySelector(".w1"), w2 = wel.querySelector(".w2");
       addTranslation(w1, "One question a day with someone you care about.");
-      addTranslation(w2, "You both answer, then see each other's answer, plus a peek at their weather, time and local life. Invite your person, or tap Make a friend to be matched with someone new.");
+      addTranslation(w2, "You both answer, then see each other's answer, plus a peek at their weather, time and local life. Tap Make a friend to be matched with someone new, or invite someone you know.");
     }
-    regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
-    for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox(regular.length === 0 && i === 0));
     var fr = friendRooms();
-    fr.forEach(function (r) { slots.appendChild(roomBox(r, true)); });
-    if (fr.length < MAX_FRIENDS) slots.appendChild(friendBox());
+    // Someone brand new (no rooms, not waiting for a match) almost always came from an ad and has no one in mind, and the
+    // invites they made were never opened. Make a friend comes first for them; "Invite someone you know" is the second tile.
+    if (rooms.length === 0 && !jget(LS_FRIEND, null)) {
+      slots.appendChild(friendBox(true));
+      slots.appendChild(emptyBox(true, true));
+      for (var j = 1; j < MAX_ROOMS; j++) slots.appendChild(emptyBox(false));
+    } else {
+      regular.forEach(function (r) { slots.appendChild(roomBox(r, false)); });
+      for (var i = regular.length; i < MAX_ROOMS; i++) slots.appendChild(emptyBox(regular.length === 0 && i === 0));
+      fr.forEach(function (r) { slots.appendChild(roomBox(r, true)); });
+      if (fr.length < MAX_FRIENDS) slots.appendChild(friendBox());
+    }
     document.getElementById("msg").textContent = friendMsg;
     pollFriend();
   }
 
   render();
   nrTrack("open");
+  // Opened from a Make a friend room's "Start a room with them": make the new room right away and go to its invite,
+  // as if the first empty tile was tapped. With no free room slot, Home just shows the rooms.
+  if (/[?&]invite=1/.test(location.search)) {
+    try { history.replaceState(null, "", location.pathname); } catch (e) {}
+    var freeBox = document.querySelector("#slots .box.empty");
+    if (freeBox) createRoomNow(freeBox);
+  }
   // Time spent: seconds Nearune is on screen (visible), sent about once a
   // minute and when the app is hidden. Same random device ID, no content.
   (function () {

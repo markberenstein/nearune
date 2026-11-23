@@ -5,7 +5,7 @@
 // as the email index.
 
 import { readSideFile, writeSideFile, createRoom, saveState } from "./storage";
-import { sendPush } from "./push";
+import { fcmTokenAlive, sendPush } from "./push";
 
 // Native app waiters can leave a push token so we can tell them the moment
 // someone matches (the app may be closed by then).
@@ -159,7 +159,18 @@ export function friendJoin(device: string, profile?: FriendProfile): Promise<Joi
       await save();
       return { status: "waiting", ticket: mine.ticket } as JoinResult;
     }
-    const idx = pickPartner(d, device, now);
+    // Skip waiters whose Android app is gone: their push token is dead (uninstalled), so a match with them was a room
+    // with nobody on the other side and a "match" notification that never arrived. They're dropped from the line.
+    let idx = pickPartner(d, device, now);
+    for (let tries = 0; idx >= 0 && tries < 5; tries++) {
+      const cand = d.queue[idx];
+      if (!cand.push || cand.push.kind !== "fcm") break;
+      const alive = await fcmTokenAlive(cand.push.token);
+      if (alive !== false) break;
+      console.log("[friend] dropped a waiter whose app is gone (push token dead), device=" + cand.device.slice(0, 6));
+      d.queue.splice(idx, 1);
+      idx = pickPartner(d, device, now);
+    }
     if (idx < 0) {
       const ticket = rand12() + rand12();
       d.queue.push({ ticket, device, at: now, seen: now, ...(profile ? { profile } : {}) });

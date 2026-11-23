@@ -4080,21 +4080,41 @@ const RAW = String.raw`<!doctype html>
       main.style.marginTop = "12px";
       card.appendChild(main);
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:6px;", text: t("Your invite link works for 3 days.") }));
-      var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email it") });
+      var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email or text it") });
       emailBtn.addEventListener("click", function () { showEmailInvite = !showEmailInvite; regError = ""; renderApp(); });
       card.appendChild(h("div", { style: "display:flex;gap:8px;justify-content:center;margin-top:10px;" }, [
         emailBtn,
         copyLinkButton(lastInviteUrl, t("Copy link"), "puzzle-choose-btn")
       ]));
       if (showEmailInvite) {
-        var em = h("input", { type: "email", placeholder: t("Their email"), value: inviteEmailDraft });
-        em.setAttribute("inputmode", "email"); em.setAttribute("autocapitalize", "off"); em.setAttribute("autocorrect", "off");
+        // An email address or a phone number: a phone number opens a text message with the invite already in it
+        // (people typed phone numbers here and got "invalid").
+        var em = h("input", { type: "text", placeholder: t("Their email or phone number"), value: inviteEmailDraft });
+        em.setAttribute("autocapitalize", "off"); em.setAttribute("autocorrect", "off"); em.setAttribute("autocomplete", "off");
         em.style.cssText = "width:100%;box-sizing:border-box;margin-top:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:11px 16px;color:var(--ink);font:inherit;font-size:16px;outline:none;";
         em.addEventListener("input", function () { inviteEmailDraft = em.value; });
-        var send = h("button", { class: "puzzle-upload-btn", type: "button", text: regBusy ? t("Sending…") : t("Send invite email") });
+        var send = h("button", { class: "puzzle-upload-btn", type: "button", text: regBusy ? t("Sending…") : t("Send invite") });
         send.disabled = regBusy;
         send.style.marginTop = "8px";
-        send.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); submitInvite(); });
+        send.addEventListener("click", function () {
+          var v = (inviteEmailDraft || "").trim();
+          var digits = v.replace(/[^0-9]/g, "");
+          if (/^[+0-9 ().\-]+$/.test(v) && digits.length >= 7 && digits.length <= 15) {
+            // a phone number: open the phone's Messages app to that number with the invite written in
+            var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+            var num = (v.charAt(0) === "+" ? "+" : "") + digits;
+            regError = "";
+            nrTrack("invite_sent"); markInviteShared();
+            location.href = "sms:" + num + (ios ? "&" : "?") + "body=" + encodeURIComponent(inviteMessage(lastInviteUrl));
+            return;
+          }
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+            regError = t("Enter their email address or phone number.");
+            renderApp();
+            return;
+          }
+          nrTrack("invite_sent"); markInviteShared(); submitInvite();
+        });
         card.appendChild(em); card.appendChild(send);
       } else if (lastInviteEmail && !regError) {
         card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:8px;", text: "\u2713 " + t("Invite emailed to") + " " + lastInviteEmail }));
@@ -4735,8 +4755,19 @@ const RAW = String.raw`<!doctype html>
     // that call site above). Only renders while notifications are actually
     // off (pushToggleRow() returns null once they're on).
     addPart(app, "pushRow", pushToggleRow);
+    if (activeTab === "today") addPart(app, "friendInvite", friendInviteLine);
     addPart(app, "switchRow", switchRow);
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
+  }
+
+  // In a Make a friend room: a reminder that they can also start a room with someone they already know. It opens Home,
+  // which makes the new room and goes straight to its invite.
+  function friendInviteLine() {
+    if (!state || state.origin !== "friend" || !viewerKey || !isConfirmedKey(viewerKey)) return null;
+    var a = h("a", { class: "switch-link", href: "/home?invite=1", text: "\uD83D\uDC8C " + t("Have someone in mind too? Start a room with them") + " \u2192" });
+    a.style.cssText = "display:block;text-align:center;margin:14px auto 4px;font-size:0.95rem;font-weight:700;";
+    a.addEventListener("click", function () { nrTrack("friend_room_invite"); });
+    return a;
   }
 
   // A registered person shows their real name ("I'm Dan"). The legacy room

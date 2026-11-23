@@ -287,6 +287,29 @@ async function sendFcmPush(deviceToken: string, payload: PushPayload): Promise<{
 // Sends one push. Returns { ok, gone } — gone=true means the subscription is
 // dead (e.g. the user uninstalled the app or revoked permission) and the
 // caller should drop it from state so we stop retrying it forever.
+/**
+ * Is this Android push token still live? Firebase's dry run (validate_only) checks it without showing anything on the
+ * phone. false = the app was uninstalled or the token expired (404 UNREGISTERED); null = couldn't tell (treated as live).
+ */
+export async function fcmTokenAlive(deviceToken: string): Promise<boolean | null> {
+  if (!FIREBASE) return null;
+  try {
+    const access = await fcmAccessToken();
+    if (!access) return null;
+    const res = await fetch((Bun.env.FCM_BASE_URL || "https://fcm.googleapis.com") + "/v1/projects/" + FIREBASE.project_id + "/messages:send", {
+      method: "POST",
+      headers: { authorization: "Bearer " + access, "content-type": "application/json" },
+      body: JSON.stringify({ validate_only: true, message: { token: deviceToken, notification: { title: "Nearune", body: "check" } } }),
+    });
+    if (res.ok) return true;
+    const text = await res.text();
+    if (res.status === 404 || (res.status === 400 && /registration token|INVALID_ARGUMENT/i.test(text) && /token/i.test(text))) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendPush(
   sub: PushSubscriptionRecord,
   payload: PushPayload

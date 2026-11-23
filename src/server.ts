@@ -236,6 +236,8 @@ const FUNNEL_STEPS = new Set([
   "invite_shared", "invite_emailed",
   // Question first: picked who it's for, saw today's question, typed, tapped Send.
   "fq_who", "fq_question", "fq_typed", "fq_sent",
+  // Picked "Not sure yet? Match me with someone" (Make a friend) instead.
+  "fq_friend",
 ]);
 
 const PORT = Number(Bun.env.PORT) || 3000;
@@ -2404,6 +2406,31 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const { translated, via, eff } = await resolveTranslation(text, target, alt);
       console.log("[translate] via=" + via + " eff=" + eff + " ok=" + !!translated);
       return json({ translated });
+    }
+
+    // Many strings in one request (the room page batches what a screen needs).
+    // Same logic as /api/translate per string, a few at a time.
+    if (req.method === "POST" && restPath === "/api/translate-batch") {
+      const body = await readJson(req);
+      const langCodeRe = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
+      const targetRaw = typeof body?.target === "string" ? body.target : "en";
+      const target = langCodeRe.test(targetRaw) ? targetRaw : "en";
+      const altRaw = typeof body?.alt === "string" ? body.alt : "";
+      const alt = langCodeRe.test(altRaw) ? altRaw : "";
+      const texts: string[] = Array.isArray(body?.texts) ? body.texts.slice(0, 50).map((x: unknown) => (typeof x === "string" ? x.slice(0, 4000) : "")) : [];
+      const out: string[] = new Array(texts.length).fill("");
+      let next = 0, ok = 0;
+      const worker = async () => {
+        while (next < texts.length) {
+          const i = next++;
+          if (!texts[i].trim()) continue;
+          try { out[i] = (await resolveTranslation(texts[i], target, alt)).translated || ""; } catch { out[i] = ""; }
+          if (out[i]) ok++;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(8, texts.length) }, worker));
+      console.log("[translate-batch] target=" + target + " n=" + texts.length + " ok=" + ok);
+      return json({ translated: out });
     }
 
     if (req.method === "GET" && restPath === "/api/geocode") {

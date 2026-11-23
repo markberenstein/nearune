@@ -1802,22 +1802,49 @@ const RAW = String.raw`<!doctype html>
     var key = target + "|" + (alt || "") + "::" + text;
     if (translationCache.hasOwnProperty(key) || translationPending[key]) return;
     translationPending[key] = true;
-    fetch(RP + "/api/translate?target=" + encodeURIComponent(target) + (alt ? "&alt=" + encodeURIComponent(alt) : "") + "&text=" + encodeURIComponent(text))
-      .then(function (res) {
-        if (!res.ok) throw new Error("bad status");
-        return res.json();
-      })
+    // Batched: every string a screen needs goes in one request (per language)
+    // instead of dozens. Dozens of slow separate calls used up the phone's
+    // few connections and held up taps like "Save my answer".
+    trQueue.push({ key: key, text: text, target: target, alt: alt || "" });
+    if (!trFlushTimer) trFlushTimer = setTimeout(flushTranslateQueue, 60);
+  }
+  var trQueue = [], trFlushTimer = null;
+  function flushTranslateQueue() {
+    trFlushTimer = null;
+    var items = trQueue; trQueue = [];
+    var groups = {};
+    items.forEach(function (it) { var g = it.target + "|" + it.alt; (groups[g] = groups[g] || []).push(it); });
+    Object.keys(groups).forEach(function (g) {
+      var list = groups[g];
+      for (var i = 0; i < list.length; i += 40) sendTranslateBatch(list.slice(i, i + 40));
+    });
+  }
+  function sendTranslateBatch(list) {
+    fetch(RP + "/api/translate-batch", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ target: list[0].target, alt: list[0].alt, texts: list.map(function (it) { return it.text; }) })
+    })
+      .then(function (res) { if (!res.ok) throw new Error("bad status"); return res.json(); })
       .then(function (data) {
-        // An empty translation means the server's translator was refused
-        // for a moment — treat it like a failure and try again shortly,
-        // rather than caching "no translation" for the whole session.
-        if (!data || !data.translated) throw new Error("empty");
-        translationCache[key] = data.translated;
-        delete translationPending[key];
-        delete translationAttempts[key];
-        safeRerender();
+        var out = (data && data.translated) || [];
+        var any = false;
+        list.forEach(function (it, i) {
+          // An empty translation means the server's translator was refused
+          // for a moment — retry that one shortly rather than caching
+          // "no translation" for the whole session.
+          if (out[i]) {
+            translationCache[it.key] = out[i];
+            delete translationPending[it.key];
+            delete translationAttempts[it.key];
+            any = true;
+          } else translateFailed(it.key, it.text, it.target, it.alt);
+        });
+        if (any) safeRerender();
       })
-      .catch(function () {
+      .catch(function () { list.forEach(function (it) { translateFailed(it.key, it.text, it.target, it.alt); }); });
+  }
+  function translateFailed(key, text, target, alt) {
+    (function () {
         delete translationPending[key];
         var attempts = (translationAttempts[key] || 0) + 1;
         translationAttempts[key] = attempts;
@@ -1830,7 +1857,7 @@ const RAW = String.raw`<!doctype html>
           // Give up for now, but try again in a minute instead of never.
           setTimeout(function () { delete translationCache[key]; safeRerender(); }, 60000);
         }
-      });
+    })();
   }
 
   // Vocalizer — speaks text aloud via the browser's built-in text-to-speech
@@ -3758,6 +3785,19 @@ const RAW = String.raw`<!doctype html>
   // set) -> today's question and an answer box -> name, city, language.
   // The answer is saved right after sign-up.
   var fq = { step: "who", rel: "", text: "", q: "" };
+  // Kept on this phone too, so leaving the app, going back or a reload
+  // doesn't lose the choice or the answer they already typed.
+  var FQ_LS_KEY = "nearuneFirstAnswer:" + ROOM;
+  function saveFq() { try { localStorage.setItem(FQ_LS_KEY, JSON.stringify({ step: fq.step, rel: fq.rel, text: fq.text, q: fq.q, at: Date.now() })); } catch (e) {} }
+  try {
+    var fqSaved = JSON.parse(localStorage.getItem(FQ_LS_KEY) || "null");
+    if (fqSaved && Date.now() - (fqSaved.at || 0) < 14 * 86400000 && fqSaved.step !== "done") {
+      fq.rel = fqSaved.rel || ""; fq.text = fqSaved.text || ""; fq.q = fqSaved.q || "";
+      fq.step = fqSaved.step === "details" && fq.text ? "details" : fq.rel ? "answer" : "who";
+      if (fq.rel) registerDraft.relationship = fq.rel;
+      if (fq.step === "details") registerDraft.showLanguage = true;
+    }
+  } catch (e) {}
   // Calm reassurance under the first screens: what Nearune does NOT ask for.
   function privacyNote(text) {
     return h("div", { class: "priv-note" }, [h("span", { class: "priv-lock", text: "\uD83D\uDD12" }), h("span", { text: text })]);
@@ -3774,10 +3814,16 @@ const RAW = String.raw`<!doctype html>
       var chips = h("div", { class: "reg-chips", style: "margin-top:14px;" });
       RELATIONSHIPS.forEach(function (pair) {
         var chip = h("button", { type: "button", class: "reg-chip", text: t(pair[1]) });
-        chip.addEventListener("click", function () { fq.rel = pair[0]; registerDraft.relationship = pair[0]; fq.step = "answer"; renderApp(); });
+        chip.addEventListener("click", function () { fq.rel = pair[0]; registerDraft.relationship = pair[0]; fq.step = "answer"; saveFq(); renderApp(); });
         chips.appendChild(chip);
       });
       card.appendChild(chips);
+      // Many people arrive from an ad with no one in mind yet: Make a friend
+      // matches them with another person instead of leaving them stuck here.
+      var notSure = h("button", { type: "button", class: "switch-link", text: "\uD83E\uDD1D " + t("Not sure yet? Match me with someone") });
+      notSure.style.cssText = "display:block;margin:16px auto 0;font-size:0.95rem;";
+      notSure.addEventListener("click", function () { funnelPing("fq_friend"); location.href = "/home?friend=1"; });
+      card.appendChild(notSure);
       card.appendChild(whoPriv);
       return regShell(card);
     }
@@ -3793,12 +3839,12 @@ const RAW = String.raw`<!doctype html>
     var ta = document.createElement("textarea");
     ta.placeholder = t("Type your answer…");
     ta.value = fq.text;
-    ta.addEventListener("input", function () { fq.text = ta.value; if (ta.value.trim()) funnelPing("fq_typed"); });
+    ta.addEventListener("input", function () { fq.text = ta.value; saveFq(); if (ta.value.trim()) funnelPing("fq_typed"); });
     var send = h("button", { class: "send-btn", text: t("Send") });
     send.addEventListener("click", function () {
       if (!fq.text.trim()) { ta.focus(); return; }
       funnelPing("fq_sent");
-      fq.q = q; fq.step = "details";
+      fq.q = q; fq.step = "details"; saveFq();
       registerDraft.showLanguage = true;
       renderApp();
       try { window.scrollTo(0, 0); } catch (e) {}
@@ -3808,7 +3854,7 @@ const RAW = String.raw`<!doctype html>
     card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;", text: t("They'll answer the same question, and you'll see each other's answers.") }));
     card.appendChild(privacyNote(t("No account, no password. Your answers are shared only with the person you invite.")));
     var back = h("button", { type: "button", class: "reg-more", text: "\u2039 " + t("Someone else") });
-    back.addEventListener("click", function () { fq.rel = ""; registerDraft.relationship = ""; fq.step = "who"; renderApp(); });
+    back.addEventListener("click", function () { fq.rel = ""; registerDraft.relationship = ""; fq.step = "who"; saveFq(); renderApp(); });
     card.appendChild(back);
     return regShell(card);
   }
@@ -3818,6 +3864,7 @@ const RAW = String.raw`<!doctype html>
     if (fq.step !== "details" || !fq.text.trim()) return;
     var text = fq.text.trim(), asked = fq.q;
     fq.step = "done";
+    try { localStorage.removeItem(FQ_LS_KEY); } catch (e) {}
     var key = dateKey(new Date());
     if (questionForKey(key) !== asked) { draftText = text; return; }
     api("/api/answer", { date: key, who: viewerKey, text: text })
@@ -3937,7 +3984,7 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(btn);
     if (fq.step === "details") {
       var backAns = h("button", { type: "button", class: "reg-more", text: "\u2039 " + t("Back to my answer") });
-      backAns.addEventListener("click", function () { fq.step = "answer"; renderApp(); });
+      backAns.addEventListener("click", function () { fq.step = "answer"; saveFq(); renderApp(); });
       form.appendChild(backAns);
     }
     card.appendChild(form);

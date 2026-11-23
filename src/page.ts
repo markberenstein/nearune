@@ -1791,7 +1791,7 @@ const RAW = String.raw`<!doctype html>
       if (tapDown) { redrawAfterTap = true; return; }
       var active = document.activeElement;
       var busy = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT");
-      if (!busy) renderApp();
+      if (!busy) renderApp(); else renderWaiting = true;
     }, 300);
   }
 
@@ -4653,7 +4653,51 @@ const RAW = String.raw`<!doctype html>
     var el = safePart(part, fn);
     if (el) app.appendChild(el);
   }
+  // Typing guard: background refreshes (weather, news, polling) used to
+  // rebuild the page while someone was typing, which dropped the cursor
+  // out of the answer box. Now they wait until the person leaves the box,
+  // and any render that does happen puts the cursor back where it was.
+  var renderWaiting = false;
+  function typingNow() {
+    var a = document.activeElement;
+    if (!a) return false;
+    if (a.tagName === "TEXTAREA") return true;
+    return a.tagName === "INPUT" && /^(text|email|tel|search|url|number|)$/i.test(a.getAttribute("type") || "");
+  }
+  function backgroundRender() {
+    if (typingNow()) { renderWaiting = true; return; }
+    renderApp();
+  }
+  document.addEventListener("focusout", function () {
+    setTimeout(function () {
+      if (renderWaiting && !typingNow()) { renderWaiting = false; safeRerender(); }
+    }, 400);
+  });
+  function fieldSig(el) {
+    return el.tagName + "|" + (el.className || "") + "|" + (el.getAttribute("placeholder") || "") + "|" + (el.getAttribute("name") || "");
+  }
   function renderApp() {
+    var app = document.getElementById("app");
+    var a = document.activeElement;
+    var keep = null;
+    if (app && a && typingNow() && app.contains(a)) {
+      var sig = fieldSig(a);
+      var same = Array.prototype.filter.call(app.querySelectorAll(a.tagName), function (x) { return fieldSig(x) === sig; });
+      keep = { sig: sig, tag: a.tagName, idx: same.indexOf(a), value: a.value, s: a.selectionStart, e: a.selectionEnd, top: a.scrollTop };
+    }
+    renderAppNow();
+    if (!keep || !app) return;
+    var again = Array.prototype.filter.call(app.querySelectorAll(keep.tag), function (x) { return fieldSig(x) === keep.sig; });
+    var el = again[keep.idx] || (again.length === 1 ? again[0] : null);
+    if (!el) return;
+    try {
+      if (el.value !== keep.value && keep.value) { el.value = keep.value; el.dispatchEvent(new Event("input", { bubbles: true })); }
+      el.focus({ preventScroll: true });
+      if (keep.s != null) el.setSelectionRange(keep.s, keep.e);
+      el.scrollTop = keep.top;
+    } catch (e) {}
+  }
+  function renderAppNow() {
     nrCheckState();
     var app = document.getElementById("app");
     if (!app) return;
@@ -6891,7 +6935,7 @@ const RAW = String.raw`<!doctype html>
       return; // leave whatever theme was already showing rather than clear it on a blip
     }
     applyWeatherSky();
-    renderApp();
+    backgroundRender();
   }
   // SANDBOX EXPERIMENT: same shape as loadWeather() above, for the fun
   // local-news line — server caches it for a couple hours (see
@@ -6905,7 +6949,7 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {
       return;
     }
-    renderApp();
+    backgroundRender();
   }
   // SANDBOX EXPERIMENT: same shape again, for the top-songs/top-movies
   // charts — server caches each for 6 hours (see music.ts/movies.ts), so
@@ -6919,7 +6963,7 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {
       return;
     }
-    renderApp();
+    backgroundRender();
   }
   async function loadMovies() {
     if (!viewerKey) return;
@@ -6930,7 +6974,7 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {
       return;
     }
-    renderApp();
+    backgroundRender();
   }
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") { lastNativeBadgeSync = 0; syncAppBadge(); loadWeather(); loadNews(); loadMusic(); loadMovies(); }
@@ -6999,7 +7043,7 @@ const RAW = String.raw`<!doctype html>
       state = next;
       var active = document.activeElement;
       var busy = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT");
-      if (!busy) renderApp();
+      if (!busy) renderApp(); else renderWaiting = true;
       syncAppBadge();
     } catch (e) {
       online = false;

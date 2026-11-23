@@ -1644,7 +1644,7 @@ const RAW = String.raw`<!doctype html>
     var next = await res.json();
     state = next;
     online = true;
-    if (path === "/api/answer") nrTrack("answered");
+    if (path === "/api/answer") { nrTrack("answered"); maybeOfferApp(); }
     if (path === "/api/nhie-vote") nrTrack("nhie_played");
     return next;
   }
@@ -3608,6 +3608,8 @@ const RAW = String.raw`<!doctype html>
           nrTrack("signed_up");
           nrTrack("invite_joined");
           try { localStorage.setItem(VIEWER_LS_KEY, viewerKey); } catch (e) {}
+          // joined in the browser: after their first answer they're asked to get the app (see appOfferCard)
+          if (!IN_NATIVE_APP && ROOM) { try { localStorage.setItem("nearuneJoinedWeb:" + ROOM, "1"); } catch (e) {} }
           if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
           try {
             var u = new URL(location.href);
@@ -4775,6 +4777,69 @@ const RAW = String.raw`<!doctype html>
     if (activeTab === "today") addPart(app, "friendInvite", friendInviteLine);
     addPart(app, "switchRow", switchRow);
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
+    var appOffer = appOfferCard();
+    if (appOffer) app.appendChild(appOffer);
+  }
+
+  // Someone who joined from an invite in the browser is asked to get the app right after their first answer: the
+  // reason is real by then (the app is what tells them when the other person answers). The app opens straight into
+  // this room as them: the room is held for this network for 48 hours, and the link is also copied as a backup.
+  var appOfferOpen = false;
+  function appOfferKey() { return "nearuneAppOffer:" + (ROOM || "main"); }
+  function maybeOfferApp() {
+    if (IN_NATIVE_APP || !ROOM || !viewerKey) return;
+    try {
+      if (!localStorage.getItem("nearuneJoinedWeb:" + ROOM) || localStorage.getItem(appOfferKey())) return;
+      localStorage.setItem(appOfferKey(), String(Date.now()));
+    } catch (e) { return; }
+    appOfferOpen = true;
+    nrTrack("app_offer_shown");
+    setTimeout(renderApp, 600);
+  }
+  function appOfferCard() {
+    if (!appOfferOpen || IN_NATIVE_APP || !state || !viewerKey) return null;
+    var other = viewerKey === "mark" ? "nikita" : "mark";
+    var op = state.people && state.people[other];
+    var oName = op && op.name ? String(op.name).split(" ")[0] : t("they");
+    var today = dateKey(new Date());
+    var theyAnswered = !!(state.answers && state.answers[today] && state.answers[today][other] && state.answers[today][other].text);
+    var ua = navigator.userAgent || "";
+    var android = /Android/i.test(ua);
+    var ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    var appleUrl = inviteStoreUrl() || "https://apps.apple.com/app/id6815887440";
+    var playUrl = "https://play.google.com/store/apps/details?id=com.nearune.app";
+    var dest = "/r/" + ROOM + "/?viewer=" + viewerKey;
+    function go(url) {
+      nrTrack("app_offer_store");
+      try { navigator.clipboard && navigator.clipboard.writeText(location.origin + dest).catch(function () {}); } catch (e) {}
+      var done = false;
+      var leave = function () { if (done) return; done = true; location.href = url; };
+      try {
+        fetch("/api/deferred-invite", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ dest: dest }) })
+          .then(leave, leave);
+      } catch (e) { leave(); }
+      setTimeout(leave, 1500);
+    }
+    var kids = [
+      h("div", { style: "font-size:2.4rem;line-height:1;margin-bottom:8px;", text: "\uD83D\uDD14" }),
+      h("h2", { text: t("Get the Nearune app") }),
+      h("p", { text: theyAnswered
+        ? tTemplate("So you'll know when tomorrow's question is up, and the moment {name} answers it.", { name: oName })
+        : tTemplate("So you'll know the moment {name} answers today's question.", { name: oName }) }),
+      h("p", { class: "puzzle-guess-note", text: t("It opens right into this room. Your answers come with you.") })
+    ];
+    var stores = ios ? [["the App Store", appleUrl]] : android ? [["Google Play", playUrl]] : [["the App Store", appleUrl], ["Google Play", playUrl]];
+    stores.forEach(function (s) {
+      var b = h("button", { type: "button", class: "puzzle-upload-btn reg-cta", text: tTemplate("Get it on {store}", { store: s[0] }) });
+      b.style.cssText = "width:100%;margin-top:10px;";
+      b.addEventListener("click", function () { go(s[1]); });
+      kids.push(b);
+    });
+    var nn = h("button", { class: "switch-link", type: "button", text: t("Not now") });
+    nn.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
+    nn.addEventListener("click", function () { appOfferOpen = false; renderApp(); });
+    kids.push(nn);
+    return h("div", { class: "picker-overlay", style: "z-index:52;" }, [h("div", { class: "picker-card" }, kids)]);
   }
 
   // In a Make a friend room: a reminder that they can also start a room with someone they already know. It opens Home,

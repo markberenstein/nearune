@@ -197,6 +197,9 @@ export function buildHomePage(): string {
         var go = function (t) {
           var m = String(t || "").match(new RegExp("/j/([a-z0-9]{1,40})/([a-z0-9-]{6,64})", "i"));
           if (m) { location.href = "/j/" + m[1].toLowerCase() + "/" + m[2]; return; }
+          // a room they already joined in the browser (copied when they tapped Get the app)
+          var mr = String(t || "").match(new RegExp("/r/([a-z0-9]{1,40})/[?]viewer=(mark|nikita)", "i"));
+          if (mr) { location.href = "/r/" + mr[1].toLowerCase() + "/?viewer=" + mr[2].toLowerCase(); return; }
           note.textContent = "That isn't a Nearune invite link. Ask them to send it again, or type the room code under Join a room.";
         };
         try { navigator.clipboard.readText().then(go, function () { go(""); }); } catch (e) { go(""); }

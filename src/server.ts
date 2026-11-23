@@ -423,7 +423,8 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       if (!rateLimit("deferred-set:" + clientIp(req, server), 20, HOUR)) return json({ ok: false }, { status: 429 });
       const db = await readJson(req);
       const dest = typeof db?.dest === "string" ? db.dest : "";
-      if (!/^\/r\/[a-z0-9]{1,40}\/\?invite=(mark|nikita)&token=[a-zA-Z0-9-]{6,64}$/.test(dest)) return json({ ok: false }, { status: 400 });
+      // an invite still to accept, or (after joining in the browser) the room itself with who they are in it
+      if (!/^\/r\/[a-z0-9]{1,40}\/\?invite=(mark|nikita)&token=[a-zA-Z0-9-]{6,64}$/.test(dest) && !/^\/r\/[a-z0-9]{1,40}\/\?viewer=(mark|nikita)$/.test(dest)) return json({ ok: false }, { status: 400 });
       deferredInvites.set(deferredKey(clientIp(req, server)), { dest, at: Date.now() });
       saveDeferredSoon();
       return json({ ok: true });

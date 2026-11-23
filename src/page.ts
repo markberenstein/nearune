@@ -1168,7 +1168,7 @@ const RAW = String.raw`<!doctype html>
   var FRIEND_MATCH_POOL_START = "2026-11-13";
   var NEW_FRIEND_POOL_START = "2026-11-14";
   function questionPoolFor(key) {
-    var rel = state && state.relationship;
+    var rel = (state && state.relationship) || (fq && fq.rel) || "";
     if (state && state.origin === "friend" && (!key || key >= NEW_FRIEND_POOL_START)) return QUESTIONS_NEW_FRIEND;
     if (rel === "family") return QUESTIONS_FAMILY;
     if (rel === "friend") return QUESTIONS_FRIEND;
@@ -3732,6 +3732,7 @@ const RAW = String.raw`<!doctype html>
         if (ROOM) { try { localStorage.setItem(MY_ROOM_LS_KEY, ROOM); } catch (e) {} }
         regError = res.data._emailSent === false ? t("Registered, but the email failed to send — try again.") : "";
         renderApp();
+        saveFirstAnswer();
       })
       .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
   }
@@ -3746,6 +3747,71 @@ const RAW = String.raw`<!doctype html>
     ]);
     var lv = leaveRoomButton();
     return h("div", {}, [top, card, lv ? h("div", { class: "switch-row", style: "justify-content:center;margin-top:10px;" }, [lv]) : null]);
+  }
+
+  // Question first (new room creators): who it's for (picks the question
+  // set) -> today's question and an answer box -> name, city, language.
+  // The answer is saved right after sign-up.
+  var fq = { step: "who", rel: "", text: "", q: "" };
+  function firstQuestionFlow() {
+    var card;
+    if (!fq.rel) {
+      funnelPing("fq_who");
+      card = h("div", { class: "card" }, [
+        h("p", { class: "reg-title", text: t("Who would you love to hear from every day?") }),
+        h("p", { class: "reg-sub", text: t("Nearune gives you both one question a day. Pick one to see today's question.") })
+      ]);
+      var chips = h("div", { class: "reg-chips", style: "margin-top:14px;" });
+      RELATIONSHIPS.forEach(function (pair) {
+        var chip = h("button", { type: "button", class: "reg-chip", text: t(pair[1]) });
+        chip.addEventListener("click", function () { fq.rel = pair[0]; registerDraft.relationship = pair[0]; fq.step = "answer"; renderApp(); });
+        chips.appendChild(chip);
+      });
+      card.appendChild(chips);
+      return regShell(card);
+    }
+    funnelPing("fq_question");
+    var key = dateKey(new Date());
+    var q = questionForKey(key);
+    card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Today's question") })]),
+      h("p", { class: "question", text: q }),
+      uiTranslateBlock(q, null)
+    ]);
+    var form = h("div", { class: "answer-form" });
+    var ta = document.createElement("textarea");
+    ta.placeholder = t("Type your answer…");
+    ta.value = fq.text;
+    ta.addEventListener("input", function () { fq.text = ta.value; if (ta.value.trim()) funnelPing("fq_typed"); });
+    var send = h("button", { class: "send-btn", text: t("Send") });
+    send.addEventListener("click", function () {
+      if (!fq.text.trim()) { ta.focus(); return; }
+      funnelPing("fq_sent");
+      fq.q = q; fq.step = "details";
+      registerDraft.showLanguage = true;
+      renderApp();
+      try { window.scrollTo(0, 0); } catch (e) {}
+    });
+    form.appendChild(ta); form.appendChild(send);
+    card.appendChild(form);
+    card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;", text: t("They'll answer the same question, and you'll see each other's answers.") }));
+    var back = h("button", { type: "button", class: "reg-more", text: "\u2039 " + t("Someone else") });
+    back.addEventListener("click", function () { fq.rel = ""; registerDraft.relationship = ""; fq.step = "who"; renderApp(); });
+    card.appendChild(back);
+    return regShell(card);
+  }
+  // Right after sign-up: save the answer they wrote first. If the day turned
+  // over in between (a different question now), it stays in the answer box.
+  function saveFirstAnswer() {
+    if (fq.step !== "details" || !fq.text.trim()) return;
+    var text = fq.text.trim(), asked = fq.q;
+    fq.step = "done";
+    var key = dateKey(new Date());
+    if (questionForKey(key) !== asked) { draftText = text; return; }
+    api("/api/answer", { date: key, who: viewerKey, text: text })
+      .then(function () { return fetch(RP + "/api/state?who=" + encodeURIComponent(viewerKey)).then(function (r) { return r.json(); }); })
+      .then(function (st) { if (st && st.people) state = st; renderApp(); })
+      .catch(function () { draftText = text; renderApp(); });
   }
 
   function registrationFlow() {
@@ -3786,8 +3852,8 @@ const RAW = String.raw`<!doctype html>
       return wait;
     }
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: soloRegistration ? t("Let's set up your Nearune") : tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) }),
-      h("p", { class: "reg-sub", text: soloRegistration ? t("Just your name and city, then you can invite someone.") : "" })
+      h("p", { class: "reg-title", text: fq.step === "details" ? t("Last step: who's it from?") : soloRegistration ? t("Let's set up your Nearune") : tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) }),
+      h("p", { class: "reg-sub", text: fq.step === "details" ? t("Your name, city and language, so they know who's answering and where you are. Then you'll invite them.") : soloRegistration ? t("Just your name and city, then you can invite someone.") : "" })
     ]);
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(registerDraft);
@@ -3851,11 +3917,16 @@ const RAW = String.raw`<!doctype html>
       errEl.style.boxShadow = "0 0 0 3px rgba(179,54,31,0.18)";
       setTimeout(function () { try { errEl.focus(); errEl.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {} }, 60);
     }
-    var btnLabel = regBusy ? t("Just a moment…") : regErrField === "name" ? t("Add your name to continue") : regErrField === "city" ? t("Add your city to continue") : t("Continue");
+    var btnLabel = regBusy ? t("Just a moment…") : regErrField === "name" ? t("Add your name to continue") : regErrField === "city" ? t("Add your city to continue") : fq.step === "details" ? t("Save my answer") : t("Continue");
     var btn = h("button", { class: "puzzle-upload-btn reg-cta", text: btnLabel });
     btn.disabled = regBusy;
     btn.addEventListener("click", submitRegister);
     form.appendChild(btn);
+    if (fq.step === "details") {
+      var backAns = h("button", { type: "button", class: "reg-more", text: "\u2039 " + t("Back to my answer") });
+      backAns.addEventListener("click", function () { fq.step = "answer"; renderApp(); });
+      form.appendChild(backAns);
+    }
     card.appendChild(form);
     if (!soloRegistration) {
       var sw = h("button", { class: "switch-link", text: tTemplate("Not {name}? Switch", { name: personName(viewerKey) }) });
@@ -4742,6 +4813,9 @@ const RAW = String.raw`<!doctype html>
       if (mine && !mine.confirmed && state.pendingConfirm && state.pendingConfirm[viewerKey] && !showRegisterForm && !isConfirmedKey(otherKey)) {
         renderSoloHome(app, otherKey); return;
       }
+      // Someone starting a brand-new room sees today's question first and
+      // answers it; name, city and language come after they tap Send.
+      if (!mine && soloRegistration && state.origin !== "friend" && fq.step !== "details") { app.appendChild(firstQuestionFlow()); return; }
       if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }
 
       var other = state.people && state.people[otherKey];
@@ -7238,6 +7312,19 @@ document.getElementById("go").addEventListener("click", function () {
   if (typedName && !window.confirm("Your room name will be " + typedName + " and it cannot be changed later. If that name is already taken, two numbers will be added to the end of it. Create this room?")) return;
   btn.disabled = true;
   btn.textContent = "Creating…";
+  // No name typed: if this phone already started a room nobody has signed up
+  // in yet, go back to that one instead of making another empty room.
+  var pendingId = "";
+  try { var pr = JSON.parse(localStorage.getItem("nearunePendingRoom") || "null"); if (pr && pr.id && Date.now() - pr.at < 14 * 86400000) pendingId = pr.id; } catch (e) {}
+  var reuse = (!typedName && pendingId)
+    ? fetch("/r/" + encodeURIComponent(pendingId) + "/api/state").then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
+        if (!st || st.closed) return "";
+        var ppl = Object.keys(st.people || {}).filter(function (k) { return st.people[k] && st.people[k].name; });
+        return ppl.length === 0 ? pendingId : "";
+      }).catch(function () { return ""; })
+    : Promise.resolve("");
+  reuse.then(function (rid) {
+  if (rid) { location.href = "/r/" + rid; return; }
   fetch("/api/create-room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: (document.getElementById("roomName").value || "").trim() }) })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
@@ -7249,6 +7336,7 @@ document.getElementById("go").addEventListener("click", function () {
             fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: nd, step: "room_created", platform: np }) }).catch(function () {});
           }
         } catch (e) {}
+        try { localStorage.setItem("nearunePendingRoom", JSON.stringify({ id: res.data.roomId, at: Date.now() })); } catch (e) {}
         location.href = "/r/" + res.data.roomId; return;
       }
       var msg = res.data && res.data.error === "registrations_paused"
@@ -7267,6 +7355,7 @@ document.getElementById("go").addEventListener("click", function () {
       btn.textContent = "Create room";
       document.getElementById("msg").textContent = "Something went wrong — try again.";
     });
+  });
 });
 </script>
 </body>

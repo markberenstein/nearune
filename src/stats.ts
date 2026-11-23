@@ -60,6 +60,10 @@ function furthestStep(st: any, ppl: any[], answeredDays: number): string {
   if (f.reg_name) return "typed name";
   if (f.reg_city) return "typed city";
   if (f.reg_screen) return "saw the sign-up form";
+  if (f.fq_sent) return "answered, didn't reach sign-up";
+  if (f.fq_typed) return "typed an answer";
+  if (f.fq_question) return "saw today's question";
+  if (f.fq_who) return "saw who-it's-for";
   return "created room only";
 }
 

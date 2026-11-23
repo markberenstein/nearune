@@ -234,6 +234,8 @@ const FUNNEL_STEPS = new Set([
   "confirm_screen", "invite_screen", "invite_step",
   // The invite actually went out: link copied or shared, or email sent.
   "invite_shared", "invite_emailed",
+  // Question first: picked who it's for, saw today's question, typed, tapped Send.
+  "fq_who", "fq_question", "fq_typed", "fq_sent",
 ]);
 
 const PORT = Number(Bun.env.PORT) || 3000;

@@ -441,7 +441,10 @@ export function buildHomePage(): string {
     var box = el("a", { class: "box empty" + (first ? (second ? " second" : " first") : ""), href: "/new", "aria-label": second ? "Invite someone you know" : first ? "Invite your first Nearune partner" : "Start a room" });
     box.addEventListener("click", function (ev) {
       nrTrack("tap_invite");
-      if (first) { ev.preventDefault(); createRoomNow(box); }
+      // Every + tile makes the room right here (reusing an empty one this
+      // phone already started) instead of sending people to the older /new
+      // page, where tapping Back and trying again left a trail of empty rooms.
+      ev.preventDefault(); createRoomNow(box);
     });
     box.appendChild(el("div", { class: "plus", text: "+" }));
     if (second) {

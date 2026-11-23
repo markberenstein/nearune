@@ -147,6 +147,66 @@ function notifySignupBlocked(room: string, country: string, via: string): void {
     .catch((e) => console.error("[slack] signup-blocked post error", e));
 }
 
+// Invite link activity, posted to #nearune-app so Mark can see whether the
+// person who got an invite ever taps it, and where they stop:
+//   preview = the link was pasted into a chat app (WhatsApp, iMessage...)
+//   opened  = a person tapped it and saw the invite page
+//   store / accept / web = which button they tapped on the invite page
+//   joined  = they finished joining the room
+// One note per room and step per 20 minutes (link previews load repeatedly).
+const inviteEventSent = new Map<string, number>();
+function waitedSince(iso: any): string {
+  const t = Date.parse(String(iso || ""));
+  if (!isFinite(t)) return "";
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min";
+}
+function inviteDevice(ua: string): string {
+  const os = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "other device";
+  const app = /Instagram/i.test(ua) ? "Instagram" : /FBAN|FBAV|FB_IAB/i.test(ua) ? "Facebook" : /WhatsApp/i.test(ua) ? "WhatsApp" : /Line\//i.test(ua) ? "LINE" : /CriOS|Chrome\//i.test(ua) ? "Chrome" : /Firefox|FxiOS/i.test(ua) ? "Firefox" : /Safari\//i.test(ua) ? "Safari" : "";
+  return app ? os + ", " + app : os;
+}
+const PREVIEW_BOTS: [RegExp, string][] = [
+  [/WhatsApp/i, "WhatsApp"], [/facebookexternalhit|Facebot/i, "Messenger/Instagram/iMessage"], [/Twitterbot/i, "iMessage/X"],
+  [/TelegramBot/i, "Telegram"], [/Slackbot/i, "Slack"], [/Discordbot/i, "Discord"], [/LinkedInBot/i, "LinkedIn"],
+  [/SkypeUriPreview|Teams/i, "Skype/Teams"], [/Snapchat/i, "Snapchat"], [/Viber/i, "Viber"], [/Line\//i, "LINE"],
+  [/Googlebot|bingbot|Applebot|bot\b|crawler|spider|preview/i, "a link preview"],
+];
+function previewBotName(ua: string): string {
+  // WhatsApp's in-app browser is a real person; its preview fetcher has no "Mozilla".
+  if (/WhatsApp/i.test(ua) && /Mozilla/i.test(ua) && /Mobile/i.test(ua) && !/WhatsApp\/[\d.]+ [AW]$/i.test(ua)) return "";
+  for (const [re, name] of PREVIEW_BOTS) if (re.test(ua)) return name;
+  return "";
+}
+function notifyInviteEvent(room: string, step: string, st: any, extra: string): void {
+  const k = room + "|" + step;
+  const last = inviteEventSent.get(k) || 0;
+  if (Date.now() - last < 20 * 60 * 1000) return;
+  inviteEventSent.set(k, Date.now());
+  if (inviteEventSent.size > 1000) inviteEventSent.clear();
+  const ppl = (st && st.people) || {};
+  const inviterKey = (["mark", "nikita"] as const).find((p) => ppl[p] && ppl[p].confirmed && !(st.pendingInvite && st.pendingInvite[p]));
+  const inviter = inviterKey ? String(ppl[inviterKey].name || "Someone") : "Someone";
+  const f = (st && st.funnel) || {};
+  const sentIso = f.invite_shared || f.invite_emailed || "";
+  const waited = waitedSince(sentIso);
+  const what =
+    step === "preview" ? ":speech_balloon: " + inviter + "'s invite link was pasted into " + extra + " (the chat loaded its preview)" :
+    step === "opened" ? ":eyes: " + inviter + "'s invite was opened (" + extra + ")" :
+    step === "store" ? ":arrow_down: Invite to " + inviter + "'s room: tapped Get the app (" + extra + ")" :
+    step === "accept" ? ":arrow_down: Invite to " + inviter + "'s room: tapped Accept invite, going to the app store (" + extra + ")" :
+    step === "web" ? ":globe_with_meridians: Invite to " + inviter + "'s room: chose Continue in browser (" + extra + ")" :
+    step === "joined" ? ":tada: " + extra + " joined " + inviter + "'s room" :
+    "Invite to " + inviter + "'s room: " + step;
+  const text = what + ". Room " + room + (waited ? ", " + waited + " after the invite was sent" : "") + ".";
+  console.log("[invite-event] room=" + room + " step=" + step + (extra ? " " + JSON.stringify(extra) : ""));
+  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  if (!hook) return;
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] invite-event post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] invite-event post error", e));
+}
+
 async function roomsCreatedToday(): Promise<number> {
   const day = pacificDay(new Date());
   if (regToday.day !== day) {
@@ -325,6 +385,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (sState.pendingInvite && sState.pendingInvite[k] && sState.pendingInvite[k]!.token === sToken && inviteLive(sState.pendingInvite[k]!)) sWho = k;
       }
       const dest = "/r/" + sRoom + "/" + (sWho ? "?invite=" + sWho + "&token=" + sToken : "");
+      try {
+        const jUa = req.headers.get("user-agent") || "";
+        const bot = previewBotName(jUa);
+        if (bot) notifyInviteEvent(sRoom, "preview", sState, bot);
+        else notifyInviteEvent(sRoom, "opened", sState, inviteDevice(jUa) + (sWho ? "" : ", link had expired"));
+      } catch {}
       // The inviter's first name is shown on the landing page and in the link
       // preview ("Mark invited you to Nearune").
       const sOther = sWho === "mark" ? "nikita" : "mark";
@@ -502,6 +568,18 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       }
       if (fb2 && isValidFunnelDevice(fb2.device) && isFunnelStep(fb2.step)) {
         await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
+      }
+      return json({ ok: true });
+    }
+    // Which button the invited person tapped on the invite page (see notifyInviteEvent).
+    if (req.method === "POST" && url.pathname === "/api/invite-event") {
+      if (!rateLimit("invite-event:" + clientIp(req, server), 60, HOUR)) return json({ ok: true });
+      const ie = await readJson(req);
+      const ieRoom = typeof ie?.room === "string" && /^[a-zA-Z0-9]{1,40}$/.test(ie.room) ? ie.room : "";
+      const ieStep = ie?.step === "store" || ie?.step === "accept" || ie?.step === "web" ? ie.step : "";
+      if (ieRoom && ieStep && (await roomExists(ieRoom))) {
+        const ieState = await loadState(ieRoom);
+        notifyInviteEvent(ieRoom, ieStep, ieState, inviteDevice(req.headers.get("user-agent") || ""));
       }
       return json({ ok: true });
     }
@@ -1688,6 +1766,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (s.pendingInvite) delete s.pendingInvite[who!];
       });
       console.log("[invite-accepted] room=" + (roomId || "main") + " who=" + who);
+      try { notifyInviteEvent(roomId || "main", "joined", { ...state, pendingInvite: { [who!]: { token } } }, name); } catch {}
       // Let the person who sent the invite know their partner is in —
       // otherwise the only way they'd find out is having the app open when
       // the 6s poll happens to catch it. Push only (not email): we never

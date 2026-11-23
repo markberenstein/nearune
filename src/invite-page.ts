@@ -150,8 +150,17 @@ try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capaci
       try { fetch("/api/journey", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ device: d, step: step, platform: "web" }) }).catch(function () {}); } catch (e) {}
     };
     send("open"); send("invite_opened");
+    // Which button they tapped, for the room's invite notes in Slack.
+    var ROOM = ${JSON.stringify(opts.roomId || "").replace(/</g, "\\u003c")};
+    var tell = function (step) {
+      if (!ROOM) return;
+      try { fetch("/api/invite-event", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ room: ROOM, step: step }) }).catch(function () {}); } catch (e) {}
+    };
+    var webs = document.querySelectorAll("a.web, a.accept[data-web]");
+    for (var wi = 0; wi < webs.length; wi++) webs[wi].addEventListener("click", function () { tell("web"); });
     var bs = document.querySelectorAll("a.badge, a.badge2, a.accept:not([data-web])");
     for (var bi = 0; bi < bs.length; bi++) bs[bi].addEventListener("click", function () {
+      tell(this.classList && this.classList.contains("accept") ? "accept" : "store");
       send(this.classList && this.classList.contains("accept") ? "invite_accept" : "invite_to_store");
       // Hold this invite so the app opens straight to it after install.
       try { fetch("/api/deferred-invite", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ dest: DEST }) }).catch(function () {}); } catch (e) {}

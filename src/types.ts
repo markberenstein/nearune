@@ -229,6 +229,8 @@ export type State = {
   // morning "new question" push was sent for, so the daily cron job never
   // double-sends if it fires more than once for the same day.
   pushSubs?: Partial<Record<PersonKey, PushSubscriptionRecord>>;
+  // A one-time note from Nearune shown at the top of the room until dismissed on that phone (e.g. an apology).
+  notice?: { id: string; title: string; body: string; at: string };
   pushLastMorningKey?: string;
 };
 

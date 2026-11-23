@@ -2735,6 +2735,51 @@ async function sweepFriendNoShows(): Promise<void> {
     console.error("[friend-no-show] failed", err);
   }
 }
+// One-time apology notes (Nov 23, 2026; wording approved by Mark). Each listed room gets a note at the top of the room
+// (until dismissed on that phone) and a push to anyone there who turned notifications on. Runs once, ever: a side
+// file records that it was done, so restarts don't send it again.
+const APOLOGY_FILE = "apology-2026-11-23.json";
+const APOLOGIES: { rooms: string[]; title: string; body: string }[] = [
+  {
+    rooms: ["tidykite74", "cleverviolet46", "velvetlantern74", "breezyacorn62"],
+    title: "Sorry about the invite trouble",
+    body: "Yesterday Nearune wouldn't accept a phone number in the invite box. That's fixed: you can now text your invite straight from your room. Your link works for 3 days.",
+  },
+  {
+    rooms: ["velvetmoon24", "mellowlotus85"],
+    title: "Sorry, your match isn't coming back",
+    body: "The person you were matched with left Nearune. Tap Make a friend again and we'll find you someone who's here, or start a room with someone you know.",
+  },
+];
+async function sendApologiesOnce(): Promise<void> {
+  try {
+    if (await readSideFile(APOLOGY_FILE).catch(() => null)) return;
+    const pushed = new Set<string>();
+    let notes = 0, pushes = 0;
+    for (const a of APOLOGIES) {
+      for (const rid of a.rooms) {
+        if (!(await roomExists(rid))) { console.log("[apology] room " + rid + " is gone, skipped"); continue; }
+        const st = await saveState(rid, (s) => { s.notice = { id: APOLOGY_FILE, title: a.title, body: a.body, at: new Date().toISOString() }; });
+        notes++;
+        for (const who of ["mark", "nikita"] as PersonKey[]) {
+          const sub: any = st.pushSubs && st.pushSubs[who];
+          if (!sub) continue;
+          const key = sub.token || sub.endpoint || "";
+          if (!key || pushed.has(key)) continue;
+          pushed.add(key);
+          const res = await sendPush(sub, { title: a.title, body: a.body, tag: "apology", url: "/r/" + rid + "/" } as any);
+          if (res.ok) pushes++;
+          console.log("[apology] room " + rid + " " + who + " push " + (res.ok ? "sent" : "failed"));
+        }
+      }
+    }
+    await writeSideFile(APOLOGY_FILE, JSON.stringify({ at: new Date().toISOString(), notes, pushes }));
+    console.log("[apology] done: " + notes + " room notes, " + pushes + " pushes sent");
+  } catch (e) {
+    console.error("[apology] failed", e);
+  }
+}
+setTimeout(sendApologiesOnce, 90 * 1000);
 setTimeout(sweepFriendNoShows, 3 * 60 * 1000);
 setInterval(sweepFriendNoShows, 60 * 60 * 1000);
 setTimeout(purgeStaleEmails, 6 * 60 * 1000);

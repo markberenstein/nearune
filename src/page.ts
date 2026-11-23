@@ -4723,6 +4723,7 @@ const RAW = String.raw`<!doctype html>
 
     addPart(app, "header", header);
     addPart(app, "friendBanner", friendBanner);
+    addPart(app, "notice", noticeCard);
     // Traveling button sits right under the clock/timezone block at the
     // very top of the page. The "enable notifications" link used to sit
     // right under it too — moved to the bottom of the page, under the
@@ -4784,6 +4785,22 @@ const RAW = String.raw`<!doctype html>
     a.style.cssText = "display:block;text-align:center;margin:14px auto 4px;font-size:0.95rem;font-weight:700;";
     a.addEventListener("click", function () { nrTrack("friend_room_invite"); });
     return a;
+  }
+
+  // A one-time note from Nearune (state.notice), shown at the top until this phone taps OK.
+  function noticeCard() {
+    var n = state && state.notice;
+    if (!n || !n.id || !viewerKey) return null;
+    var key = "nearuneNotice:" + (ROOM || "main") + ":" + n.id;
+    try { if (localStorage.getItem(key)) return null; } catch (e) {}
+    var ok = h("button", { class: "puzzle-upload-btn", type: "button", text: t("OK") });
+    ok.style.marginTop = "10px";
+    ok.addEventListener("click", function () { try { localStorage.setItem(key, "1"); } catch (e) {} renderApp(); });
+    return h("div", { class: "card", style: "border:2px solid var(--accent);" }, [
+      h("p", { class: "question", style: "margin:0 0 6px;", text: t(n.title || "") }),
+      h("p", { class: "reg-sub", style: "margin:0;", text: t(n.body || "") }),
+      ok
+    ]);
   }
 
   // A registered person shows their real name ("I'm Dan"). The legacy room

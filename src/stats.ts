@@ -14,6 +14,7 @@ import { runQa } from "./qa";
 import { weatherKitConfigured, weatherKitCurrentWeather } from "./weatherkit";
 import { elevenLabsUsage, voiceSelfTest, parseVoiceSample, voiceWritePermissionTest, defaultVoiceId } from "./voice";
 import { claudeUsageSummary } from "./usage";
+import { fcmTokenAlive } from "./push";
 
 // Railway project cost, via Railway's GraphQL API. Needs RAILWAY_API_TOKEN (an account token). Returns null when unset or on any failure.
 async function railwayUsage() {
@@ -89,6 +90,9 @@ export async function computeStats(full = true) {
   // (iPhone app, Android app, or browser). People with notifications off
   // aren't counted, so the total can be lower than People.
   const platform = { ios: 0, android: 0, web: 0 };
+  // Android phones signed up for notifications, checked below with a silent
+  // dry run (nothing shows on the phone).
+  const fcmSubs: { label: string; token: string }[] = [];
   // Where unfinished sign-ups (last 24 hours) stopped, and which form errors
   // they hit. These rooms aren't in the room list, so this is the only place
   // they show up.
@@ -141,6 +145,7 @@ export async function computeStats(full = true) {
       const p = st?.people?.[k]; if (!p) continue;
       const sub = st?.pushSubs?.[k];
       if (sub) platform[sub.kind === "apns" ? "ios" : sub.kind === "fcm" ? "android" : "web"]++;
+      if (sub && sub.kind === "fcm" && sub.token) fcmSubs.push({ label: "Room " + (st?.roomNo || "?") + " " + String(p.name || k).slice(0, 30), token: String(sub.token) });
       if (p.voiceId) voiceIds.push({ room: st?.roomNo || rooms, who: String(p.name || k).slice(0, 30), id: String(p.voiceId) });
       const o = st?.people?.[k === "mark" ? "nikita" : "mark"];
       const loc = String(p.location || "").trim();
@@ -303,6 +308,22 @@ export async function computeStats(full = true) {
     const ok = !!ff && !!ver;
     qa.checks.push({ name: "Video conversion (ffmpeg)", ok, items: [{ label: "ffmpeg installed", ok, note: ok ? ver : "missing: shared videos stay as uploaded (HEVC may not play on Android)" }], detail: ok ? ver : "ffmpeg missing" });
     if (!ok) { qa.ok = false; qa.failures.push("Video conversion: ffmpeg missing"); }
+  }
+  // Android notifications: can each Android phone still receive them? A dead
+  // one means the app was removed from that phone. If every phone is dead,
+  // that points to a setup problem rather than people uninstalling.
+  if (qa && Array.isArray(qa.checks) && fcmSubs.length) {
+    const aitems: { label: string; ok: boolean; note: string }[] = [];
+    for (const f of fcmSubs.slice(0, 60)) {
+      const alive = await fcmTokenAlive(f.token).catch(() => null);
+      aitems.push({ label: f.label, ok: alive !== false, note: alive === true ? "can receive notifications" : alive === false ? "app removed from this phone (or its data cleared)" : "couldn't check right now" });
+    }
+    const live = aitems.filter((i) => i.note.startsWith("can receive")).length;
+    const dead = aitems.filter((i) => !i.ok).length;
+    const unknown = aitems.length - live - dead;
+    const allDead = dead === aitems.length && aitems.length >= 3;
+    qa.checks.push({ name: "Android notifications", ok: !allDead, items: aitems, detail: live + " of " + aitems.length + " Android phones can receive notifications" + (dead ? ", " + dead + " removed the app" : "") + (unknown ? ", " + unknown + " couldn't be checked" : "") + (allDead ? " (every Android phone failed: likely a setup problem, not uninstalls)" : "") });
+    if (allDead) { qa.ok = false; qa.failures.push("Android notifications: no Android phone can receive them"); }
   }
   // Quirky local story: every place with an active couple must come back with a story today.
   // Skipped in the first minutes after a restart: the stories are fetched from

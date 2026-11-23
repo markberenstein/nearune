@@ -7475,7 +7475,7 @@ export function buildPrivacyPage() {
   return legalPageShell(
     "Privacy Policy",
     `<h1>Privacy Policy</h1>
-    <p class="updated">Last updated November 2026</p>
+    <p class="updated">Last updated November 23, 2026</p>
     <p>Nearune is a small, private ritual for two people to share a daily question — built by one person for close-to-home use, now open for anyone to use. This page explains, plainly, what data we collect and what we do with it.</p>
 
     <h2>How access works</h2>
@@ -7499,6 +7499,11 @@ export function buildPrivacyPage() {
 
     <h2>Where data lives</h2>
     <p>Room data and uploaded photos are stored in a cloud object-storage bucket. Outgoing emails (confirmations, invites, recovery links) are sent through a transactional email provider (Resend or SendGrid) — the email content passes through that provider but isn't retained by us beyond what's needed to send it. Location text you enter is sent to a free geocoding service (Open-Meteo) solely to resolve a timezone and language default; it isn't stored by us beyond the fields above.</p>
+    <p>To save you typing, the sign-up form suggests your city from your internet connection: your IP address is sent to a lookup service (ipapi.co), which returns an approximate city. Nothing from this lookup is stored, and you can change or clear the city before you continue. We never use your phone's location unless you tap "Use my current location". If you do, the position, rounded to about a kilometer, is sent to OpenStreetMap's lookup service to find the city name, and only the city name is kept.</p>
+    <h2>The people you invite</h2>
+    <p>We never ask for details about the person you invite. If you text an invite, the phone number you type opens a message on your own phone and is never sent to us. If you email an invite, the address is used only to send that one email through our email provider and is not saved by us. The invite itself is a private link that stops working after 3 days. When the person you invite joins, they enter their own name, city and language.</p>
+    <h2>Make a friend</h2>
+    <p>If you choose Make a friend (for people 18 and older), we hold your first name, city and language in a waiting list until you're matched with another person who chose it. You're removed from the list as soon as you're matched, or after 30 days if no match comes. You and your match share a room like any other: each of you sees the other's first name, city, local time and weather, and your answers to the daily question. You can report or block your match and leave the room at any time.</p>
 
     <h2>Other services that process your data</h2>
     <p>To provide specific features, text or data you enter is sent to these services. We use them only for the feature named, not for advertising.</p>
@@ -7510,7 +7515,8 @@ export function buildPrivacyPage() {
       <li><strong>Popular songs and movies (Deezer and Apple charts):</strong> only the country is used.</li>
       <li><strong>Safety screening and place recognition (Anthropic, maker of Claude):</strong> photos and comments you share, and puzzle pictures with their questions and answers, are sent to Anthropic's API to be checked automatically for inappropriate content before they are saved. A puzzle picture with no location may also be sent to suggest where it was taken. Anthropic processes this to return a result; we don't use it for advertising.</li>
       <li><strong>Hosting (Railway):</strong> the service runs on Railway's cloud infrastructure, where room data is stored.</li>
-      <li><strong>Notifications (Apple Push Notification service):</strong> a device token is used to deliver reminders if you turn them on.</li>
+      <li><strong>Notifications (Apple Push Notification service on iPhone, Google Firebase Cloud Messaging on Android):</strong> a device token is used to deliver reminders and room updates if you turn them on.</li>
+      <li><strong>City suggestion (ipapi.co):</strong> your IP address is used once to suggest your city on the sign-up form, as described above. Nothing is stored.</li>
       <li><strong>Website analytics (Google Analytics):</strong> only on our download pages (nearune.ai/get and nearune.ai/military), Google Analytics records the visit, device and browser type, approximate location, and the link that brought you there, so we can see which ads and searches help people find Nearune. It isn't used inside rooms or the app, and never sees your answers, photos or voice.</li>
       <li><strong>Ad measurement (Meta):</strong> the Nearune app (iPhone and Android) uses Meta's software kit to tell Meta that Nearune was installed and opened (and when an in-app tip is made), along with basic device details such as phone model and iOS version, so we can see which of our ads lead to installs. It doesn't use your phone's advertising ID, and it never sends your name, email, answers, photos or voice.</li>
     </ul>

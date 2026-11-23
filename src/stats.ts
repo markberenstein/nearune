@@ -94,6 +94,9 @@ export async function computeStats(full = true) {
   // they show up.
   const abandoned: Record<string, number> = {};
   const abandonedErrors: Record<string, number> = {};
+  // The unfinished rooms themselves (last 24 hours), newest first, so the
+  // admin page can list them next to the real ones.
+  const unfinished: { id: string; created: string; via: string; stopped: string; steps: string[]; last: string | null }[] = [];
   const dayAgo = Date.now() - 86400000;
   for (const id of ids) {
     let st: any;
@@ -106,6 +109,8 @@ export async function computeStats(full = true) {
       abandoned[step] = (abandoned[step] || 0) + 1;
       const f = (st && st.funnel) || {};
       for (const k of Object.keys(f)) if (k.startsWith("reg_err_")) abandonedErrors[k.slice(8)] = (abandonedErrors[k.slice(8)] || 0) + 1;
+      const times = Object.values(f).map((v: any) => String(v)).filter((v) => isFinite(Date.parse(v))).sort();
+      unfinished.push({ id: String(id).slice(0, 40), created: st.createdAt, via: String(st.createdVia || "").slice(0, 40), stopped: step, steps: Object.keys(f).sort((a, b) => Date.parse(f[a]) - Date.parse(f[b])), last: times.length ? times[times.length - 1] : null });
     }
     if (!signedUp) continue;
     rooms++;
@@ -170,7 +175,7 @@ export async function computeStats(full = true) {
     }
     return {
       at: new Date().toISOString(),
-      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors }, platform,
+      rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors, unfinished: unfinished.sort((a, b) => Date.parse(b.created) - Date.parse(a.created)) }, platform,
       cities: [...byCity.values()].sort((a, b) => b.n - a.n),
       qa: lastFull.qa,
       weatherkit: lastFull.weatherkit,
@@ -319,7 +324,7 @@ export async function computeStats(full = true) {
   const at = new Date().toISOString();
   lastFull = {
     at,
-    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors }, platform,
+    rooms, activeRooms: active, answeredRooms: answered, bothWeekRooms: bothWeek, people, roomList, signups: { started: signupsStarted, finished: signupsFinished, abandoned, abandonedErrors, unfinished: unfinished.sort((a, b) => Date.parse(b.created) - Date.parse(a.created)) }, platform,
     cities: [...byCity.values()].sort((a, b) => b.n - a.n),
     qa,
     weatherkit: wk,

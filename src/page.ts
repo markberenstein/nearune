@@ -1772,10 +1772,27 @@ const RAW = String.raw`<!doctype html>
   var translationAttempts = {};
   var TRANSLATE_MAX_ATTEMPTS = 5;
 
+  // Translations arrive one string at a time (dozens on a non-English
+  // phone), and each used to redraw the whole page right away. A tap that
+  // landed mid-redraw was lost (the button it started on was replaced), so
+  // buttons like "Who is it for?" seemed to do nothing. Now redraws from
+  // translations are batched, and never happen while a finger is down.
+  var trRedrawTimer = null, tapDown = false, redrawAfterTap = false;
+  try {
+    document.addEventListener("pointerdown", function () { tapDown = true; }, true);
+    var tapEnd = function () { setTimeout(function () { tapDown = false; if (redrawAfterTap) { redrawAfterTap = false; safeRerender(); } }, 200); };
+    document.addEventListener("pointerup", tapEnd, true);
+    document.addEventListener("pointercancel", tapEnd, true);
+  } catch (e) {}
   function safeRerender() {
-    var active = document.activeElement;
-    var busy = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT");
-    if (!busy) renderApp();
+    if (trRedrawTimer) clearTimeout(trRedrawTimer);
+    trRedrawTimer = setTimeout(function () {
+      trRedrawTimer = null;
+      if (tapDown) { redrawAfterTap = true; return; }
+      var active = document.activeElement;
+      var busy = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT");
+      if (!busy) renderApp();
+    }, 300);
   }
 
   function scheduleTranslate(text, target, alt) {
@@ -3920,7 +3937,7 @@ const RAW = String.raw`<!doctype html>
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     if (!cls) btn.style.cssText = "color: var(--ink); font-size: 0.9rem; padding: 6px;";
     btn.addEventListener("click", function () {
-      var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); };
+      var done = function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 3500); };
       var copyText = url === lastInviteUrl ? inviteMessage(url) : url;
       nrTrack("invite_sent"); markInviteShared();
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText).then(done, done);
@@ -3932,8 +3949,27 @@ const RAW = String.raw`<!doctype html>
   // Opens the phone's share sheet (so the link can go out as an Instagram DM,
   // text, etc.) where the browser supports it; otherwise falls back to
   // copying the link.
+  // Facebook/Instagram's built-in browsers (and some others) can't open the
+  // phone's share sheet, so Send there used to just copy the link silently.
+  // In that case we show direct WhatsApp and text-message buttons.
+  function noShareSheet() {
+    var ua = navigator.userAgent || "";
+    return !navigator.share || /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|MicroMessenger/i.test(ua);
+  }
+  function directSendRow(url) {
+    if (!noShareSheet() || !url) return null;
+    var msg = inviteMessage(url);
+    var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    var wa = h("a", { class: "picker-btn", href: "https://wa.me/?text=" + encodeURIComponent(msg), target: "_blank", rel: "noopener", text: "\uD83D\uDCAC " + t("Send on WhatsApp") });
+    wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
+    var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
+    sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
+    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); }); });
+    return h("div", {}, [wa, sms]);
+  }
   function shareLinkButton(url, label, cls) {
     var labelText = label || t("Share invite link");
+    if (noShareSheet() && url === lastInviteUrl) labelText = t("Copy your invite");
     var btn = h("button", { class: cls || "switch-link", text: labelText });
     btn.addEventListener("click", function () {
       nrTrack("invite_sent"); markInviteShared();
@@ -3946,7 +3982,7 @@ const RAW = String.raw`<!doctype html>
           : { url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied!"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
         window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
@@ -4038,6 +4074,8 @@ const RAW = String.raw`<!doctype html>
       setTimeout(submitInviteLink, 0);
     }
     if (lastInviteUrl) {
+      var dsHome = directSendRow(lastInviteUrl);
+      if (dsHome) card.appendChild(dsHome);
       var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
       main.style.marginTop = "12px";
       card.appendChild(main);
@@ -4144,6 +4182,8 @@ const RAW = String.raw`<!doctype html>
       var sb = shareLinkButton(lastInviteUrl, handle ? t("Send to @") + handle : t("Send your invite again"), "puzzle-upload-btn reg-cta");
       sb.style.cssText = "width:100%;margin-top:8px;";
       sb.addEventListener("click", function () { setTimeout(closeResend, 800); });
+      var dsRe = directSendRow(lastInviteUrl);
+      if (dsRe) kids.push(dsRe);
       kids.push(sb);
       var cp = copyLinkButton(lastInviteUrl, t("Copy link"), "picker-btn"); cp.style.cssText = "width:100%;margin-top:10px;"; kids.push(cp);
     } else {
@@ -4186,8 +4226,12 @@ const RAW = String.raw`<!doctype html>
     var main, copy = null;
     if (chosen && lastInviteUrl) {
       main = shareLinkButton(lastInviteUrl, t("Send it to them"), "puzzle-upload-btn reg-cta");
-      copy = copyLinkButton(lastInviteUrl, t("Copy message and link"), "picker-btn");
-      copy.style.cssText = "width:100%;margin-top:10px;";
+      // Without a share sheet the main button already copies, so skip the
+      // second copy button.
+      if (!noShareSheet()) {
+        copy = copyLinkButton(lastInviteUrl, t("Copy message and link"), "picker-btn");
+        copy.style.cssText = "width:100%;margin-top:10px;";
+      }
     } else {
       main = h("button", { type: "button", class: "puzzle-upload-btn reg-cta", text: chosen ? t("Getting your link ready…") : t("Send your invite") });
       main.style.opacity = "0.55";
@@ -4205,6 +4249,8 @@ const RAW = String.raw`<!doctype html>
       chips
     ];
     if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
+    var dsStep = chosen && lastInviteUrl ? directSendRow(lastInviteUrl) : null;
+    if (dsStep) kids.push(dsStep);
     kids.push(main);
     if (copy) kids.push(copy);
     kids.push(mf);

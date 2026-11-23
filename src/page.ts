@@ -3719,6 +3719,7 @@ const RAW = String.raw`<!doctype html>
       return city;
     } catch (e) { return ""; }
   }
+  var clearRegErrorShown = function () {};
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     funnelPing("reg_clicked");
@@ -3925,10 +3926,10 @@ const RAW = String.raw`<!doctype html>
     // the city and the phone; who the room is for is asked on the invite
     // card; military time is a setting in the room.
     form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
-    var nameInputEl = textField(registerDraft.name, "Your name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; } });
+    var nameInputEl = textField(registerDraft.name, "Your name", function (v) { registerDraft.name = v; if (v) funnelPing("reg_name"); if (v && regErrField === "name") { regErrField = ""; regError = ""; clearRegErrorShown(); } });
     form.appendChild(nameInputEl);
     form.appendChild(h("div", { class: "reg-label", text: t("Your city") }));
-    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); if (v && regErrField === "city") { regErrField = ""; regError = ""; } suggestLanguageFromLocation(registerDraft, v); });
+    lastLocInputEl = textField(registerDraft.location, "City (e.g. Los Angeles, CA)", function (v) { registerDraft.location = v; registerDraft.locationTouched = true; if (v) funnelPing("reg_city"); if (v && regErrField === "city") { regErrField = ""; regError = ""; clearRegErrorShown(); } suggestLanguageFromLocation(registerDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(registerDraft));
     form.appendChild(makeLocNote());
@@ -3970,7 +3971,8 @@ const RAW = String.raw`<!doctype html>
       more.addEventListener("click", function () { regShowEmail = true; renderApp(); });
       form.appendChild(more);
     }
-    if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
+    var regErrNote = regError ? h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }) : null;
+    if (regErrNote) form.appendChild(regErrNote);
     var errEl = regErrField === "name" ? nameInputEl : regErrField === "city" ? lastLocInputEl : null;
     if (errEl) {
       errEl.style.borderColor = "#B3361F";
@@ -3982,6 +3984,17 @@ const RAW = String.raw`<!doctype html>
     btn.disabled = regBusy;
     btn.addEventListener("click", submitRegister);
     form.appendChild(btn);
+    // As soon as they type into the box that was missing, the red outline,
+    // the error line and "Add your name to continue" go away. They used to
+    // stay until the next tap, so people who had just typed their name still
+    // saw it rejected, and many gave up there.
+    clearRegErrorShown = function () {
+      try {
+        if (errEl) { errEl.style.borderColor = ""; errEl.style.boxShadow = ""; }
+        if (regErrNote && regErrNote.parentNode) regErrNote.parentNode.removeChild(regErrNote);
+        btn.textContent = fq.step === "details" ? t("Save my answer") : t("Continue");
+      } catch (e) {}
+    };
     if (fq.step === "details") {
       var backAns = h("button", { type: "button", class: "reg-more", text: "\u2039 " + t("Back to my answer") });
       backAns.addEventListener("click", function () { fq.step = "answer"; saveFq(); renderApp(); });

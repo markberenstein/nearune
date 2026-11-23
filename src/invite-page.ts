@@ -96,14 +96,13 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
   <h1 class="name">Nearune</h1>
   <p class="sub">${who} invited you</p>
   ${opts.preview ? previewBlock(opts.preview, who) : ""}
-  <a class="accept" id="acceptBtn" href="${esc(appStoreUrl)}">Accept invite</a>
-  <p class="acc-note" id="accNote">Opens the App Store to get Nearune. Then open it and you're in ${who === "Someone" ? "the room" : who + "'s room"}.</p>
-  <p class="get" style="margin-top:18px">Or get the app here</p>
+  <a class="accept" id="acceptBtn" href="${dest}" data-web="1">Accept invite</a>
+  <p class="acc-note" id="accNote">Join right here, no download needed. You can get the app later.</p>
+  <p class="get" style="margin-top:18px">Prefer the app?</p>
   <div class="badges">
     <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
     <a class="badge2" href="https://play.google.com/store/apps/details?id=com.nearune.app" aria-label="Get Nearune on Google Play"><img src="/google-play-badge.svg" alt="Get it on Google Play"></a>
   </div>
-  <div><a class="web" href="${dest}">Don't want the app? Continue in your browser</a></div>
   ${opts.roomId ? '<div class="code">Room code<b>' + esc(opts.roomId) + "</b></div>" : ""}
 </main>
 <script>
@@ -123,15 +122,12 @@ try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capaci
 })();
 </script>
 <script>
-// Accept invite goes to the right store for this phone; on a computer it
-// continues in the browser.
+// Accept invite joins right here in the browser (it used to send people to the App Store first, a big ask for someone
+// who just got a link). The store badges under it are for anyone who prefers the app; on this phone the matching one
+// is shown first.
 (function () {
   var ua = navigator.userAgent || "";
-  var a = document.getElementById("acceptBtn"), n = document.getElementById("accNote");
-  var isAndroid = /Android/i.test(ua);
-  var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (isAndroid) { a.href = "https://play.google.com/store/apps/details?id=com.nearune.app"; n.textContent = n.textContent.replace("the App Store", "Google Play"); }
-  else if (!isIOS) { a.href = ${JSON.stringify(opts.dest).replace(/</g, "\\u003c")}; n.textContent = "Opens Nearune in your browser."; a.setAttribute("data-web", "1"); }
+  if (/Android/i.test(ua)) { var b = document.querySelector(".badges"); var g = document.querySelector("a.badge2"); if (b && g) b.insertBefore(g, b.firstChild); }
 })();
 </script>
 <script>var DEST = ${JSON.stringify(opts.dest).replace(/</g, "\\u003c")};</script>

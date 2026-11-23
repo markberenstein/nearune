@@ -1509,7 +1509,7 @@ const RAW = String.raw`<!doctype html>
   function pushPromptDialog(awaitingPartner) {
     nrTrack("notif_asked");
     var body = awaitingPartner
-      ? t("Turn these on and we'll let you know the moment your partner accepts your invite — plus a daily nudge whenever today's question is ready.")
+      ? t("Turn these on and we'll let you know the moment they accept your invite — plus a daily nudge whenever today's question is ready.")
       : t("Nearune can let you know when today's question is ready, so neither of you misses a day.");
     var card = h("div", { class: "picker-card" }, [
       h("h2", { text: t("Want a daily reminder?") }),
@@ -3565,12 +3565,28 @@ const RAW = String.raw`<!doctype html>
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(acceptDraft);
     applyPhoneLanguage(acceptDraft);
-    lastLocInputEl = textField(acceptDraft.location, "City where you're based (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; suggestLanguageFromLocation(acceptDraft, v); });
+    // Same as the inviter's form: name first, then city (filled in from their connection), each with a label.
+    form.appendChild(h("div", { class: "reg-label", text: t("Your name") }));
+    form.appendChild(textField(acceptDraft.name, "Your name", function (v) { acceptDraft.name = v; }));
+    form.appendChild(h("div", { class: "reg-label", text: t("Your city") }));
+    lastLocInputEl = textField(acceptDraft.location, "City (e.g. Los Angeles, CA)", function (v) { acceptDraft.location = v; acceptDraft.locationTouched = true; suggestLanguageFromLocation(acceptDraft, v); });
     form.appendChild(lastLocInputEl);
     form.appendChild(makeLocButton(acceptDraft));
     form.appendChild(makeLocNote());
     form.appendChild(makeLocChoices());
-    form.appendChild(textField(acceptDraft.name, "Preferred name", function (v) { acceptDraft.name = v; }));
+    if (!acceptDraft.location && !acceptDraft.ipCityTried) {
+      acceptDraft.ipCityTried = true;
+      var fillJoinCity = function (label) {
+        if (!label || acceptDraft.location || acceptDraft.locationTouched) return;
+        acceptDraft.location = label;
+        if (lastLocInputEl && document.body.contains(lastLocInputEl)) lastLocInputEl.value = label;
+        suggestLanguageFromLocation(acceptDraft, label);
+      };
+      fetch("/api/ip-city").then(function (r) { return r.json(); }).then(function (d) {
+        fillJoinCity((d && d.label) || tzCityGuess());
+      }).catch(function () { fillJoinCity(tzCityGuess()); });
+    }
+    form.appendChild(h("div", { class: "reg-label", text: t("Language") }));
     form.appendChild(languageSelectField(acceptDraft.language, function (v) { acceptDraft.language = v; acceptDraft.languageTouched = true; }));
     if (regError) form.appendChild(h("p", { class: "puzzle-guess-note", text: t(regError) }));
     var btn = h("button", { class: "puzzle-upload-btn", text: regBusy ? t("Joining…") : invFirst ? tTemplate("Join {name}'s room", { name: invFirst }) : t("Join Nearune") });
@@ -4042,7 +4058,7 @@ const RAW = String.raw`<!doctype html>
     // reminder line. Email is offered because many people only have their
     // partner's email, not a quick way to text them a link.
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite your Nearune partner") }),
+      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite someone to your room") }),
       h("p", { class: "reg-sub", text: state && state.origin !== "friend" && !state.relationship
         ? t("First, who's this invite for? It picks your daily questions.")
         : stillWaiting
@@ -5146,6 +5162,8 @@ const RAW = String.raw`<!doctype html>
   // ago the invite went out (a placeholder city/time would be misleading).
   function pendingClockBlock(key) {
     var at = state.pendingInviteAt && state.pendingInviteAt[key];
+    // a link made but not yet sent (only picking who it's for) isn't an invite yet
+    if (at && !inviteWasShared()) at = null;
     var days = at ? Math.floor((Date.now() - Date.parse(at)) / 86400000) : 0;
     var sub = !at ? t("Not invited yet") : days < 1 ? t("Invited today") : days === 1 ? t("Invited 1 day ago") : tTemplate("Invited {n} days ago", { n: String(days) });
     return h("div", { class: "clock-block" }, [

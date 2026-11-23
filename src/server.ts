@@ -163,7 +163,7 @@ function waitedSince(iso: any): string {
 }
 function inviteDevice(ua: string): string {
   const os = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "other device";
-  const app = /Instagram/i.test(ua) ? "Instagram" : /FBAN|FBAV|FB_IAB/i.test(ua) ? "Facebook" : /WhatsApp/i.test(ua) ? "WhatsApp" : /Line\//i.test(ua) ? "LINE" : /CriOS|Chrome\//i.test(ua) ? "Chrome" : /Firefox|FxiOS/i.test(ua) ? "Firefox" : /Safari\//i.test(ua) ? "Safari" : "";
+  const app = /; ?wv\)/.test(ua) && !/Instagram|FBAN|FBAV|FB_IAB|WhatsApp|Line\//i.test(ua) ? "Nearune app" : /Instagram/i.test(ua) ? "Instagram" : /FBAN|FBAV|FB_IAB/i.test(ua) ? "Facebook" : /WhatsApp/i.test(ua) ? "WhatsApp" : /Line\//i.test(ua) ? "LINE" : /CriOS|Chrome\//i.test(ua) ? "Chrome" : /Firefox|FxiOS/i.test(ua) ? "Firefox" : /Safari\//i.test(ua) ? "Safari" : "";
   return app ? os + ", " + app : os;
 }
 const PREVIEW_BOTS: [RegExp, string][] = [
@@ -195,7 +195,7 @@ function notifyInviteEvent(room: string, step: string, st: any, extra: string): 
     step === "opened" ? ":eyes: " + inviter + "'s invite was opened (" + extra + ")" :
     step === "store" ? ":arrow_down: Invite to " + inviter + "'s room: tapped Get the app (" + extra + ")" :
     step === "accept" ? ":arrow_down: Invite to " + inviter + "'s room: tapped Accept invite, going to the app store (" + extra + ")" :
-    step === "web" ? ":globe_with_meridians: Invite to " + inviter + "'s room: chose Continue in browser (" + extra + ")" :
+    step === "web" ? ":globe_with_meridians: Invite to " + inviter + "'s room: tapped Accept invite, joining in the browser (" + extra + ")" :
     step === "joined" ? ":tada: " + extra + " joined " + inviter + "'s room" :
     "Invite to " + inviter + "'s room: " + step;
   const text = what + ". Room " + room + (waited ? ", " + waited + " after the invite was sent" : "") + ".";
@@ -281,7 +281,9 @@ function logSignupFailure(req: Request, pathname: string, res: Response): void {
     if (!SIGNUP_PATHS.has(step) || res.status < 400) return;
     const ua = req.headers.get("user-agent") || "";
     const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "other";
-    const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+    // The Android app runs in Android's WebView, whose user agent also says Chrome and Safari but adds "; wv)" — that
+    // marked every Android app user as "Android web". (Facebook and Instagram's own browsers are WebViews too: still web.)
+    const kind = /; ?wv\)/.test(ua) && !/Instagram|FBAN|FBAV|FB_IAB|WhatsApp|Line\//i.test(ua) ? "app" : /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
     const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
     res.clone().json().then((b: any) => {
       const country = b && typeof b.country === "string" ? b.country.slice(0, 2) : "";
@@ -501,7 +503,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       // browser language. Lets the admin tell a real visitor from a test.
       const ua = req.headers.get("user-agent") || "";
       const device = /iPad/i.test(ua) ? "iPad" : /iPhone|iPod/i.test(ua) ? "iPhone" : /Android/i.test(ua) ? "Android" : /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS X/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "other";
-      const kind = /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
+      // The Android app runs in Android's WebView, whose user agent also says Chrome and Safari but adds "; wv)" — that
+    // marked every Android app user as "Android web". (Facebook and Instagram's own browsers are WebViews too: still web.)
+    const kind = /; ?wv\)/.test(ua) && !/Instagram|FBAN|FBAV|FB_IAB|WhatsApp|Line\//i.test(ua) ? "app" : /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
       const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
       const via = device + " " + kind + " " + lang;
       const id = await createRoom(useName, via, useName || undefined);

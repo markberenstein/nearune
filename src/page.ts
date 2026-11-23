@@ -387,6 +387,8 @@ const RAW = String.raw`<!doctype html>
   .reg-sub { color: var(--ink-soft); font-size: 0.92rem; margin: 0 0 6px; text-align: left; }
   .reg-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin: 10px 0 -2px 8px; text-align: left; }
   .reg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .priv-note { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); color: var(--ink-soft, var(--ink)); font-size: 0.85rem; line-height: 1.4; text-align: left; }
+  .priv-lock { flex: none; }
   .reg-chip { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 10px 16px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
   .reg-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .reg-more { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.82rem; text-decoration: underline; cursor: pointer; padding: 6px 4px; align-self: center; }
@@ -3658,7 +3660,10 @@ const RAW = String.raw`<!doctype html>
   function inviteEmailKey() { return "nearuneInviteEmail:" + ROOM + ":" + viewerKey; }
   function sentInviteEmail() {
     if (lastInviteEmail) return lastInviteEmail;
-    try { return localStorage.getItem(inviteEmailKey()) || ""; } catch (e) { return ""; }
+    // Not kept on the phone either any more (the app promises the invite
+    // address is never saved); clear what older versions left behind.
+    try { localStorage.removeItem(inviteEmailKey()); } catch (e) {}
+    return "";
   }
   function confirmEmailKey() { return "nearuneConfirmEmail:" + ROOM + ":" + viewerKey; }
   function sentToEmail() {
@@ -3753,6 +3758,10 @@ const RAW = String.raw`<!doctype html>
   // set) -> today's question and an answer box -> name, city, language.
   // The answer is saved right after sign-up.
   var fq = { step: "who", rel: "", text: "", q: "" };
+  // Calm reassurance under the first screens: what Nearune does NOT ask for.
+  function privacyNote(text) {
+    return h("div", { class: "priv-note" }, [h("span", { class: "priv-lock", text: "\uD83D\uDD12" }), h("span", { text: text })]);
+  }
   function firstQuestionFlow() {
     var card;
     if (!fq.rel) {
@@ -3761,6 +3770,7 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "reg-title", text: t("Who would you love to hear from every day?") }),
         h("p", { class: "reg-sub", text: t("Nearune gives you both one question a day. Pick one to see today's question.") })
       ]);
+      var whoPriv = privacyNote(t("Nearune never saves the phone number or email you send your invite to."));
       var chips = h("div", { class: "reg-chips", style: "margin-top:14px;" });
       RELATIONSHIPS.forEach(function (pair) {
         var chip = h("button", { type: "button", class: "reg-chip", text: t(pair[1]) });
@@ -3768,6 +3778,7 @@ const RAW = String.raw`<!doctype html>
         chips.appendChild(chip);
       });
       card.appendChild(chips);
+      card.appendChild(whoPriv);
       return regShell(card);
     }
     funnelPing("fq_question");
@@ -3795,6 +3806,7 @@ const RAW = String.raw`<!doctype html>
     form.appendChild(ta); form.appendChild(send);
     card.appendChild(form);
     card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;", text: t("They'll answer the same question, and you'll see each other's answers.") }));
+    card.appendChild(privacyNote(t("No account, no password. Your answers are shared only with the person you invite.")));
     var back = h("button", { type: "button", class: "reg-more", text: "\u2039 " + t("Someone else") });
     back.addEventListener("click", function () { fq.rel = ""; registerDraft.relationship = ""; fq.step = "who"; renderApp(); });
     card.appendChild(back);
@@ -3855,6 +3867,7 @@ const RAW = String.raw`<!doctype html>
       h("p", { class: "reg-title", text: fq.step === "details" ? t("Last step: who's it from?") : soloRegistration ? t("Let's set up your Nearune") : tTemplate("You're registering as {name}.", { name: personName(viewerKey) }) }),
       h("p", { class: "reg-sub", text: fq.step === "details" ? t("Your name, city and language, so they know who's answering and where you are. Then you'll invite them.") : soloRegistration ? t("Just your name and city, then you can invite someone.") : "" })
     ]);
+    if (soloRegistration) card.appendChild(privacyNote(t("A first name or nickname is fine, and just your city, never your exact location. They're used only inside Nearune and never sold or shared with advertisers.")));
     var form = h("div", { class: "puzzle-setup" });
     applySavedProfile(registerDraft);
     applyPhoneLanguage(registerDraft);
@@ -3959,7 +3972,6 @@ const RAW = String.raw`<!doctype html>
         lastAppStoreUrl = res.data._appStoreUrl || "";
         if (!res.data._viaHandle) {
           lastInviteEmail = email;
-          try { localStorage.setItem(inviteEmailKey(), email); } catch (e) {}
         }
         state = res.data;
         showInviteForm = false;
@@ -4205,6 +4217,7 @@ const RAW = String.raw`<!doctype html>
           nrTrack("invite_sent"); markInviteShared(); submitInvite();
         });
         card.appendChild(em); card.appendChild(send);
+        card.appendChild(privacyNote(t("Never saved. A phone number opens a text from your own phone, and an email address is used only to send this invite.")));
       } else if (lastInviteEmail && !regError) {
         card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:8px;", text: "\u2713 " + t("Invite emailed to") + " " + lastInviteEmail }));
       }

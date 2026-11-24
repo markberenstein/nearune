@@ -25,10 +25,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 }
 
 
-// The app's web view, plus our own small plugin (MetaEventsPlugin below).
+// The app's web view, plus our own small plugins (MetaEventsPlugin and
+// NearuneSharePlugin below).
 class NearuneBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(MetaEventsPlugin())
+        bridge?.registerPluginInstance(NearuneSharePlugin())
     }
 }
 
@@ -50,5 +52,37 @@ public class MetaEventsPlugin: CAPPlugin, CAPBridgedPlugin {
             AppEvents.shared.logEvent(.completedRegistration, parameters: [.registrationMethod: method])
         }
         call.resolve()
+    }
+}
+
+// Opens the iPhone share sheet with the invite message (a short personal line,
+// today's question and the link). The web share sheet inside the app flashed
+// closed whenever text was included (Nov 14, 2026), so invites from the
+// iPhone app had to go out as a bare link; this native sheet doesn't.
+@objc(NearuneSharePlugin)
+public class NearuneSharePlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "NearuneSharePlugin"
+    public let jsName = "NearuneShare"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "share", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func share(_ call: CAPPluginCall) {
+        let text = call.getString("text") ?? ""
+        if text.isEmpty { call.reject("nothing to share"); return }
+        DispatchQueue.main.async {
+            guard let vc = self.bridge?.viewController else { call.reject("no view"); return }
+            let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+            // iPad shows the sheet as a popover, which needs an anchor.
+            if let pop = sheet.popoverPresentationController {
+                pop.sourceView = vc.view
+                pop.sourceRect = CGRect(x: vc.view.bounds.midX, y: vc.view.bounds.maxY - 80, width: 1, height: 1)
+                pop.permittedArrowDirections = []
+            }
+            sheet.completionWithItemsHandler = { activity, completed, _, _ in
+                call.resolve(["completed": completed, "activity": activity?.rawValue ?? ""])
+            }
+            vc.present(sheet, animated: true)
+        }
     }
 }

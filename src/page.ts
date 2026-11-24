@@ -4073,12 +4073,70 @@ const RAW = String.raw`<!doctype html>
   // What the Copy link button puts on the clipboard: a short note from the
   // sender, today's question, then the link. (The share sheet still sends the
   // bare link; Messages shows the invite page's preview card under it.)
+  // The language the invite goes out in: the message they send, the chat
+  // preview card and the invite page. Starts as the inviter's own language;
+  // the "Invitation language" picker on the invite card can change it.
+  var inviteLangName = "";
+  var inviteMsgTr = {};
+  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"];
+  function myLanguageName() {
+    var me = state && state.people && state.people[viewerKey];
+    return (me && me.language && LANG_NAME_TO_CODE[String(me.language).toLowerCase()] && !/^(gib|tlh)$/.test(LANG_NAME_TO_CODE[String(me.language).toLowerCase()])) ? me.language : "English";
+  }
+  function inviteLanguage() { return inviteLangName || myLanguageName(); }
+  function inviteLangCode() { return LANG_NAME_TO_CODE[inviteLanguage().toLowerCase()] || "en"; }
+  // A line in the invite's language: the app's own translation when it's
+  // the inviter's language, otherwise one fetched when they picked it.
+  function tInvite(s) {
+    if (inviteLanguage() === myLanguageName()) return t(s);
+    var c = inviteLangCode();
+    if (c === "en") return s;
+    return (inviteMsgTr[c] && inviteMsgTr[c][s]) || s;
+  }
+  function loadInviteTranslations(code, extra) {
+    if (code === "en") return;
+    var texts = INVITE_MSG_STRINGS.concat(extra || []).filter(function (x) { return x && !(inviteMsgTr[code] && inviteMsgTr[code][x]); });
+    if (!texts.length) return;
+    fetch(RP + "/api/translate-batch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target: code, texts: texts }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var out = (d && d.translated) || [];
+        inviteMsgTr[code] = inviteMsgTr[code] || {};
+        texts.forEach(function (x, i) { if (out[i]) inviteMsgTr[code][x] = out[i]; });
+      }).catch(function () {});
+  }
+  function todaysQuestionText() {
+    try { if (state && state.todayKey) return questionForKey(state.todayKey) || ""; } catch (e) {}
+    return "";
+  }
+  // "Invitation language: [French ▾]" on the invite card.
+  function inviteLangRow() {
+    var sel = document.createElement("select");
+    sel.className = "lang-select";
+    sel.style.cssText = "width:auto !important;flex:0 1 auto;max-width:50%;min-width:0;padding:6px 10px;font-size:0.9rem;margin-left:8px;";
+    LANGUAGES.filter(function (p) { return !/^(gib|tlh)$/.test(p[1]); }).slice().sort(function (a, b) { return a[0].localeCompare(b[0]); }).forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0]; opt.textContent = pair[0];
+      if (pair[0] === inviteLanguage()) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", function () {
+      inviteLangName = sel.value;
+      loadInviteTranslations(inviteLangCode(), [todaysQuestionText()]);
+      // The invite link stays the same; the server just notes the language
+      // for the preview card and the invite page.
+      fetch(RP + "/api/invite-lang", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, lang: inviteLangName }) }).catch(function () {});
+      funnelPing("invite_lang_changed");
+    });
+    return h("div", { style: "display:flex;align-items:center;justify-content:center;margin-top:12px;font-size:0.9rem;color:var(--muted,#6F6054);" }, [
+      h("span", { style: "white-space:nowrap;", text: "\uD83C\uDF10 " + t("Invitation language") }), sel
+    ]);
+  }
   function inviteMessage(url) {
-    var q = "";
-    try { if (state && state.todayKey) q = questionForKey(state.todayKey) || ""; } catch (e) {}
-    return t("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
-      (q ? "\n\n" + t("Today's question:") + " \u201c" + q + "\u201d" : "") +
-      "\n\n" + t("Join me here:") + " " + url;
+    var q = todaysQuestionText();
+    return tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
+      (q ? "\n\n" + tInvite("Today's question:") + " \u201c" + tInvite(q) + "\u201d" : "") +
+      "\n\n" + tInvite("Join me here:") + " " + url;
   }
   // Today's question rides along with the invite so the invite page can
   // show it ("Here's today's question"). The server only shows it if it's
@@ -4088,6 +4146,7 @@ const RAW = String.raw`<!doctype html>
       var k = state && state.todayKey;
       if (k) { body.q = questionForKey(k); body.qKey = k; }
     } catch (e) {}
+    try { body.lang = inviteLanguage(); } catch (e) {}
     return body;
   }
   function submitInviteLink() {
@@ -4266,6 +4325,7 @@ const RAW = String.raw`<!doctype html>
       setTimeout(submitInviteLink, 0);
     }
     if (lastInviteUrl) {
+      card.appendChild(inviteLangRow());
       var dsHome = directSendRow(lastInviteUrl);
       if (dsHome) card.appendChild(dsHome);
       var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
@@ -4466,6 +4526,7 @@ const RAW = String.raw`<!doctype html>
       chips
     ];
     if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
+    if (chosen) kids.push(inviteLangRow());
     var dsStep = chosen && lastInviteUrl ? directSendRow(lastInviteUrl) : null;
     if (dsStep) kids.push(dsStep);
     kids.push(main);

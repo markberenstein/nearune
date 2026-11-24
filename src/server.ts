@@ -237,6 +237,8 @@ const FUNNEL_STEPS = new Set([
   // What happened in the share screen after Send: finished (picked an app or
   // person), closed without sending, or copied the link instead.
   "invite_share_done", "invite_share_cancel", "invite_copied",
+  // Changed the "Invitation language" picker on the invite card.
+  "invite_lang_changed",
   // Tapped "While you wait, get matched with someone now" after sending.
   "invite_wait_friend",
   // Question first: picked who it's for, saw today's question, typed, tapped Send.
@@ -423,7 +425,10 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const jUa2 = req.headers.get("user-agent") || "";
         const al = previewBotName(jUa2) ? "" : (req.headers.get("accept-language") || "").split(",")[0].trim().toLowerCase();
         const fromInviter = sP && (sP as any).language ? langCodeForName(String((sP as any).language)) : null;
-        const pick = al && /^[a-z]{2,3}(-[a-z0-9]{2,4})?$/.test(al) ? al : (fromInviter || "en");
+        // The language the inviter picked for this invite wins; otherwise the
+        // visitor's browser language, then the inviter's own language.
+        const chosen = sInv && (sInv as any).lang ? langCodeForName(String((sInv as any).lang)) : null;
+        const pick = chosen || (al && /^[a-z]{2,3}(-[a-z0-9]{2,4})?$/.test(al) ? al : (fromInviter || "en"));
         iLang = /^(gib|tlh)$/.test(pick) ? "en" : pick;
       } catch {}
       const iTr: Record<string, string> = {};
@@ -1691,6 +1696,26 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }
 
+    // The inviter changed the invite's language. Same link; this only sets the
+    // language of its preview card and invite page.
+    if (req.method === "POST" && restPath === "/api/invite-lang") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      const lang = typeof body?.lang === "string" ? body.lang.trim().slice(0, 40) : "";
+      if (!isPerson(who) || !lang || !langCodeForName(lang)) return json({ error: "invalid" }, { status: 400 });
+      if (!rateLimit("invite-lang-ip:" + clientIp(req, server), 30, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const cur = await loadState(roomId);
+      if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed) return json({ error: "not_confirmed" }, { status: 403 });
+      const other: PersonKey = who === "mark" ? "nikita" : "mark";
+      await saveState(roomId, (s) => { if (s.pendingInvite && s.pendingInvite[other]) (s.pendingInvite[other] as any).lang = lang; });
+      // Warm the translations so the card and page are ready.
+      try {
+        const lc = langCodeForName(lang)!; const b0 = lc.split("-")[0];
+        const tgt = b0 === "zh" || b0 === "pt" ? lc : b0;
+        if (!/^(en|gib|tlh)/.test(tgt)) for (const en of INVITE_STRINGS) resolveTranslation(en, tgt, "").catch(() => {});
+      } catch {}
+      return json({ ok: true });
+    }
     if (req.method === "POST" && restPath === "/api/invite") {
       const body = await readJson(req);
       if (!body) return json({ error: "bad_json" }, { status: 400 });
@@ -1747,13 +1772,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
             : { token, at: madeAt };
         if (q) { base.q = q; base.qKey = qKey; }
         else if (priorLive && priorInvite!.q) { base.q = priorInvite!.q; base.qKey = priorInvite!.qKey; }
+        // The language the inviter picked for this invite (a name like "French").
+        const bodyLang = typeof body?.lang === "string" ? body.lang.trim().slice(0, 40) : "";
+        if (bodyLang && langCodeForName(bodyLang)) base.lang = bodyLang;
+        else if (priorLive && (priorInvite as any).lang) base.lang = (priorInvite as any).lang;
         s.pendingInvite[other] = base;
       });
       // Start translating the invite page into the inviter's language now, so
       // the chat app's preview card and the page are ready when the link lands.
       try {
         const meK = other === "mark" ? "nikita" : "mark";
-        const lc = langCodeForName(String((state.people as any)?.[meK]?.language || ""));
+        const lc = langCodeForName(String((state.pendingInvite as any)?.[other]?.lang || (state.people as any)?.[meK]?.language || ""));
         if (lc && !/^(en|gib|tlh)/.test(lc)) {
           const b0 = lc.split("-")[0];
           const tgt = b0 === "zh" || b0 === "pt" ? lc : b0;

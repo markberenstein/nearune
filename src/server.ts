@@ -230,10 +230,15 @@ async function roomsCreatedToday(): Promise<number> {
 
 const FUNNEL_STEPS = new Set([
   "reg_screen", "reg_city", "reg_name", "reg_email", "reg_clicked",
-  "reg_err_city", "reg_err_name", "reg_err_relationship", "reg_err_server",
+  "reg_err_city", "reg_err_name", "reg_err_filler", "reg_err_relationship", "reg_err_server",
   "confirm_screen", "invite_screen", "invite_step",
   // The invite actually went out: link copied or shared, or email sent.
   "invite_shared", "invite_emailed",
+  // What happened in the share screen after Send: finished (picked an app or
+  // person), closed without sending, or copied the link instead.
+  "invite_share_done", "invite_share_cancel", "invite_copied",
+  // Tapped "While you wait, get matched with someone now" after sending.
+  "invite_wait_friend",
   // Question first: picked who it's for, saw today's question, typed, tapped Send.
   "fq_who", "fq_question", "fq_typed", "fq_sent",
   // Picked "Not sure yet? Match me with someone" (Make a friend) instead.

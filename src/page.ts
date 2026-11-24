@@ -3730,6 +3730,10 @@ const RAW = String.raw`<!doctype html>
     } catch (e) {}
   }
   var clearRegErrorShown = function () {};
+  function fillerName(n) {
+    var x = String(n || "").toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[.!?,]+$/, "").trim();
+    return /^(i|i'm|im|i am|i don't|i dont|the|a|an|hi|hello|hey|yes|no|ok|okay|me|you|name|my name|test|it|is|and|so|we|what|who)$/.test(x);
+  }
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
     funnelPing("reg_clicked");
@@ -3738,6 +3742,10 @@ const RAW = String.raw`<!doctype html>
     // tap on Continue never looks like nothing happened.
     regErrField = "";
     if (!name) { funnelPing("reg_err_name"); regErrField = "name"; regError = t("Enter your name."); renderApp(); return; }
+    // Filler words the phone keyboard suggests in an empty box ("I", "I'm",
+    // "The"...). Several people tapped one to get past the name box, and their
+    // invite then read "I'm invited you to Nearune". Ask for a real name.
+    if (fillerName(name)) { funnelPing("reg_err_filler"); regErrField = "name"; regError = t("Please enter your first name. It's what your invite will show."); renderApp(); return; }
     if (!registerDraft.location.trim()) { funnelPing("reg_err_city"); regErrField = "city"; regError = t("Enter the city where you're based."); renderApp(); return; }
     if (locCityBlocks) { funnelPing("reg_err_city"); regErrField = "city"; regError = locCityError; renderApp(); return; }
     // Only the first registrant's choice is asked for (see
@@ -4137,7 +4145,7 @@ const RAW = String.raw`<!doctype html>
     wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
     var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
     sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
-    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); }); });
+    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); }); });
     return h("div", {}, [wa, sms]);
   }
   function shareLinkButton(url, label, cls) {
@@ -4158,15 +4166,15 @@ const RAW = String.raw`<!doctype html>
         // message (see NearuneSharePlugin in SceneDelegate.swift).
         var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
         if (iosApp && url === lastInviteUrl && NS && NS.share) {
-          NS.share({ text: inviteMessage(url) }).catch(function () { navigator.share({ url: url }).catch(function () {}); });
+          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); }, function () {}); });
           return;
         }
         var shareObj = url === lastInviteUrl && !iosApp
           ? { text: inviteMessage(url) }
           : { url: url };
-        navigator.share(shareObj).catch(function () {});
+        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
         window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
@@ -4323,9 +4331,13 @@ const RAW = String.raw`<!doctype html>
       // without a specific person in mind, and a match gets them a real
       // second person right away instead of an empty room.
       {
-        var mfl = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + (stillWaiting ? t("Make a friend while you wait") : t("No one in mind? Make a friend instead")) });
-        mfl.style.cssText = "display:block;margin:6px auto 0;font-size:0.9rem;";
-        mfl.addEventListener("click", function () { location.href = "/home?friend=1"; });
+        // After the invite is out, this becomes a real button: Make a friend is
+        // what gets new people a second person, and invites from ad visitors
+        // mostly go unanswered.
+        var afterSend = stillWaiting || inviteWasShared();
+        var mfl = h("button", { class: afterSend ? "puzzle-choose-btn" : "switch-link", type: "button", text: "\uD83E\uDD1D " + (afterSend ? t("While you wait, get matched with someone now") : t("No one in mind? Make a friend instead")) });
+        mfl.style.cssText = afterSend ? "display:block;width:100%;box-sizing:border-box;margin:14px 0 0;font-weight:700;" : "display:block;margin:6px auto 0;font-size:0.9rem;";
+        mfl.addEventListener("click", function () { funnelPing("invite_wait_friend"); location.href = "/home?friend=1"; });
         card.appendChild(mfl);
       }
     } else if (regError) {

@@ -53,7 +53,10 @@ function furthestStep(st: any, ppl: any[], answeredDays: number): string {
   const allConfirmed = ppl.length >= 2 && ppl.every((p: any) => p.confirmed);
   if (answeredDays > 0) return "answered a question";
   if (allConfirmed) return "partner joined";
-  if (f.invite_shared || f.invite_emailed) return "sent the invite";
+  if (f.invite_share_done || f.invite_emailed) return "sent the invite (share completed)";
+  if (f.invite_copied) return "sent the invite (copied the link)";
+  if (f.invite_share_cancel) return "tapped Send, closed the share screen";
+  if (f.invite_shared) return "sent the invite";
   if (st && st.pendingInvite && Object.keys(st.pendingInvite).length > 0) return "invite ready, not sent yet";
   if (ppl.some((p: any) => p.confirmed)) return "registered";
   if (ppl.length > 0) return "registered, not confirmed";

@@ -28,7 +28,7 @@ import {
   addRoomAlias,
   roomSlug,
 } from "./storage";
-import { resolveTranslation, translateEmailStrings } from "./translate";
+import { resolveTranslation, translateEmailStrings, langCodeForName } from "./translate";
 import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample, defaultVoiceId } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage, voiceGenderForName } from "./ai";
 import { regionAbbr } from "./usstates";
@@ -52,7 +52,7 @@ function isKnownQuestion(q: string): boolean {
 }
 import { rateLimit, clientIp } from "./rate-limit";
 import { buildGetPage } from "./get-page";
-import { buildInvitePage } from "./invite-page";
+import { buildInvitePage, INVITE_STRINGS } from "./invite-page";
 import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, friendRequeue, type FriendProfile } from "./friend";
 import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep } from "./funnel";
@@ -415,7 +415,40 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const preview = sInv && sInv.q && sP && sP.confirmed
         ? { question: sInv.q, isToday: sInv.qKey === sToday, city: effectiveLocation(sP as any, sToday) || "", tz: sP.tz || "", answered: sAnswered && sInv.qKey === sToday }
         : null;
-      return new Response(buildInvitePage({ origin: publicOrigin, inviter: sInviter, roomId: sRoom, dest, preview }), {
+      // Shown in the recipient's language: their browser's language when a
+      // person opens it, or the inviter's language for the chat app's
+      // preview card (the robot that builds the card has no language).
+      let iLang = "en";
+      try {
+        const jUa2 = req.headers.get("user-agent") || "";
+        const al = previewBotName(jUa2) ? "" : (req.headers.get("accept-language") || "").split(",")[0].trim().toLowerCase();
+        const fromInviter = sP && (sP as any).language ? langCodeForName(String((sP as any).language)) : null;
+        const pick = al && /^[a-z]{2,3}(-[a-z0-9]{2,4})?$/.test(al) ? al : (fromInviter || "en");
+        iLang = /^(gib|tlh)$/.test(pick) ? "en" : pick;
+      } catch {}
+      const iTr: Record<string, string> = {};
+      if (!/^en\b/.test(iLang)) {
+        const want = INVITE_STRINGS.concat(preview && preview.question ? [preview.question] : []);
+        const base0 = iLang.split("-")[0];
+        // Plain language code ("fr", not "fr-ma") so every visitor shares the
+        // same cached translations; Chinese and Portuguese keep their variant.
+        iLang = base0 === "zh" || base0 === "pt" ? iLang : base0;
+        const base = "";
+        // Wait at most ~2.5s; anything not back by then stays in English.
+        await Promise.race([
+          Promise.all(want.map(async (en) => {
+            try {
+              const r = await resolveTranslation(en, iLang, base);
+              const out = (r && r.translated) || "";
+              // Keep the inviter's name slot; drop a translation that lost it.
+              if (out && (!en.includes("{0}") || out.includes("{0}"))) iTr[en] = out;
+            } catch {}
+          })),
+          new Promise((r) => setTimeout(r, 2500)),
+        ]);
+      }
+      console.log("[invite-page] room=" + sRoom + " lang=" + iLang + " translated=" + Object.keys(iTr).length);
+      return new Response(buildInvitePage({ origin: publicOrigin, inviter: sInviter, roomId: sRoom, dest, preview, tr: iTr, lang: Object.keys(iTr).length ? iLang : "en" }), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       });
     }
@@ -1716,6 +1749,17 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         else if (priorLive && priorInvite!.q) { base.q = priorInvite!.q; base.qKey = priorInvite!.qKey; }
         s.pendingInvite[other] = base;
       });
+      // Start translating the invite page into the inviter's language now, so
+      // the chat app's preview card and the page are ready when the link lands.
+      try {
+        const meK = other === "mark" ? "nikita" : "mark";
+        const lc = langCodeForName(String((state.people as any)?.[meK]?.language || ""));
+        if (lc && !/^(en|gib|tlh)/.test(lc)) {
+          const b0 = lc.split("-")[0];
+          const tgt = b0 === "zh" || b0 === "pt" ? lc : b0;
+          for (const en of INVITE_STRINGS.concat(q ? [q] : [])) resolveTranslation(en, tgt, "").catch(() => {});
+        }
+      } catch {}
       const inviteUrl = roomId
         ? publicOrigin + "/j/" + roomId + "/" + token
         : publicOrigin + roomPrefix + "/?invite=" + other + "&token=" + token;

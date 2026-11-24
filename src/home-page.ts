@@ -524,6 +524,16 @@ export function buildHomePage(): string {
     } catch (e) {}
   }
   function browserTz() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } }
+  // Tells Meta (through the app's Meta SDK) that someone really signed up,
+  // so ad campaigns can aim for sign-ups instead of bare installs. Only works
+  // inside the iPhone/Android app (version 1.0.4 and later); a no-op on the
+  // web and in older app versions. Sends no name, email or city.
+  function metaSignup(method) {
+    try {
+      var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.MetaEvents;
+      if (P && P.logRegistration) P.logRegistration({ method: method }).catch(function () {});
+    } catch (e) {}
+  }
   function startFriend(profile) {
     friendMsg = "";
     var body = { device: deviceId(), adult: true };
@@ -540,6 +550,7 @@ export function buildHomePage(): string {
           render(); return;
         }
         var d = x.d;
+        metaSignup("make_a_friend");
         if (d.status === "matched") { openMatch(d.roomId, d.token, d.who, d.ready); return; }
         else { setFriend({ status: "waiting", ticket: d.ticket }); registerFriendPush(d.ticket); }
         render();

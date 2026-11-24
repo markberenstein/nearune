@@ -10,11 +10,38 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Every visible line on the page and in the link preview card. The server
+// translates these into the recipient's language (their browser's, or for
+// chat-app preview cards the inviter's) and passes them in as "tr".
+// "{0}" stands for the inviter's name.
+export const INVITE_STRINGS = [
+  "{0} wants to stay close with you",
+  "Someone wants to stay close with you",
+  "Today's question",
+  "A question for you two",
+  "Answer it, then see {0}'s answer.",
+  "Answer it, then see their answer.",
+  "One question a day, just for the two of you. Answer it, then see each other's answers.",
+  "{0} invited you",
+  "Someone invited you",
+  "You",
+  "{0} already answered. Join to see it.",
+  "Accept invite",
+  "Join right here, no download needed. You can get the app later.",
+  "Prefer the app?",
+  "Room code",
+];
+type Tr = Record<string, string>;
+function T(tr: Tr | undefined, en: string, who?: string): string {
+  const out = (tr && tr[en]) || en;
+  return who === undefined ? out : out.split("{0}").join(who);
+}
+
 export type InvitePreview = { question: string; isToday: boolean; city: string; tz: string; answered: boolean };
 
 // A small look inside the room they're invited to: both clocks, the
 // question waiting for them, and whether the inviter already answered.
-function previewBlock(p: InvitePreview, who: string): string {
+function previewBlock(p: InvitePreview, who: string, tr?: Tr): string {
   const city = esc((p.city || "").split(",")[0].trim() || who);
   const tz = esc(p.tz || "");
   return `
@@ -22,28 +49,31 @@ function previewBlock(p: InvitePreview, who: string): string {
     <div class="clocks">
       <div class="clock"><span class="lbl">${city}</span><b data-tz="${tz}">&nbsp;</b></div>
       <span class="plane" aria-hidden="true">&#x2708;&#xFE0E;</span>
-      <div class="clock you"><span class="lbl">You</span><b data-tz="">&nbsp;</b></div>
+      <div class="clock you"><span class="lbl">${esc(T(tr, "You"))}</span><b data-tz="">&nbsp;</b></div>
     </div>
     <div class="q">
-      <span class="lbl">${p.isToday ? "Today's question" : "A question for you two"}</span>
-      <p>${esc(p.question)}</p>
-      ${p.answered ? `<div class="ans">&#x1F512; ${who} already answered. Join to see it.</div>` : `<div class="ans">Answer it, then see ${who === "Someone" ? "their" : who + "'s"} answer.</div>`}
+      <span class="lbl">${esc(T(tr, p.isToday ? "Today's question" : "A question for you two"))}</span>
+      <p>${esc((tr && tr[p.question]) || p.question)}</p>
+      ${p.answered ? `<div class="ans">&#x1F512; ${esc(T(tr, "{0} already answered. Join to see it.", who))}</div>` : `<div class="ans">${esc(who === "Someone" ? T(tr, "Answer it, then see their answer.") : T(tr, "Answer it, then see {0}'s answer.", who))}</div>`}
     </div>
   </div>`;
 }
 
-export function buildInvitePage(opts: { origin: string; inviter: string; roomId: string; dest: string; preview?: InvitePreview | null }): string {
+export function buildInvitePage(opts: { origin: string; inviter: string; roomId: string; dest: string; preview?: InvitePreview | null; tr?: Tr; lang?: string }): string {
+  const tr = opts.tr;
   const appStoreUrl = Bun.env.APP_STORE_URL || DEFAULT_APP_STORE_URL;
-  const who = opts.inviter ? esc(opts.inviter) : "Someone";
+  // Plain name; every place it's used escapes it.
+  const who = opts.inviter || "Someone";
   // Preview card wording reads as reaching out, not as a request to install
   // an app: who wants to stay close, and the question waiting for them.
-  const title = opts.inviter ? who + " wants to stay close with you" : "Someone wants to stay close with you";
-  const desc = opts.preview && opts.preview.question
-    ? (opts.preview.isToday ? "Today's question" : "A question for you two") + ": \u201c" + esc(opts.preview.question) + "\u201d Answer it, then see " + (opts.inviter ? who + "'s" : "their") + " answer."
-    : "One question a day, just for the two of you. Answer it, then see each other's answers.";
+  const title = esc(opts.inviter ? T(tr, "{0} wants to stay close with you", who) : T(tr, "Someone wants to stay close with you"));
+  const qShown = opts.preview && opts.preview.question ? (tr && tr[opts.preview.question]) || opts.preview.question : "";
+  const desc = esc(opts.preview && opts.preview.question
+    ? T(tr, opts.preview.isToday ? "Today's question" : "A question for you two") + ": \u201c" + qShown + "\u201d " + (opts.inviter ? T(tr, "Answer it, then see {0}'s answer.", who) : T(tr, "Answer it, then see their answer."))
+    : T(tr, "One question a day, just for the two of you. Answer it, then see each other's answers."));
   const dest = esc(opts.dest);
   return `<!doctype html>
-<html lang="en">
+<html lang="${esc(opts.lang || "en")}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -94,16 +124,16 @@ body{margin:0;background:var(--cream);color:var(--ink);font-family:'Manrope',sys
 <main class="card">
   <img class="logo" src="/apple-touch-icon.png" alt="Nearune">
   <h1 class="name">Nearune</h1>
-  <p class="sub">${who} invited you</p>
-  ${opts.preview ? previewBlock(opts.preview, who) : ""}
-  <a class="accept" id="acceptBtn" href="${dest}" data-web="1">Accept invite</a>
-  <p class="acc-note" id="accNote">Join right here, no download needed. You can get the app later.</p>
-  <p class="get" style="margin-top:18px">Prefer the app?</p>
+  <p class="sub">${esc(opts.inviter ? T(tr, "{0} invited you", who) : T(tr, "Someone invited you"))}</p>
+  ${opts.preview ? previewBlock(opts.preview, who, tr) : ""}
+  <a class="accept" id="acceptBtn" href="${dest}" data-web="1">${esc(T(tr, "Accept invite"))}</a>
+  <p class="acc-note" id="accNote">${esc(T(tr, "Join right here, no download needed. You can get the app later."))}</p>
+  <p class="get" style="margin-top:18px">${esc(T(tr, "Prefer the app?"))}</p>
   <div class="badges">
     <a class="badge" href="${esc(appStoreUrl)}" aria-label="Download Nearune on the App Store"><img src="/app-store-badge.png" alt="Download on the App Store"></a>
     <a class="badge2" href="https://play.google.com/store/apps/details?id=com.nearune.app" aria-label="Get Nearune on Google Play"><img src="/google-play-badge.svg" alt="Get it on Google Play"></a>
   </div>
-  ${opts.roomId ? '<div class="code">Room code<b>' + esc(opts.roomId) + "</b></div>" : ""}
+  ${opts.roomId ? '<div class="code">' + esc(T(tr, "Room code")) + "<b>" + esc(opts.roomId) + "</b></div>" : ""}
 </main>
 <script>
 try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) location.replace(${JSON.stringify(opts.dest).replace(/</g, "\\u003c")}); } catch (e) {}

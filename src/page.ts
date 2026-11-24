@@ -3719,6 +3719,16 @@ const RAW = String.raw`<!doctype html>
       return city;
     } catch (e) { return ""; }
   }
+  // Tells Meta (through the app's Meta SDK) that someone really signed up,
+  // so ad campaigns can aim for sign-ups instead of bare installs. Only works
+  // inside the iPhone/Android app (version 1.0.4 and later); a no-op on the
+  // web and in older app versions. Sends no name, email or city.
+  function metaSignup(method) {
+    try {
+      var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.MetaEvents;
+      if (P && P.logRegistration) P.logRegistration({ method: method }).catch(function () {});
+    } catch (e) {}
+  }
   var clearRegErrorShown = function () {};
   function submitRegister() {
     var name = registerDraft.name.trim(), email = registerDraft.email.trim();
@@ -3755,6 +3765,7 @@ const RAW = String.raw`<!doctype html>
           renderApp(); return;
         }
         nrTrack("signed_up");
+        metaSignup(soloRegistration ? "room" : "invite");
         lastConfirmUrl = res.data._confirmUrl || "";
         if (email) {
           lastConfirmEmail = email;

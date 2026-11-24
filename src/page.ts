@@ -3785,6 +3785,7 @@ const RAW = String.raw`<!doctype html>
   // Question first (new room creators): who it's for (picks the question
   // set) -> today's question and an answer box -> name, city, language.
   // The answer is saved right after sign-up.
+  var QUESTION_FIRST = false;
   var fq = { step: "who", rel: "", text: "", q: "" };
   // Kept on this phone too, so leaving the app, going back or a reload
   // doesn't lose the choice or the answer they already typed.
@@ -4888,7 +4889,11 @@ const RAW = String.raw`<!doctype html>
       }
       // Someone starting a brand-new room sees today's question first and
       // answers it; name, city and language come after they tap Send.
-      if (!mine && soloRegistration && state.origin !== "friend" && fq.step !== "details") { app.appendChild(firstQuestionFlow()); return; }
+      // Question-first sign-up (who it's for -> today's question -> name and
+      // city) is switched off for now: nobody finished it on Nov 23. New rooms
+      // go back to name and city first; "who it's for" is asked with the
+      // invite. Set QUESTION_FIRST = true to bring it back.
+      if (QUESTION_FIRST && !mine && soloRegistration && state.origin !== "friend" && fq.step !== "details") { app.appendChild(firstQuestionFlow()); return; }
       if (!mine || !mine.confirmed) { app.appendChild(registrationFlow()); return; }
 
       var other = state.people && state.people[otherKey];

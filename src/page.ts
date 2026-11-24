@@ -4147,11 +4147,22 @@ const RAW = String.raw`<!doctype html>
     btn.addEventListener("click", function () {
       nrTrack("invite_sent"); markInviteShared();
       if (navigator.share) {
-        // Link only: adding a title/text made the share sheet flash and close
-        // inside the iPhone app (Nov 14, 2026), so invites go out as the bare
-        // link, which Messages turns into a preview card.
-        var shareObj = url === lastInviteUrl
-          ? { url: url }
+        // Inside the iPhone app, adding text made the share sheet flash and
+        // close (Nov 14, 2026), so there it stays the bare link (Messages turns
+        // it into a preview card). Everywhere else (Android, browsers) the
+        // invite goes out with a short personal message and today's question:
+        // a bare link from a number they may not have saved looked like spam,
+        // and nobody opened those.
+        var iosApp = isNativeApp() && /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+        // iPhone app 1.0.4 and later: native share sheet that can carry the
+        // message (see NearuneSharePlugin in SceneDelegate.swift).
+        var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
+        if (iosApp && url === lastInviteUrl && NS && NS.share) {
+          NS.share({ text: inviteMessage(url) }).catch(function () { navigator.share({ url: url }).catch(function () {}); });
+          return;
+        }
+        var shareObj = url === lastInviteUrl && !iosApp
+          ? { text: inviteMessage(url) }
           : { url: url };
         navigator.share(shareObj).catch(function () {});
       } else if (navigator.clipboard && navigator.clipboard.writeText) {

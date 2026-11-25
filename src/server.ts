@@ -2727,7 +2727,7 @@ async function inviteSweep(): Promise<void> {
             const h0 = localHour(inv0 && inv0.tz);
             if (h0 >= 9 && h0 < 21) {
               const w0 = invitedLabel(st.relationship);
-              const r0 = await sendPush(sub, { title: cap(w0) + " hasn't joined yet", body: "Today's question is waiting for you both. A quick note from you can help. Tap to send your link again.", tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
+              const r0 = await sendPush(sub, { title: cap(w0) + " hasn't joined yet", body: "Today's question is waiting for you both. A quick note from you can help. Tap to send your link again.", tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1&n=0" } as any);
               if (r0.ok) {
                 console.log("[invite-nudge] room=" + (id || "main") + " 1h");
                 await saveState(id, (s) => { s.inviteHourNudgeToken = inv.token; });
@@ -2747,7 +2747,8 @@ async function inviteSweep(): Promise<void> {
         const wasSent = !!(f.invite_shared || f.invite_emailed || inv.instagram || !inv.link);
         const nudge = (wasSent ? INVITE_NUDGES_SENT : INVITE_NUDGES_UNSENT)[count];
         const wN = invitedLabel(st.relationship);
-        const res = await sendPush(sub, { title: nudge.title(hoursLeft, wN), body: nudge.body(hoursLeft, wN), tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1" } as any);
+        // n tells the follow-up card which message to offer (day 1, 2 or 3).
+        const res = await sendPush(sub, { title: nudge.title(hoursLeft, wN), body: nudge.body(hoursLeft, wN), tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1&n=" + (count + 1) } as any);
         if (res.ok) {
           console.log("[invite-nudge] room=" + (id || "main") + " #" + (count + 1));
           await saveState(id, (s) => { s.inviteNudgeAt = new Date().toISOString(); s.inviteNudgeCount = count + 1; s.inviteNudgeToken = inv.token; });

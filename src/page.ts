@@ -1405,7 +1405,7 @@ const RAW = String.raw`<!doctype html>
       viewerKey = viewerParam;
       localStorage.setItem(VIEWER_LS_KEY, viewerParam);
       if (ROOM) localStorage.setItem(MY_ROOM_LS_KEY, ROOM);
-      var cleanUrl = location.pathname + (/[?&]resend=1/.test(location.search) ? "?resend=1" : "");
+      var cleanUrl = location.pathname + (/[?&]resend=1/.test(location.search) ? "?resend=1" + ((location.search.match(/[?&](n=[0-3])\b/) || [])[1] ? "&" + location.search.match(/[?&](n=[0-3])\b/)[1] : "") : "");
       history.replaceState(null, "", cleanUrl);
     }
   } catch (e) {}
@@ -4080,8 +4080,14 @@ const RAW = String.raw`<!doctype html>
   var inviteMsgTr = {};
   // Opening line of a follow-up (the 1-hour / 1-day / 2-day reminders open
   // the "They haven't joined yet" card, and what it sends starts with this).
-  var FOLLOWUP_LINE = "Hey! Did you see my Nearune invite? It's really from me, not spam.";
-  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:", FOLLOWUP_LINE];
+  // One per reminder: 1 hour, day 1, day 2, day 3 (link about to expire).
+  var FOLLOWUP_LINES = [
+    "Hey! Did you see my Nearune invite? It's really from me, not spam.",
+    "Hey! Just making sure my Nearune invite didn't get lost. It's really from me, not spam.",
+    "Today's question made me think of you. Want to answer it with me?",
+    "Last nudge, I promise! My invite link stops working soon. I'd really love to do this with you."
+  ];
+  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"].concat(FOLLOWUP_LINES);
   function myLanguageName() {
     var me = state && state.people && state.people[viewerKey];
     return (me && me.language && LANG_NAME_TO_CODE[String(me.language).toLowerCase()] && !/^(gib|tlh)$/.test(LANG_NAME_TO_CODE[String(me.language).toLowerCase()])) ? me.language : "English";
@@ -4137,7 +4143,7 @@ const RAW = String.raw`<!doctype html>
   }
   function inviteMessage(url) {
     var q = todaysQuestionText();
-    return (resendOpen ? tInvite(FOLLOWUP_LINE) + "\n\n" : "") +
+    return (resendOpen ? tInvite(FOLLOWUP_LINES[resendN] || FOLLOWUP_LINES[0]) + "\n\n" : "") +
       tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
       (q ? "\n\n" + tInvite("Today's question:") + " \u201c" + tInvite(q) + "\u201d" : "") +
       "\n\n" + tInvite("Join me here:") + " " + url;
@@ -4429,6 +4435,8 @@ const RAW = String.raw`<!doctype html>
   // phone remembers the address); Instagram -> "Send to @handle"; link ->
   // the share sheet, where their recent chat is usually at the top.
   var resendOpen = /[?&]resend=1/.test(location.search);
+  // Which reminder opened it: 0 = 1 hour, 1 = day 1, 2 = day 2, 3 = day 3.
+  var resendN = parseInt(((location.search.match(/[?&]n=([0-3])\b/) || [])[1]) || "0", 10);
   var resendBusy = false, resendDone = "";
   function closeResend() {
     resendOpen = false;

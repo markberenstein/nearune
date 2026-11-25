@@ -4078,7 +4078,10 @@ const RAW = String.raw`<!doctype html>
   // the "Invitation language" picker on the invite card can change it.
   var inviteLangName = "";
   var inviteMsgTr = {};
-  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"];
+  // Opening line of a follow-up (the 1-hour / 1-day / 2-day reminders open
+  // the "They haven't joined yet" card, and what it sends starts with this).
+  var FOLLOWUP_LINE = "Hey! Did you see my Nearune invite? It's really from me, not spam.";
+  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:", FOLLOWUP_LINE];
   function myLanguageName() {
     var me = state && state.people && state.people[viewerKey];
     return (me && me.language && LANG_NAME_TO_CODE[String(me.language).toLowerCase()] && !/^(gib|tlh)$/.test(LANG_NAME_TO_CODE[String(me.language).toLowerCase()])) ? me.language : "English";
@@ -4134,7 +4137,8 @@ const RAW = String.raw`<!doctype html>
   }
   function inviteMessage(url) {
     var q = todaysQuestionText();
-    return tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
+    return (resendOpen ? tInvite(FOLLOWUP_LINE) + "\n\n" : "") +
+      tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
       (q ? "\n\n" + tInvite("Today's question:") + " \u201c" + tInvite(q) + "\u201d" : "") +
       "\n\n" + tInvite("Join me here:") + " " + url;
   }
@@ -4438,7 +4442,10 @@ const RAW = String.raw`<!doctype html>
     var handle = state.pendingInviteHandle && state.pendingInviteHandle[other];
     var email = sentInviteEmail();
     var kids = [envelope, h("h2", { text: t("They haven't joined yet") }),
-      h("p", { text: t("Send your invite again. They'll see today's question and a button to join.") })];
+      h("p", { text: t("Unexpected invites are easy to ignore, even from friends. Send a quick follow-up so they know it's really you.") })];
+    if (lastInviteUrl && !email) {
+      kids.push(h("div", { style: "background:var(--cream,#FFF7EC);border:1px solid var(--line,#E8D9C8);border-radius:16px;padding:12px 14px;margin:10px 0 4px;text-align:left;font-size:0.92rem;line-height:1.4;white-space:pre-line;overflow-wrap:anywhere;", text: inviteMessage(lastInviteUrl) }));
+    }
     if (resendDone) {
       kids.push(h("p", { style: "font-weight:700;margin-top:10px;", text: resendDone }));
     } else if (email) {
@@ -4458,7 +4465,7 @@ const RAW = String.raw`<!doctype html>
       kids.push(eb);
       if (lastInviteUrl) { var sl = shareLinkButton(lastInviteUrl, t("Or share the link"), "picker-btn"); sl.style.cssText = "width:100%;margin-top:10px;"; kids.push(sl); }
     } else if (lastInviteUrl) {
-      var sb = shareLinkButton(lastInviteUrl, handle ? t("Send to @") + handle : t("Send your invite again"), "puzzle-upload-btn reg-cta");
+      var sb = shareLinkButton(lastInviteUrl, handle ? t("Send to @") + handle : t("Send a follow-up"), "puzzle-upload-btn reg-cta");
       sb.style.cssText = "width:100%;margin-top:8px;";
       sb.addEventListener("click", function () { setTimeout(closeResend, 800); });
       var dsRe = directSendRow(lastInviteUrl);

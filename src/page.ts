@@ -4078,7 +4078,8 @@ const RAW = String.raw`<!doctype html>
   // the "Invitation language" picker on the invite card can change it.
   var inviteLangName = "";
   var inviteMsgTr = {};
-  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"];
+  var HEADSUP_MSG = "Hey! I just sent you an invite to Nearune. It's really from me, not spam. One question a day, just for the two of us. Tap it when you get a sec.";
+  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:", HEADSUP_MSG];
   function myLanguageName() {
     var me = state && state.people && state.people[viewerKey];
     return (me && me.language && LANG_NAME_TO_CODE[String(me.language).toLowerCase()] && !/^(gib|tlh)$/.test(LANG_NAME_TO_CODE[String(me.language).toLowerCase()])) ? me.language : "English";
@@ -4204,7 +4205,7 @@ const RAW = String.raw`<!doctype html>
     wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
     var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
     sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
-    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); }); });
+    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); headsUpLater(); }); });
     return h("div", {}, [wa, sms]);
   }
   function shareLinkButton(url, label, cls) {
@@ -4225,15 +4226,15 @@ const RAW = String.raw`<!doctype html>
         // message (see NearuneSharePlugin in SceneDelegate.swift).
         var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
         if (iosApp && url === lastInviteUrl && NS && NS.share) {
-          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); }, function () {}); });
+          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); if (r && r.completed) headsUpLater(); }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); headsUpLater(); }, function () {}); });
           return;
         }
         var shareObj = url === lastInviteUrl && !iosApp
           ? { text: inviteMessage(url) }
           : { url: url };
-        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
+        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); if (url === lastInviteUrl) headsUpLater(); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); if (url === lastInviteUrl) headsUpLater(); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
         window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
@@ -4475,6 +4476,62 @@ const RAW = String.raw`<!doctype html>
   }
 
   var inviteStepNeedsWho = false;
+  // HEADS-UP: right after the invite goes out, nudge the inviter to send a
+  // quick note of their own ("It's really from me, not spam"). People are
+  // trained to ignore unexpected invites, even from friends; a second message
+  // in their own chat turns it into one they were expecting.
+  var HU_KEY = "nearuneHeadsUp:" + ROOM;
+  var headsUpState = "";
+  try { headsUpState = localStorage.getItem(HU_KEY) || ""; } catch (e) {}
+  function setHeadsUp(v) { headsUpState = v; try { localStorage.setItem(HU_KEY, v); } catch (e) {} }
+  function headsUpLater() {
+    if (headsUpState === "done") return;
+    setHeadsUp("pending");
+    setTimeout(function () { renderApp(); }, 600);
+  }
+  function headsUpOverlay() {
+    if (headsUpState !== "pending" || !state || state.origin === "friend") return null;
+    var otherK = viewerKey === "mark" ? "nikita" : "mark";
+    if (state.people && state.people[otherK] && state.people[otherK].confirmed) return null;
+    funnelPing("headsup_shown");
+    var msg = tInvite(HEADSUP_MSG);
+    var done = function (step) { funnelPing(step); setHeadsUp("done"); renderApp(); };
+    var kids = [
+      h("div", { style: "font-size:2.4rem;line-height:1;margin-bottom:8px;", text: "\uD83D\uDC4B" }),
+      h("h2", { text: t("Give them a heads-up") }),
+      h("p", { text: t("We've all learned to ignore unexpected invites, even from friends. A quick note from you makes sure they open it.") }),
+      h("div", { style: "background:var(--cream,#FFF7EC);border:1px solid var(--line,#E8D9C8);border-radius:16px;padding:12px 14px;margin:12px 0 4px;text-align:left;font-size:0.95rem;line-height:1.4;", text: msg })
+    ];
+    var iosApp = isNativeApp() && /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
+    if ((iosApp && NS && NS.share) || (!iosApp && !noShareSheet())) {
+      var send = h("button", { type: "button", class: "puzzle-upload-btn reg-cta", text: t("Send heads-up") });
+      send.style.cssText = "width:100%;margin-top:12px;";
+      send.addEventListener("click", function () {
+        var p = iosApp ? NS.share({ text: msg }).then(function (r) { if (!(r && r.completed)) throw new Error("cancel"); }) : navigator.share({ text: msg });
+        p.then(function () { done("headsup_sent"); }, function () {});
+      });
+      kids.push(send);
+    } else {
+      // No share sheet here (in-app browsers, older iPhone app): straight to
+      // WhatsApp or a text message.
+      var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+      var wa = h("a", { class: "picker-btn", href: "https://wa.me/?text=" + encodeURIComponent(msg), target: "_blank", rel: "noopener", text: "\uD83D\uDCAC " + t("Send on WhatsApp") });
+      wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:12px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
+      var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
+      sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
+      [wa, sms].forEach(function (a) { a.addEventListener("click", function () { done("headsup_sent"); }); });
+      kids.push(wa); kids.push(sms);
+    }
+    var told = h("button", { type: "button", class: "switch-link", text: t("I already told them") });
+    told.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
+    told.addEventListener("click", function () { done("headsup_told"); });
+    var skip = h("button", { type: "button", class: "switch-link", text: t("Not now") });
+    skip.style.cssText = "display:block;margin:6px auto 0;font-size:0.85rem;opacity:0.8;";
+    skip.addEventListener("click", function () { done("headsup_skip"); });
+    kids.push(told); kids.push(skip);
+    return h("div", { class: "picker-overlay", style: "z-index:51;" }, [h("div", { class: "picker-card" }, kids)]);
+  }
   function sendInviteStep() {
     if (!state || state.origin === "friend") return null;
     if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;
@@ -4834,7 +4891,9 @@ const RAW = String.raw`<!doctype html>
       app.appendChild(invCard);
       var invStep = sendInviteStep();
       if (invStep) app.appendChild(invStep);
-      var rsCard = invStep ? null : resendCard();
+      var huStep = invStep ? null : headsUpOverlay();
+      if (huStep) app.appendChild(huStep);
+      var rsCard = invStep || huStep ? null : resendCard();
       if (rsCard) app.appendChild(rsCard);
     }
     // Today's question sits right under the invite, so there's an obvious

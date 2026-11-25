@@ -4296,9 +4296,13 @@ const RAW = String.raw`<!doctype html>
     // Kept calm on purpose: one main button, two small ones, one optional
     // reminder line. Email is offered because many people only have their
     // partner's email, not a quick way to text them a link.
+    // Once the invite has really gone out, the card says so and asks them to
+    // tell the person to expect it (unexpected invites get ignored).
+    var sentNow = !!headsUpState && !stillWaiting && !!(state && state.relationship);
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite someone to your room") }),
-      h("p", { class: "reg-sub", text: state && state.origin !== "friend" && !state.relationship
+      h("p", { class: "reg-title", text: sentNow ? t("Your invitation has been sent") : stillWaiting ? t("Your invite is still waiting") : t("Invite someone to your room") }),
+      h("p", { class: "reg-sub", text: sentNow ? sentNowLine()
+        : state && state.origin !== "friend" && !state.relationship
         ? t("First, who's this invite for? It picks your daily questions.")
         : stillWaiting
         ? t("They haven't joined yet. Send it again by text or email.")
@@ -4332,12 +4336,10 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(inviteLangRow());
       var dsHome = directSendRow(lastInviteUrl);
       if (dsHome) card.appendChild(dsHome);
-      var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
+      var main = shareLinkButton(lastInviteUrl, headsUpState ? t("Send it again") : t("Send them your invite"), "puzzle-upload-btn reg-cta");
       main.style.marginTop = "12px";
       card.appendChild(main);
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:6px;", text: t("Your invite link works for 3 days.") }));
-      var huNote = headsUpNote();
-      if (huNote) card.appendChild(huNote);
       var emailBtn = h("button", { class: "puzzle-choose-btn", type: "button", text: "\u2709\uFE0F " + t("Email or text it") });
       emailBtn.addEventListener("click", function () { showEmailInvite = !showEmailInvite; regError = ""; renderApp(); });
       card.appendChild(h("div", { style: "display:flex;gap:8px;justify-content:center;margin-top:10px;" }, [
@@ -4486,7 +4488,7 @@ const RAW = String.raw`<!doctype html>
   var inviteStepNeedsWho = false;
   // HEADS-UP: people are trained to ignore unexpected invites, even from
   // friends. Once the invite has really gone out, the invite card reminds the
-  // inviter to tell them it's coming (headsUpNote below).
+  // inviter to tell them it's coming (sentNowLine below).
   var HU_KEY = "nearuneHeadsUp:" + ROOM;
   var headsUpState = "";
   try { headsUpState = localStorage.getItem(HU_KEY) || ""; } catch (e) {}
@@ -4499,15 +4501,13 @@ const RAW = String.raw`<!doctype html>
   }
   // After the invite really went out: a polite reminder on the invite card
   // to tell them it's coming, so it isn't ignored as an unexpected invite.
-  function headsUpNote() {
-    if (headsUpState !== "pending" && headsUpState !== "done") return null;
+  function sentNowLine() {
     var rel = state && state.relationship;
-    var line = rel === "significant_other" ? t("Your invite is on its way to your significant other. Let them know it's coming, so it doesn't get ignored.")
-      : rel === "family" ? t("Your invite is on its way to your family member. Let them know it's coming, so it doesn't get ignored.")
-      : rel === "friend" ? t("Your invite is on its way to your friend. Let them know it's coming, so it doesn't get ignored.")
-      : rel === "its_complicated" ? t("Your invite is on its way to... whatever you want to call them. Let them know it's coming, so it doesn't get ignored.")
-      : t("Your invite is on its way. Let them know it's coming, so it doesn't get ignored.");
-    return h("p", { style: "background:var(--cream,#FFF7EC);border:1px solid var(--line,#E8D9C8);border-radius:14px;padding:10px 12px;margin:10px 0 0;font-size:0.92rem;line-height:1.4;text-align:left;", text: "\uD83D\uDC4B " + line });
+    return rel === "significant_other" ? t("To be sure it isn't ignored, let your significant other know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : rel === "family" ? t("To be sure it isn't ignored, let your family member know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : rel === "friend" ? t("To be sure it isn't ignored, let your friend know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : rel === "its_complicated" ? t("To be sure it isn't ignored, let them (whatever you want to call them) know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : t("To be sure it isn't ignored, let them know to expect it, and that you'd love to make Nearune a daily habit together.");
   }
   function sendInviteStep() {
     if (!state || state.origin === "friend") return null;

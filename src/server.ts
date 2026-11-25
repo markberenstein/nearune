@@ -239,6 +239,8 @@ const FUNNEL_STEPS = new Set([
   "invite_share_done", "invite_share_cancel", "invite_copied",
   // Changed the "Invitation language" picker on the invite card.
   "invite_lang_changed",
+  // The "let them know it's coming" note appeared after the invite went out.
+  "headsup_shown",
   // Tapped "While you wait, get matched with someone now" after sending.
   "invite_wait_friend",
   // Question first: picked who it's for, saw today's question, typed, tapped Send.

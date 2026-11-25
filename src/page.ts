@@ -4078,7 +4078,10 @@ const RAW = String.raw`<!doctype html>
   // the "Invitation language" picker on the invite card can change it.
   var inviteLangName = "";
   var inviteMsgTr = {};
-  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"];
+  // Opening line of a follow-up (the 1-hour / 1-day / 2-day reminders open
+  // the "They haven't joined yet" card, and what it sends starts with this).
+  var FOLLOWUP_LINE = "Hey! Did you see my Nearune invite? It's really from me, not spam.";
+  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:", FOLLOWUP_LINE];
   function myLanguageName() {
     var me = state && state.people && state.people[viewerKey];
     return (me && me.language && LANG_NAME_TO_CODE[String(me.language).toLowerCase()] && !/^(gib|tlh)$/.test(LANG_NAME_TO_CODE[String(me.language).toLowerCase()])) ? me.language : "English";
@@ -4134,7 +4137,8 @@ const RAW = String.raw`<!doctype html>
   }
   function inviteMessage(url) {
     var q = todaysQuestionText();
-    return tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
+    return (resendOpen ? tInvite(FOLLOWUP_LINE) + "\n\n" : "") +
+      tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
       (q ? "\n\n" + tInvite("Today's question:") + " \u201c" + tInvite(q) + "\u201d" : "") +
       "\n\n" + tInvite("Join me here:") + " " + url;
   }
@@ -4204,7 +4208,7 @@ const RAW = String.raw`<!doctype html>
     wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
     var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
     sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
-    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); }); });
+    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); headsUpLater(); }); });
     return h("div", {}, [wa, sms]);
   }
   function shareLinkButton(url, label, cls) {
@@ -4225,15 +4229,15 @@ const RAW = String.raw`<!doctype html>
         // message (see NearuneSharePlugin in SceneDelegate.swift).
         var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
         if (iosApp && url === lastInviteUrl && NS && NS.share) {
-          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); }, function () {}); });
+          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); if (r && r.completed) headsUpLater(); }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); headsUpLater(); }, function () {}); });
           return;
         }
         var shareObj = url === lastInviteUrl && !iosApp
           ? { text: inviteMessage(url) }
           : { url: url };
-        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
+        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); if (url === lastInviteUrl) headsUpLater(); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); if (url === lastInviteUrl) headsUpLater(); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
         window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
@@ -4292,9 +4296,13 @@ const RAW = String.raw`<!doctype html>
     // Kept calm on purpose: one main button, two small ones, one optional
     // reminder line. Email is offered because many people only have their
     // partner's email, not a quick way to text them a link.
+    // Once the invite has really gone out, the card says so and asks them to
+    // tell the person to expect it (unexpected invites get ignored).
+    var sentNow = !!headsUpState && !stillWaiting && !!(state && state.relationship);
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: stillWaiting ? t("Your invite is still waiting") : t("Invite someone to your room") }),
-      h("p", { class: "reg-sub", text: state && state.origin !== "friend" && !state.relationship
+      h("p", { class: "reg-title", text: sentNow ? t("Your invitation has been sent") : stillWaiting ? t("Your invite is still waiting") : t("Invite someone to your room") }),
+      h("p", { class: "reg-sub", text: sentNow ? sentNowLine()
+        : state && state.origin !== "friend" && !state.relationship
         ? t("First, who's this invite for? It picks your daily questions.")
         : stillWaiting
         ? t("They haven't joined yet. Send it again by text or email.")
@@ -4328,7 +4336,7 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(inviteLangRow());
       var dsHome = directSendRow(lastInviteUrl);
       if (dsHome) card.appendChild(dsHome);
-      var main = shareLinkButton(lastInviteUrl, t("Send them your invite"), "puzzle-upload-btn reg-cta");
+      var main = shareLinkButton(lastInviteUrl, headsUpState ? t("Send it again") : t("Send them your invite"), "puzzle-upload-btn reg-cta");
       main.style.marginTop = "12px";
       card.appendChild(main);
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:6px;", text: t("Your invite link works for 3 days.") }));
@@ -4436,7 +4444,10 @@ const RAW = String.raw`<!doctype html>
     var handle = state.pendingInviteHandle && state.pendingInviteHandle[other];
     var email = sentInviteEmail();
     var kids = [envelope, h("h2", { text: t("They haven't joined yet") }),
-      h("p", { text: t("Send your invite again. They'll see today's question and a button to join.") })];
+      h("p", { text: t("Unexpected invites are easy to ignore, even from friends. Send a quick follow-up so they know it's really you.") })];
+    if (lastInviteUrl && !email) {
+      kids.push(h("div", { style: "background:var(--cream,#FFF7EC);border:1px solid var(--line,#E8D9C8);border-radius:16px;padding:12px 14px;margin:10px 0 4px;text-align:left;font-size:0.92rem;line-height:1.4;white-space:pre-line;overflow-wrap:anywhere;", text: inviteMessage(lastInviteUrl) }));
+    }
     if (resendDone) {
       kids.push(h("p", { style: "font-weight:700;margin-top:10px;", text: resendDone }));
     } else if (email) {
@@ -4456,7 +4467,7 @@ const RAW = String.raw`<!doctype html>
       kids.push(eb);
       if (lastInviteUrl) { var sl = shareLinkButton(lastInviteUrl, t("Or share the link"), "picker-btn"); sl.style.cssText = "width:100%;margin-top:10px;"; kids.push(sl); }
     } else if (lastInviteUrl) {
-      var sb = shareLinkButton(lastInviteUrl, handle ? t("Send to @") + handle : t("Send your invite again"), "puzzle-upload-btn reg-cta");
+      var sb = shareLinkButton(lastInviteUrl, handle ? t("Send to @") + handle : t("Send a follow-up"), "puzzle-upload-btn reg-cta");
       sb.style.cssText = "width:100%;margin-top:8px;";
       sb.addEventListener("click", function () { setTimeout(closeResend, 800); });
       var dsRe = directSendRow(lastInviteUrl);
@@ -4475,6 +4486,29 @@ const RAW = String.raw`<!doctype html>
   }
 
   var inviteStepNeedsWho = false;
+  // HEADS-UP: people are trained to ignore unexpected invites, even from
+  // friends. Once the invite has really gone out, the invite card reminds the
+  // inviter to tell them it's coming (sentNowLine below).
+  var HU_KEY = "nearuneHeadsUp:" + ROOM;
+  var headsUpState = "";
+  try { headsUpState = localStorage.getItem(HU_KEY) || ""; } catch (e) {}
+  function setHeadsUp(v) { headsUpState = v; try { localStorage.setItem(HU_KEY, v); } catch (e) {} }
+  function headsUpLater() {
+    if (headsUpState) return;
+    setHeadsUp("pending");
+    setTimeout(function () { renderApp(); }, 600);
+    funnelPing("headsup_shown");
+  }
+  // After the invite really went out: a polite reminder on the invite card
+  // to tell them it's coming, so it isn't ignored as an unexpected invite.
+  function sentNowLine() {
+    var rel = state && state.relationship;
+    return rel === "significant_other" ? t("To be sure it isn't ignored, let your significant other know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : rel === "family" ? t("To be sure it isn't ignored, let your family member know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : rel === "friend" ? t("To be sure it isn't ignored, let your friend know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : rel === "its_complicated" ? t("To be sure it isn't ignored, let them (whatever you want to call them) know to expect it, and that you'd love to make Nearune a daily habit together.")
+      : t("To be sure it isn't ignored, let them know to expect it, and that you'd love to make Nearune a daily habit together.");
+  }
   function sendInviteStep() {
     if (!state || state.origin === "friend") return null;
     if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;

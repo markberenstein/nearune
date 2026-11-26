@@ -409,6 +409,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const bot = previewBotName(jUa);
         if (bot) notifyInviteEvent(sRoom, "preview", sState, bot);
         else notifyInviteEvent(sRoom, "opened", sState, inviteDevice(jUa) + (sWho ? "" : ", link had expired"));
+        // Hold the invite for this phone's network as soon as a person opens
+        // the link (not only when they tap a store badge). Nov 26: an invited
+        // friend opened the link in Chrome, went and installed the app on
+        // their own, and the app had nothing to send them to, so they
+        // started a new room instead of joining.
+        if (!bot && sWho) { deferredInvites.set(deferredKey(clientIp(req, server)), { dest, at: Date.now() }); saveDeferredSoon(); }
       } catch {}
       // The inviter's first name is shown on the landing page and in the link
       // preview ("Mark invited you to Nearune").

@@ -392,6 +392,11 @@ const RAW = String.raw`<!doctype html>
   .qvote-opt { display: block; width: 100%; box-sizing: border-box; text-align: left; margin: 8px 0 0; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-size: 0.95rem; line-height: 1.35; cursor: pointer; }
   .qvote-opt.mine { border-color: var(--accent, #A8522A); box-shadow: 0 0 0 2px rgba(168, 82, 42, 0.25); }
   .qvote-q { display: block; }
+  .holiday-wrap { margin: 0 0 12px; }
+  .holiday-card { padding: 12px 16px 6px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 8px; }
+  .holiday-title { font-weight: 700; font-size: 1.02rem; color: var(--ink); line-height: 1.35; }
+  .holiday-card .journal-toggle { margin-top: 2px; padding-left: 0; }
+  .holiday-about { margin: 0 0 8px; font-size: 0.95rem; line-height: 1.45; color: var(--ink); }
   .qvote-mypick { margin: 8px 0 0; font-weight: 700; font-size: 1rem; line-height: 1.35; color: var(--ink); }
   .qvote-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; }
   .qvote-row .qvote-opt { margin: 0; flex: 1; min-width: 0; }
@@ -3823,7 +3828,7 @@ const RAW = String.raw`<!doctype html>
           // Their weather / Local Feel were never fetched while the invite
           // screen was showing — load them now instead of waiting for the
           // next scheduled refresh.
-          loadWeather(); loadNews(); loadMusic(); loadMovies();
+          loadWeather(); loadNews(); loadHolidays(); loadMusic(); loadMovies();
         })
         .catch(function () { regBusy = false; regError = t("Something went wrong — try again."); renderApp(); });
     });
@@ -4822,7 +4827,7 @@ const RAW = String.raw`<!doctype html>
     var k = me ? viewerKey + "|" + (me.location || "") + "|" + (me.travelLocation || "") : "";
     if (!k || k === soloFeedKey) return;
     soloFeedKey = k;
-    loadWeather(); loadNews(); loadMusic(); loadMovies();
+    loadWeather(); loadNews(); loadHolidays(); loadMusic(); loadMovies();
   }
   // SOLO START: until the partner joins, a confirmed person can still
   // answer today's question on their own. Their answers are saved under the
@@ -5115,6 +5120,7 @@ const RAW = String.raw`<!doctype html>
     // next step after sending it.
     // Today's question waits until they've said who the room is for (it
     // picks the question set: partner, family or friend).
+    if (confirmed) { var hc = safePart("holiday", holidayCard); if (hc) app.appendChild(hc); }
     if (confirmed && (state.relationship || state.origin === "friend")) app.appendChild(soloQuestionCard(otherKey));
     if (confirmed) { var qv = questionVoteCard(); if (qv) app.appendChild(qv); }
     var weatherBlock = weatherWidgetBlock();
@@ -5282,7 +5288,7 @@ const RAW = String.raw`<!doctype html>
       }
 
       if (!otherConfirmedYet) { renderSoloHome(app, otherKey); return; }
-      if (soloFeedKey) { soloFeedKey = ""; loadWeather(); loadNews(); loadMusic(); loadMovies(); }
+      if (soloFeedKey) { soloFeedKey = ""; loadWeather(); loadNews(); loadHolidays(); loadMusic(); loadMovies(); }
     }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
@@ -5322,6 +5328,7 @@ const RAW = String.raw`<!doctype html>
         addPart(app, "puzzle", puzzleSection);
       } else {
         addPart(app, "voiceNew", voiceNewBanner);
+        addPart(app, "holiday", holidayCard);
         addPart(app, "question", questionCard);
         addPart(app, "voiceNudge", voiceNudgeBlock);
         addPart(app, "qvote", questionVoteCard);
@@ -5476,6 +5483,7 @@ const RAW = String.raw`<!doctype html>
     renderApp();
     loadWeather(); // refreshes it too — wasn't known yet during initialLoad's call, now it is
     loadNews();
+    loadHolidays();
     loadMusic();
     loadMovies();
   }
@@ -7640,6 +7648,7 @@ const RAW = String.raw`<!doctype html>
     syncAppBadge();
     loadWeather();
     loadNews();
+    loadHolidays();
     loadMusic();
     loadMovies();
     // Pre-fetch the VAPID key and pre-register the service worker now,
@@ -7677,6 +7686,46 @@ const RAW = String.raw`<!doctype html>
   // SANDBOX EXPERIMENT: same shape as loadWeather() above, for the fun
   // local-news line — server caches it for a couple hours (see
   // localnews.ts) so polling this often costs nothing extra.
+  // Public holiday today where each person is (see holidays.ts).
+  var holidayList = [], holidayOpen = {};
+  async function loadHolidays() {
+    if (!viewerKey) return;
+    try {
+      var res = await fetch(RP + "/api/holidays");
+      var data = await res.json();
+      holidayList = (data && data.holidays) || [];
+    } catch (e) {
+      return;
+    }
+    backgroundRender();
+  }
+  // "Thanksgiving today in the United States", with "What is it?" folded
+  // away. Shown only in the reader's own language (t()), per Mark.
+  function holidayCard() {
+    if (!holidayList || !holidayList.length) return null;
+    var seen = {};
+    var items = holidayList.filter(function (x) { var k = x.country + "|" + x.name; if (seen[k]) return false; seen[k] = 1; return true; });
+    var lang = myUiLang() || "en";
+    var wrap = h("div", { class: "holiday-wrap" });
+    items.forEach(function (x) {
+      var country = x.country;
+      try { country = new Intl.DisplayNames([lang], { type: "region" }).of(x.country) || x.country; } catch (e) {}
+      if (lang === "en" && /^(US|GB|NL|PH|AE|BS|GM|CZ|DO|CF|KM|MV|MH|SB|CD|CG)$/.test(x.country)) country = "the " + country;
+      var flag = /^[A-Z]{2}$/.test(x.country) ? String.fromCodePoint(0x1F1E6 + x.country.charCodeAt(0) - 65, 0x1F1E6 + x.country.charCodeAt(1) - 65) + " " : "\uD83C\uDF89 ";
+      var key = x.country + "|" + x.name;
+      var open = !!holidayOpen[key];
+      var card = h("div", { class: "holiday-card" });
+      card.appendChild(h("div", { class: "holiday-title", text: flag + tTemplate("{holiday} today in {country}", { holiday: t(x.name), country: country }) }));
+      if (x.about) {
+        var tg = h("button", { type: "button", class: "journal-toggle" + (open ? " open" : ""), html: '<span class="chevron">\u203A</span><span>' + t("What is it?") + "</span>" });
+        tg.addEventListener("click", function () { holidayOpen[key] = !open; renderApp(); });
+        card.appendChild(tg);
+        if (open) card.appendChild(h("p", { class: "holiday-about", text: t(x.about) }));
+      }
+      wrap.appendChild(card);
+    });
+    return wrap;
+  }
   async function loadNews() {
     if (!viewerKey) return;
     try {
@@ -7714,7 +7763,7 @@ const RAW = String.raw`<!doctype html>
     backgroundRender();
   }
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") { lastNativeBadgeSync = 0; syncAppBadge(); loadWeather(); loadNews(); loadMusic(); loadMovies(); }
+    if (document.visibilityState === "visible") { lastNativeBadgeSync = 0; syncAppBadge(); loadWeather(); loadNews(); loadHolidays(); loadMusic(); loadMovies(); }
   });
   // Picks dark or pale text, whichever reads better against BOTH ends of the
   // sky gradient (WCAG contrast), instead of assuming day = dark, night = pale.

@@ -32,13 +32,14 @@ import { resolveTranslation, translateEmailStrings, langCodeForName } from "./tr
 import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample, defaultVoiceId } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage, voiceGenderForName } from "./ai";
 import { regionAbbr } from "./usstates";
-import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel } from "./geo";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel, resolveCountryCode } from "./geo";
+import { holidaysOn } from "./holidays";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
 import { newRound } from "./nhie";
 import { topSongs, previewClip } from "./music";
 import { topMovies } from "./movies";
-import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, normalizeInstagramHandle } from "./util";
+import { PUZZLE_TOTAL, puzzleUnlockedCount, json, isValidEmail, readJson, sendEmail, todayKeyPT, todayKeyFor, guessMatches, advanceQueue, forClient, hashEmail, unansweredCount, isSoloRoom, effectiveLocation, effectiveTz, normalizeInstagramHandle } from "./util";
 import { APP_STORE_BADGE_B64 } from "./badge";
 import { GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_BADGE_PNG_B64, GOOGLE_PLAY_URL } from "./play-badge";
 import { buildPageHtml, buildNewRoomPage, buildRecoverPage, buildPrivacyPage, buildSupportPage, buildTermsPage, buildChildSafetyPage, buildManifestJson, buildServiceWorkerJs } from "./page";
@@ -1407,6 +1408,29 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         topLocalStory(effectiveLocation(state.people?.nikita, today)),
       ]);
       return json({ news: { mark: markNews, nikita: nikitaNews } });
+    }
+
+    // Today's public holiday where each person is, by their own local date
+    // (see holidays.ts). Shown above today's question.
+    if (req.method === "GET" && restPath === "/api/holidays") {
+      const state = await loadState(roomId);
+      const today = todayKeyFor(state);
+      const out: any[] = [];
+      for (const k of ["mark", "nikita"] as PersonKey[]) {
+        const p = state.people?.[k];
+        if (!p || !p.confirmed) continue;
+        const loc = effectiveLocation(p, today);
+        const cc = loc ? await resolveCountryCode(loc) : null;
+        if (!cc) continue;
+        const tz = effectiveTz(p, today) || p.tz || "UTC";
+        let day = today;
+        try { day = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); } catch {}
+        let countryName = cc.toUpperCase();
+        try { countryName = new Intl.DisplayNames(["en"], { type: "region" }).of(cc.toUpperCase()) || countryName; } catch {}
+        const list = await holidaysOn(cc, day, countryName);
+        for (const hd of list) out.push({ who: k, country: cc.toUpperCase(), name: hd.name, about: hd.about });
+      }
+      return json({ holidays: out });
     }
 
     // Top songs chart (see music.ts) at each person's effective location —

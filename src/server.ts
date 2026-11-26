@@ -2127,7 +2127,19 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (!s.people) s.people = {};
         if (!s.people[who]) s.people[who] = { name: "", location: "", language: "", confirmed: true };
         s.people[who]!.voiceId = result.voiceId;
+        s.people[who]!.voiceAt = new Date().toISOString();
       });
+      // Tell the partner (first recording only): the moment that brings
+      // them back to tap 🔊.
+      const vOther: PersonKey = who === "mark" ? "nikita" : "mark";
+      const vSub = !oldVoiceId && anyPushConfigured && state.pushSubs ? state.pushSubs[vOther] : null;
+      if (vSub && state.people?.[vOther]?.confirmed) {
+        const nm = state.people?.[who]?.name || "Your partner";
+        sendPush(vSub, { title: nm + " recorded their voice \uD83C\uDF99\uFE0F", body: "Tap \uD83D\uDD0A on " + nm + "'s answer to hear it in their own voice.", tag: "voice-recorded", url: "/r/" + roomId + "/" } as any)
+          .then((res) => { if (res.gone) saveState(roomId, (s2) => { if (s2.pushSubs) delete s2.pushSubs[vOther]; }).catch(() => {}); })
+          .catch(() => {});
+        console.log(`[voice] room=${roomId} partner notified`);
+      }
       // Old clone is no longer referenced by anything — clean it up at the
       // provider rather than letting clones accumulate there forever.
       if (oldVoiceId && oldVoiceId !== result.voiceId) deleteVoice(oldVoiceId).catch(() => {});

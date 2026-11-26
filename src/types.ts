@@ -59,6 +59,9 @@ export type PersonProfile = {
   instagram?: string;
   voiceId?: string;
   hasVoice?: boolean;
+  // When this person last recorded their voice (the partner's 🔊 pulses
+  // until they've played it once).
+  voiceAt?: string;
   // ISO timestamp of the last photo this person shared (see storage.ts's
   // photoKey) — absence means they haven't shared one. Doubles as a
   // cache-busting value for the image URL (GET /api/photo?who=...&v=...),

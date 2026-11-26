@@ -483,6 +483,32 @@ const RAW = String.raw`<!doctype html>
   .picker-btn:hover { border-color: var(--accent); }
 
   .switch-row { text-align: center; }
+  @keyframes voicePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+  .speak-btn.voice-new { opacity: 1; animation: voicePulse 1.4s ease-in-out infinite; }
+  .voice-new-banner { display: flex; gap: 10px; align-items: center; margin: 0 0 12px; padding: 12px 14px; border-radius: 16px; background: rgba(255, 214, 102, 0.18); border: 1px solid rgba(255, 214, 102, 0.55); color: var(--ink); font-size: 0.95rem; line-height: 1.35; font-weight: 600; }
+  .vnb-ico { font-size: 1.3rem; flex: none; }
+  .voice-card.voice-spotlight { border: 1.5px solid rgba(255, 214, 102, 0.7); box-shadow: 0 0 0 4px rgba(255, 214, 102, 0.12); }
+  .voice-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .voice-badge { font-size: 0.8rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); opacity: 0.75; }
+  .voice-badge.on { opacity: 1; border-color: rgba(127, 200, 140, 0.8); background: rgba(127, 200, 140, 0.15); }
+  .voice-fold { margin-top: 10px; }
+  .voice-collapsed { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100%; box-sizing: border-box; margin: 6px 0 0; padding: 13px 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.95rem; cursor: pointer; text-align: left; }
+  .voice-collapsed .vc-left { font-weight: 700; }
+  .voice-collapsed .vc-edit { opacity: 0.8; text-decoration: underline; }
+  .settings-open-row { text-align: center; margin: 22px 0 8px; }
+  .settings-open { background: var(--surface); border: 1px solid var(--line); color: var(--ink); font: inherit; font-size: 1rem; font-weight: 700; padding: 12px 26px; border-radius: 999px; cursor: pointer; }
+  .settings-sheet { padding: 6px 2px 30px; }
+  .settings-top { display: flex; align-items: center; justify-content: space-between; margin: 6px 4px 14px; }
+  .settings-top h2 { margin: 0; font-size: 1.5rem; color: var(--ink); }
+  .settings-done { background: none; border: 0; color: var(--ink); font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer; padding: 8px 4px; }
+  .set-group { margin: 0 0 18px; }
+  .set-group-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft, var(--ink)); opacity: 0.8; margin: 0 6px 8px; }
+  .set-box { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; box-sizing: border-box; padding: 15px 16px; background: none; border: 0; border-top: 1px solid var(--line); color: var(--ink); font: inherit; font-size: 1rem; text-align: left; text-decoration: none; cursor: pointer; }
+  .set-box > .set-row:first-child { border-top: 0; }
+  .set-row-end { opacity: 0.6; font-size: 0.95rem; flex: none; }
+  .set-row.danger { color: #D2453B; justify-content: center; font-weight: 700; }
+  .set-group .voice-card { margin: 0; }
   .foot-links { margin-top: 8px; }
   .foot-group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 6px; margin: 2px 0; }
   .foot-group .switch-link { font-size: 0.85rem; padding: 6px 4px; }
@@ -2294,10 +2320,25 @@ const RAW = String.raw`<!doctype html>
     }
     speak(text, lang, authorKey);
   }
+  // A partner's newly recorded voice: their 🔊 buttons gently pulse until
+  // this phone has played one of them once.
+  function voiceHeardKey(k) { return "nearuneVoiceHeard:" + (ROOM || "main") + ":" + k; }
+  function voiceIsNew(k) {
+    if (!k || k === viewerKey) return false;
+    var p = state && state.people && state.people[k];
+    if (!(p && p.hasVoice && p.voiceAt)) return false;
+    try { return localStorage.getItem(voiceHeardKey(k)) !== p.voiceAt; } catch (e) { return false; }
+  }
+  function markVoiceHeard(k) {
+    var p = state && state.people && state.people[k];
+    if (!(p && p.voiceAt)) return;
+    try { localStorage.setItem(voiceHeardKey(k), p.voiceAt); } catch (e) {}
+  }
   function speakButton(text, lang, label, authorKey) {
     if (!text) return null;
+    var isNewVoice = voiceIsNew(authorKey);
     return h("button", {
-      class: "speak-btn",
+      class: "speak-btn" + (isNewVoice ? " voice-new" : ""),
       type: "button",
       "aria-label": label,
       title: label,
@@ -2316,6 +2357,7 @@ const RAW = String.raw`<!doctype html>
             if (p && p.catch) p.catch(function () {});
           } catch (err) {}
         }
+        if (isNewVoice) { markVoiceHeard(authorKey); try { e.currentTarget.classList.remove("voice-new"); } catch (x) {} setTimeout(safeRerender, 1500); }
         speakAs(text, lang, authorKey, unlockedAudio);
       },
     }, [document.createTextNode("🔊")]);
@@ -2405,7 +2447,30 @@ const RAW = String.raw`<!doctype html>
     if (nLang !== "en") return nLang;
     return null;
   }
+  // Nov 26 (Mark): buttons, labels and notes show in the viewer's OWN
+  // language only. Both languages stay on what carries meaning: the daily
+  // question and vote choices, answers and comments, Never Have I Ever, and
+  // Local feel content (those use translateBlock/uiTranslateBlock or tBi).
+  function myUiLang() {
+    var meP = viewerKey && state && state.people && state.people[viewerKey];
+    if (!(meP && meP.language)) {
+      var pc = phoneLanguageCode();
+      return pc && pc !== "en" ? pc : null;
+    }
+    var mine = langCodeFor(viewerKey);
+    return mine !== "en" ? mine : null;
+  }
   function t(text) {
+    if (!text) return text;
+    var lang = myUiLang();
+    if (!lang) return text;
+    var key = lang + "|en::" + text;
+    scheduleTranslate(text, lang, "en");
+    var val = translationCache[key];
+    return val || text;
+  }
+  // Two-language version (English plus the other language), for content.
+  function tBi(text) {
     if (!text) return text;
     var lang = otherUiLang();
     if (!lang) return text;
@@ -3579,6 +3644,7 @@ const RAW = String.raw`<!doctype html>
   var inviteEmailDraft = "";
   var regBusy = false, regError = "", regErrField = "", showRegisterForm = false, showInviteForm = false;
   var showDeleteConfirm = false, deleteConfirmText = "", deleteBusy = false, deleteError = "";
+  var settingsOpen = false;
 
   function textField(value, placeholder, onInput) {
     var i = document.createElement("input");
@@ -5014,6 +5080,7 @@ const RAW = String.raw`<!doctype html>
 
   function renderSoloHome(app, otherKey) {
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
+    if (settingsOpen) { app.appendChild(settingsSheet()); return; }
     ensureSoloFeed();
     // Solo order (per Mark): clocks, traveling, partner invite, weather,
     // daily question, Local Feel, and the email-confirm reminder last.
@@ -5071,9 +5138,7 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that. Until you confirm (up to 7 days) we keep your email so we can send a reminder; after that Nearune doesn't save it.") })
       ]));
     }
-    var pushRow = pushToggleRow();
-    if (pushRow) app.appendChild(pushRow);
-    app.appendChild(footerLinks({ room: false, block: false }));
+    app.appendChild(settingsButtonRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
 
@@ -5217,6 +5282,7 @@ const RAW = String.raw`<!doctype html>
     }
 
     if (showDeleteConfirm) { app.appendChild(deleteConfirmScreen()); return; }
+    if (settingsOpen) { app.appendChild(settingsSheet()); return; }
 
     addPart(app, "header", header);
     addPart(app, "friendBanner", friendBanner);
@@ -5251,7 +5317,9 @@ const RAW = String.raw`<!doctype html>
         addPart(app, "puzzleFlash", puzzleFlashBanner);
         addPart(app, "puzzle", puzzleSection);
       } else {
+        addPart(app, "voiceNew", voiceNewBanner);
         addPart(app, "question", questionCard);
+        addPart(app, "voiceNudge", voiceNudgeBlock);
         addPart(app, "qvote", questionVoteCard);
         addPart(app, "streak", streakCard);
         addPart(app, "journal", journalSection);
@@ -5261,7 +5329,9 @@ const RAW = String.raw`<!doctype html>
       // the status row at the very top of the page. Shown on the Today tab
       // only — on the Puzzle and Local Feel tabs it read as unrelated
       // clutter (it's an account-level voice setting, not tied to either).
-      if (activeTab === "today") {
+      // Your voice stays on the Today page (Mark: a feature to spotlight,
+      // not a setting).
+      if (activeTab === "today" && !voiceNudgeWanted()) {
         addPart(app, "voice", voiceRecorderBlock);
       }
     }
@@ -5269,7 +5339,6 @@ const RAW = String.raw`<!doctype html>
     // voice-recording box, instead of up under the traveling button (see
     // that call site above). Only renders while notifications are actually
     // off (pushToggleRow() returns null once they're on).
-    addPart(app, "pushRow", pushToggleRow);
     if (activeTab === "today") addPart(app, "friendInvite", friendInviteLine);
     addPart(app, "switchRow", switchRow);
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
@@ -5898,7 +5967,7 @@ const RAW = String.raw`<!doctype html>
         .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, status: res.status, body: body || {} }; }); })
         .then(function (result) {
           voiceRecordState.uploading = false;
-          if (result.ok && !(result.body && result.body.error)) nrTrack("voice_recorded");
+          if (result.ok && !(result.body && result.body.error)) { nrTrack("voice_recorded"); voiceExpanded = false; }
           if (!result.ok || result.body.error) {
             var verr = result.body && result.body.error;
             voiceRecordState.error = verr === "too_short"
@@ -5935,12 +6004,41 @@ const RAW = String.raw`<!doctype html>
   // just how one gets recorded. Lives right under the status row, visible
   // to the signed-in viewer for their own voice only (never lets one person
   // record a sample "as" the other).
+  // Once a voice is saved, the card collapses to one row; "Edit your voice
+  // recording" opens the full recorder again.
+  var voiceExpanded = false;
   function voiceRecorderBlock() {
+    var card = voiceRecorderCard();
+    var me = viewerKey && state.people && state.people[viewerKey];
+    var busyNow = voiceRecordState && (voiceRecordState.recording || voiceRecordState.uploading || voiceRecordState.error);
+    if (!card || !(me && me.hasVoice) || !voiceExpanded || busyNow) return card;
+    // Open after a voice is saved: the same toggle above folds it away again.
+    var fold = h("div", { class: "voice-fold" });
+    var hide = h("button", { type: "button", class: "journal-toggle open", html: '<span class="chevron">\u203A</span><span>' + t("Edit your voice recording") + "</span>" });
+    hide.addEventListener("click", function () { voiceExpanded = false; renderApp(); });
+    fold.appendChild(hide);
+    fold.appendChild(card);
+    return fold;
+  }
+  function voiceRecorderCard() {
     if (!viewerKey) return null;
     var key = viewerKey;
     var person = state.people && state.people[key];
     var hasVoice = !!(person && person.hasVoice);
     var partnerName = personName(otherKeyOf(key));
+    var busyNow = voiceRecordState && (voiceRecordState.recording || voiceRecordState.uploading || voiceRecordState.error);
+    if (hasVoice && !voiceExpanded && !busyNow) {
+      // Collapsed (Mark, Nov 26): "Edit your voice recording" sits above a
+      // one-line "Your voice is saved" row; either one opens the recorder.
+      var fold = h("div", { class: "voice-fold" });
+      var edit = h("button", { type: "button", class: "journal-toggle", html: '<span class="chevron">\u203A</span><span>' + t("Edit your voice recording") + "</span>" });
+      var row = h("button", { type: "button", class: "voice-collapsed" });
+      row.appendChild(h("span", { class: "vc-left", text: "\uD83C\uDF99\uFE0F " + t("Your voice is saved") + " \u2713" }));
+      [edit, row].forEach(function (b) { b.addEventListener("click", function () { voiceExpanded = true; renderApp(); }); });
+      fold.appendChild(edit);
+      fold.appendChild(row);
+      return fold;
+    }
     var wrap = h("div", { class: "voice-card" });
     wrap.appendChild(h("div", { class: "voice-card-title", text: tTemplate("Let {name} hear your voice", { name: partnerName }) }));
     wrap.appendChild(h("p", {
@@ -6667,7 +6765,7 @@ const RAW = String.raw`<!doctype html>
     choices.forEach(function (q, i) {
       var mine = myPick === i, theirs = theirPick === i;
       var b = h("button", { type: "button", class: "qvote-opt" + (mine ? " mine" : "") });
-      b.appendChild(h("span", { class: "qvote-q", text: t(q) }));
+      b.appendChild(h("span", { class: "qvote-q", text: tBi(q) }));
       var tags = [];
       if (mine) tags.push("\u2713 " + t("Your vote"));
       if (theirs) tags.push(tTemplate("{name}'s vote", { name: otherName }));
@@ -6777,6 +6875,47 @@ const RAW = String.raw`<!doctype html>
     return card;
   }
 
+  // Banner while a partner's new voice hasn't been played yet on this phone.
+  function voiceNewBanner() {
+    var ok = viewerKey && otherKeyOf(viewerKey);
+    if (!ok || !voiceIsNew(ok)) return null;
+    return h("div", { class: "voice-new-banner" }, [
+      h("span", { class: "vnb-ico", text: "\uD83C\uDF99\uFE0F" }),
+      h("span", { text: tTemplate("{name} recorded their voice! Tap \uD83D\uDD0A on their answer to hear it in their own voice.", { name: personName(ok) }) })
+    ]);
+  }
+  // Right after you answer (and before you've recorded), the recorder moves
+  // up under your answer, where it makes sense.
+  function myAnsweredToday() {
+    try { var a = state.answers && state.answers[dateKey(new Date())]; return !!(a && a[viewerKey] && a[viewerKey].text); } catch (e) { return false; }
+  }
+  function voiceNudgeWanted() {
+    var me = viewerKey && state.people && state.people[viewerKey];
+    var other = viewerKey && state.people && state.people[otherKeyOf(viewerKey)];
+    return !!(me && me.confirmed && !me.hasVoice && other && other.confirmed && myAnsweredToday());
+  }
+  function voiceNudgeBlock() {
+    if (!voiceNudgeWanted()) return null;
+    var el = voiceRecorderBlock();
+    if (!el) return null;
+    el.classList.add("voice-spotlight");
+    var title = el.querySelector(".voice-card-title");
+    if (title) title.textContent = "\uD83D\uDD0A " + tTemplate("{name} will hear your answer in a computer voice", { name: personName(otherKeyOf(viewerKey)) });
+    var desc = el.querySelector(".voice-card-desc");
+    if (desc) desc.textContent = t("Record about 30 seconds so they hear it in yours. It takes less than a minute.");
+    return el;
+  }
+  // Who has recorded their voice, shown on the streak card.
+  function voiceBadges() {
+    var row = h("div", { class: "voice-badges" });
+    ["mark", "nikita"].forEach(function (k) {
+      var p = state.people && state.people[k];
+      if (!(p && p.confirmed)) return;
+      var nm = k === viewerKey ? t("You") : personName(k);
+      row.appendChild(h("span", { class: "voice-badge" + (p.hasVoice ? " on" : ""), text: "\uD83C\uDF99\uFE0F " + nm + (p.hasVoice ? " \u2713" : " \u00B7 " + t("no voice yet")) }));
+    });
+    return row.childNodes.length > 1 ? row : null;
+  }
   function streakCard() {
     var info = streakInfo();
     var dots = h("div", { class: "streak-dots" });
@@ -6787,7 +6926,7 @@ const RAW = String.raw`<!doctype html>
       info.count > 0 ? h("strong", { text: t(info.count === 1 ? "{n} day" : "{n} days").split("{n}").join(String(info.count)) }) : null,
       info.count > 0 ? document.createTextNode(" " + t("in a row.")) : null
     ]);
-    return h("div", { class: "streak-card" }, [text, dots]);
+    return h("div", { class: "streak-card" }, [text, dots, voiceBadges()]);
   }
 
   function journalSection() {
@@ -7309,7 +7448,84 @@ const RAW = String.raw`<!doctype html>
   }
 
   function switchRow() {
-    return footerLinks({ room: true, block: true });
+    return settingsButtonRow();
+  }
+  // Nov 26 (Mark): the pile of small links at the bottom of the room
+  // (reminders, switch, my rooms, start with someone else, privacy, terms,
+  // support, block, leave, delete) now lives in one Settings sheet.
+  function settingsButtonRow() {
+    var row = h("div", { class: "settings-open-row" });
+    var b = h("button", { type: "button", class: "settings-open", text: "\u2699\uFE0F " + t("Settings") });
+    b.addEventListener("click", function () { settingsOpen = true; renderApp(); try { window.scrollTo(0, 0); } catch (e) {} });
+    row.appendChild(b);
+    return row;
+  }
+  function setRow(label, onClick, opts) {
+    opts = opts || {};
+    var el = opts.href ? h("a", { class: "set-row" + (opts.danger ? " danger" : ""), href: opts.href }) : h("button", { type: "button", class: "set-row" + (opts.danger ? " danger" : "") });
+    el.appendChild(h("span", { text: label }));
+    var endText = opts.end === undefined ? "\u203A" : opts.end;
+    if (endText) el.appendChild(h("span", { class: "set-row-end", text: endText }));
+    if (onClick) el.addEventListener("click", onClick);
+    return el;
+  }
+  function setGroup(title, rows) {
+    rows = rows.filter(Boolean);
+    if (!rows.length) return null;
+    var g = h("div", { class: "set-group" });
+    if (title) g.appendChild(h("div", { class: "set-group-title", text: title }));
+    var box = h("div", { class: "set-box" });
+    rows.forEach(function (r) { box.appendChild(r); });
+    g.appendChild(box);
+    return g;
+  }
+  function settingsSheet() {
+    var wrap = h("div", { class: "settings-sheet" });
+    var top = h("div", { class: "settings-top" });
+    top.appendChild(h("h2", { text: t("Settings") }));
+    var done = h("button", { type: "button", class: "settings-done", text: t("Done") });
+    done.addEventListener("click", function () { settingsOpen = false; renderApp(); });
+    top.appendChild(done);
+    wrap.appendChild(top);
+    var me = viewerKey && state.people && state.people[viewerKey];
+    var other = viewerKey && state.people && state.people[otherKeyOf(viewerKey)];
+    var otherOn = !!(other && other.confirmed);
+    // You
+    var pushRow = null;
+    if (pushSupported() && viewerKey) {
+      pushRow = setRow(t("Reminders"), function () { if (pushState === "on") disablePush(); else if (pushState !== "busy") enablePush(); },
+        { end: pushState === "busy" ? t("Working…") : pushState === "on" ? t("On") : t("Off") });
+    }
+    var sw = me ? setRow(tTemplate("Not {name}? Switch", { name: personName(viewerKey) }), function () {
+      settingsOpen = false; viewerKey = null; previewKey = null; weatherExpanded = false;
+      try { localStorage.removeItem(VIEWER_LS_KEY); } catch (e) {}
+      renderApp();
+    }) : null;
+    var youG = setGroup(t("You"), [pushRow, sw]);
+    if (youG) wrap.appendChild(youG);
+    if (pushError) wrap.appendChild(h("p", { class: "offline-note", text: pushError }));
+    // Rooms
+    wrap.appendChild(setGroup(t("Rooms"), [
+      setRow(t("My rooms"), null, { href: "/home" }),
+      setRow(t("Start Nearune with someone else"), null, { href: "/new" })
+    ]));
+    // Safety
+    var blockRow = otherOn ? setRow(isBlocked() ? tTemplate("Unblock {name}", { name: personName(otherKeyOf(viewerKey)) }) : tTemplate("Block {name}", { name: personName(otherKeyOf(viewerKey)) }),
+      function () { setBlocked(!isBlocked()); }) : null;
+    var leaveRow = state && state.origin !== "friend" && ROOM ? setRow(t("Leave room"), function () { settingsOpen = false; leaveRoomLocal(); }) : null;
+    var safeG = setGroup(t("Safety"), [blockRow, leaveRow]);
+    if (safeG) wrap.appendChild(safeG);
+    // Help
+    wrap.appendChild(setGroup(t("Help"), [
+      setRow(t("Support"), null, { href: "/support" }),
+      setRow(t("Privacy"), null, { href: "/privacy" }),
+      setRow(t("Terms"), null, { href: "/terms" })
+    ]));
+    // Delete, last and on its own
+    wrap.appendChild(setGroup("", [setRow(t("Delete my data"), function () {
+      settingsOpen = false; showDeleteConfirm = true; deleteConfirmText = ""; deleteError = ""; renderApp();
+    }, { danger: true, end: "" })]));
+    return wrap;
   }
 
   function deleteConfirmScreen() {

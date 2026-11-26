@@ -309,6 +309,9 @@ function logSignupFailure(req: Request, pathname: string, res: Response): void {
 }
 
 await loadRoomAliases();
+// Last room each phone created (hashed address + browser), for the
+// "one room at a time" check in /api/create-room. Memory only.
+const recentRoomByDevice = new Map<string, { id: string; at: number }>();
 
 Bun.serve({
   port: PORT,
@@ -558,7 +561,27 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     const kind = /; ?wv\)/.test(ua) && !/Instagram|FBAN|FBAV|FB_IAB|WhatsApp|Line\//i.test(ua) ? "app" : /Safari\//.test(ua) || /Chrome\//.test(ua) || /Firefox\//.test(ua) ? "web" : "app";
       const lang = (req.headers.get("accept-language") || "").split(",")[0].trim().slice(0, 12) || "?";
       const via = device + " " + kind + " " + lang;
+      // One room at a time: if this same phone (same network address and
+      // browser) made a room in the last 30 minutes and nobody has signed up
+      // in it yet, send them back to that room instead of making another.
+      // Double taps, going back and tapping again, and reopening the app were
+      // creating 3-5 empty rooms per person. Only the hashed pair is kept,
+      // in memory, never the address itself.
+      const devKey = new Bun.CryptoHasher("sha256").update(clientIp(req, server) + "|" + ua).digest("hex").slice(0, 32);
+      const prior = recentRoomByDevice.get(devKey);
+      if (!useName && prior && Date.now() - prior.at < 30 * 60 * 1000) {
+        try {
+          const pst = await loadState(prior.id);
+          const signed = Object.values(pst.people || {}).some((p: any) => p && p.name);
+          if (!pst.closed && !signed) {
+            console.log("[room-reused] " + prior.id + " via " + via + " (same phone, still empty)");
+            return json({ roomId: prior.id, reused: true });
+          }
+        } catch {}
+      }
       const id = await createRoom(useName, via, useName || undefined);
+      recentRoomByDevice.set(devKey, { id, at: Date.now() });
+      if (recentRoomByDevice.size > 5000) { const cut = Date.now() - 30 * 60 * 1000; for (const [k, v] of recentRoomByDevice) if (v.at < cut) recentRoomByDevice.delete(k); }
       // Not counted as a room yet: it only becomes one (gets a number, shows
       // on the admin page, counts toward the daily cap) once someone signs
       // up in it. Abandoned ones are removed after 24 hours.

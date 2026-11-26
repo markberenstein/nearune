@@ -1245,40 +1245,66 @@ const RAW = String.raw`<!doctype html>
   // the next 4 the algorithm would ask. The winner is swapped forward into
   // tomorrow and the question it replaced takes the winner's old day, so
   // nothing repeats and nothing is skipped.
-  // Who wins (Mark's rules): a person's vote first counts on their 4th vote;
-  // after that first win, only on every 5th vote since their last win. If nobody's vote counts,
-  // tomorrow gets the algorithm's next question. If both votes count and
-  // differ, whoever has lost more of those splits wins (ties: the earlier
-  // vote); the other stays eligible, so they win the very next time they
-  // vote, which keeps it to at least 1 win in every 5 votes.
+  // Who wins (Mark's rules, Nov 25): these are minimums, and it should feel
+  // random. A person's vote can't choose the question before their 4th vote,
+  // nor sooner than 5 days after their last win. On a day when someone's
+  // vote is allowed, a dice roll (the same on both phones: it's seeded by the
+  // room and the day) decides whether a vote chooses at all; the chance grows
+  // the longer they've been waiting (40%, then +15% a day, up to 100%). Two
+  // allowed votes for different questions: the roll picks between them.
+  // Otherwise tomorrow gets the algorithm's next question.
   // Votes close when tomorrow's question arrives (server only takes tomorrow).
-  var QVOTE_FIRST = 4, QVOTE_AFTER = 5;
-  function qVoteNeed(wins, k) { return wins[k] ? QVOTE_AFTER : QVOTE_FIRST; }
+  var QVOTE_FIRST = 4, QVOTE_GAP_DAYS = 5;
+  function qRoll(day, salt) {
+    var str = (ROOM || "main") + ":" + day + ":" + salt, hsh = 2166136261;
+    for (var i = 0; i < str.length; i++) { hsh ^= str.charCodeAt(i); hsh = Math.imul(hsh, 16777619) >>> 0; }
+    return (hsh % 100000) / 100000;
+  }
+  function qDaysBetween(a, b) { return Math.round((keyToUtcMs(b) - keyToUtcMs(a)) / DAY_MS); }
+  // Days since this person first became allowed (0 on the first allowed day).
+  function qAllowedSince(p, day) {
+    if (p.count < QVOTE_FIRST) return -1;
+    if (p.lastWin && qDaysBetween(p.lastWin, day) < QVOTE_GAP_DAYS) return -1;
+    var from = p.lastWin ? keyOffsetDays(p.lastWin, QVOTE_GAP_DAYS) : p.fourth;
+    return Math.max(0, qDaysBetween(from, day));
+  }
   function qVoteResolve(day) {
     var qv = (state && state.qvotes) || {};
-    var since = { mark: 0, nikita: 0 }, lost = { mark: 0, nikita: 0 }, wins = { mark: 0, nikita: 0 };
-    var result = -1, before = null, need = null;
+    var ppl = { mark: { count: 0, lastWin: "", fourth: "" }, nikita: { count: 0, lastWin: "", fourth: "" } };
+    var result = -1, snap = null;
+    function snapshot(d) {
+      var o = {};
+      ["mark", "nikita"].forEach(function (k) { var p = ppl[k]; o[k] = { count: p.count, lastWin: p.lastWin, nextAllowed: p.lastWin ? keyOffsetDays(p.lastWin, QVOTE_GAP_DAYS) : "" }; });
+      return o;
+    }
     Object.keys(qv).sort().forEach(function (d) {
       if (d > day) return;
-      if (d === day) { before = { mark: since.mark, nikita: since.nikita }; need = { mark: qVoteNeed(wins, "mark"), nikita: qVoteNeed(wins, "nikita") }; }
+      if (d === day) snap = snapshot(d);
       var v = qv[d] || {};
       var ok = function (x) { return x && typeof x.pick === "number" && x.pick >= 0 && x.pick <= 3; };
-      var votes = {};
-      ["mark", "nikita"].forEach(function (k) { if (ok(v[k])) { votes[k] = v[k]; since[k]++; } });
-      var el = ["mark", "nikita"].filter(function (k) { return votes[k] && since[k] >= qVoteNeed(wins, k); });
-      var pick = -1, winners = [];
-      if (el.length === 2 && votes.mark.pick !== votes.nikita.pick) {
-        var w = lost.mark !== lost.nikita ? (lost.mark > lost.nikita ? "mark" : "nikita") : ((votes.mark.at || "") <= (votes.nikita.at || "") ? "mark" : "nikita");
-        lost[w === "mark" ? "nikita" : "mark"]++;
-        pick = votes[w].pick; winners = [w];
-      } else if (el.length) {
-        pick = votes[el[0]].pick; winners = el;
+      var allowed = [];
+      ["mark", "nikita"].forEach(function (k) {
+        if (!ok(v[k])) return;
+        var p = ppl[k];
+        p.count++;
+        if (p.count === QVOTE_FIRST && !p.fourth) p.fourth = d;
+        var waited = qAllowedSince(p, d);
+        if (waited >= 0) allowed.push({ k: k, pick: v[k].pick, waited: waited });
+      });
+      var pick = -1;
+      if (allowed.length) {
+        var maxWait = Math.max.apply(null, allowed.map(function (a) { return a.waited; }));
+        var chance = Math.min(1, 0.4 + 0.15 * maxWait);
+        if (qRoll(d, "go") < chance) {
+          var w = allowed.length === 1 || allowed[0].pick === allowed[1].pick ? allowed : [allowed[qRoll(d, "who") < 0.5 ? 0 : 1]];
+          pick = w[0].pick;
+          w.forEach(function (a) { ppl[a.k].lastWin = d; });
+        }
       }
-      winners.forEach(function (k) { since[k] = 0; wins[k]++; });
       if (d === day) result = pick;
     });
-    if (!before) { before = { mark: since.mark, nikita: since.nikita }; need = { mark: qVoteNeed(wins, "mark"), nikita: qVoteNeed(wins, "nikita") }; }
-    return { pick: result, before: before, need: need };
+    if (!snap) snap = snapshot(day);
+    return { pick: result, people: snap };
   }
   function qVoteWinner(day) { return qVoteResolve(day).pick; }
   function voteSwaps(upTo) {
@@ -6609,20 +6635,24 @@ const RAW = String.raw`<!doctype html>
     var other = state.people && state.people[otherKey];
     var otherName = other && other.confirmed ? personName(otherKey) : "";
     var myPick = votes[viewerKey] ? votes[viewerKey].pick : -1;
-    // Which of my votes this is (1..4 at first, then 1..5); only the last can win.
-    var qr = qVoteResolve(tomorrow);
-    var myNth = (qr.before[viewerKey] || 0) + 1, myNeed = qr.need[viewerKey] || QVOTE_FIRST;
     var theirPick = otherName && votes[otherKey] ? votes[otherKey].pick : -1;
+    var qr = qVoteResolve(tomorrow);
+    var me2 = qr.people[viewerKey] || { count: 0, nextAllowed: "" };
+    var myCount = me2.count + (votes[viewerKey] ? 1 : 0);
+    var voteNote, thisVoteNo = me2.count + 1;
+    if (me2.nextAllowed && tomorrow < me2.nextAllowed) {
+      voteNote = tTemplate("Your pick won recently. Your vote gets another chance from {day}.", { day: t(formatDateLabel(me2.nextAllowed)) });
+    } else if (thisVoteNo < QVOTE_FIRST) {
+      voteNote = tTemplate("Keep voting: from your 4th vote, your pick has a chance to choose the question. Votes so far: {n}", { n: myCount });
+    } else {
+      voteNote = "\uD83C\uDFB2 " + t("Your vote has a chance to choose tomorrow's question!");
+    }
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Vote on tomorrow's question") }), h("span", { text: t(formatDateLabel(tomorrow)) })]),
       h("p", { class: "puzzle-guess-note", style: "margin:6px 0 10px;", text: otherName
         ? tTemplate("Pick the one you'd most like {name} to answer.", { name: otherName })
         : t("Pick the question you'd most like to answer tomorrow.") }),
-      h("p", { class: "qvote-count", text: myNth >= myNeed
-        ? "\u2B50 " + t("This vote can choose tomorrow's question!")
-        : myNeed === QVOTE_FIRST
-        ? tTemplate("Vote {n} of 4. Your 4th vote gets to choose the question.", { n: myNth })
-        : tTemplate("Vote {n} of 5. Every 5th vote gets to choose the question.", { n: myNth }) })
+      h("p", { class: "qvote-count", text: voteNote })
     ]);
     choices.forEach(function (q, i) {
       var mine = myPick === i, theirs = theirPick === i;

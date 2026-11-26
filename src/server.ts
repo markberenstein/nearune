@@ -179,6 +179,29 @@ function previewBotName(ua: string): string {
   for (const [re, name] of PREVIEW_BOTS) if (re.test(ua)) return name;
   return "";
 }
+// Rooms that got the Nov 26 "send your link again" alert, so Slack can say
+// when one of them comes back to life (Mark wants to know the fix worked).
+let alertedCache: { at: number; rooms: Set<string> } | null = null;
+async function alertedRooms(): Promise<Set<string>> {
+  if (alertedCache && Date.now() - alertedCache.at < 5 * 60 * 1000) return alertedCache.rooms;
+  const rooms = new Set<string>();
+  try {
+    const rec = JSON.parse((await readSideFile("alert-invite-2026-11-26.json")) || "null");
+    for (const k of (rec && rec.done) || []) rooms.add(String(k).split(":")[0]);
+  } catch {}
+  alertedCache = { at: Date.now(), rooms };
+  return rooms;
+}
+function slackPost(text: string, tag: string): void {
+  console.log("[" + tag + "] " + text);
+  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  if (!hook) return;
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] " + tag + " post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] " + tag + " post error", e));
+}
+const resendSlackSent = new Set<string>();
+
 function notifyInviteEvent(room: string, step: string, st: any, extra: string): void {
   const k = room + "|" + step;
   const last = inviteEventSent.get(k) || 0;
@@ -491,7 +514,21 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     if (req.method === "GET" && url.pathname === "/api/deferred-invite") {
       const dk = deferredKey(clientIp(req, server));
       const hit = deferredInvites.get(dk);
-      if (hit && Date.now() - hit.at < 48 * HOUR) { deferredInvites.delete(dk); saveDeferredSoon(); return json({ dest: hit.dest }); }
+      if (hit && Date.now() - hit.at < 48 * HOUR) {
+        deferredInvites.delete(dk); saveDeferredSoon();
+        // The Nov 26 fix in action: someone installed the app after opening an
+        // invite and the app is taking them straight into that room.
+        const dm = hit.dest.match(/^\/r\/([a-z0-9]+)\//);
+        if (dm) {
+          loadState(dm[1]).then((dst: any) => {
+            const ppl = (dst && dst.people) || {};
+            const ik = (["mark", "nikita"] as const).find((p) => ppl[p] && ppl[p].confirmed && !(dst.pendingInvite && dst.pendingInvite[p]));
+            const inviter = ik ? String(ppl[ik].name || "Someone") : "Someone";
+            slackPost(":white_check_mark: FIX WORKED: an invited friend installed the app and it opened straight into " + inviter + "'s room (room " + dm[1] + "), instead of a new room.", "fix-worked");
+          }).catch(() => {});
+        }
+        return json({ dest: hit.dest });
+      }
       return json({ dest: null });
     }
 
@@ -1558,6 +1595,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const step = typeof body?.step === "string" ? body.step : "";
       if (!FUNNEL_STEPS.has(step)) return json({ ok: false }, { status: 400 });
       const cur = await loadState(roomId);
+      if ((step === "invite_shared" || step === "invite_emailed") && roomId && !resendSlackSent.has(roomId) && cur.funnel && cur.funnel[step]) {
+        const ar = await alertedRooms();
+        if (ar.has(roomId)) {
+          resendSlackSent.add(roomId);
+          const ppl: any = cur.people || {};
+          const ik = (["mark", "nikita"] as const).find((p) => ppl[p] && ppl[p].confirmed && !(cur.pendingInvite && cur.pendingInvite[p]));
+          slackPost(":repeat: " + (ik ? String(ppl[ik].name || "Someone") : "Someone") + " sent their invite again after today's alert (room " + roomId + ").", "alert-resend");
+        }
+      }
       // Only rooms that were really created (never conjure a room from a made-up id).
       if (roomId && !cur.createdAt) return json({ ok: false }, { status: 404 });
       if (cur.funnel && cur.funnel[step]) return json({ ok: true });
@@ -1909,6 +1955,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       });
       console.log("[invite-accepted] room=" + (roomId || "main") + " who=" + who);
       try { notifyInviteEvent(roomId || "main", "joined", { ...state, pendingInvite: { [who!]: { token } } }, name); } catch {}
+      alertedRooms().then((ar) => {
+        if (ar.has(roomId)) slackPost(":white_check_mark: FIX WORKED: " + name + " joined room " + roomId + ", one of the rooms that got today's \"send your link again\" alert.", "fix-worked");
+      }).catch(() => {});
       // Let the person who sent the invite know their partner is in —
       // otherwise the only way they'd find out is having the app open when
       // the 6s poll happens to catch it. Push only (not email): we never

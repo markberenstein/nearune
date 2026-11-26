@@ -4189,7 +4189,7 @@ const RAW = String.raw`<!doctype html>
     "Today's question made me think of you. Want to answer it with me?",
     "Last nudge, I promise! My invite link stops working soon. I'd really love to do this with you."
   ];
-  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"].concat(FOLLOWUP_LINES);
+  var INVITE_MSG_STRINGS = ["I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.", "Happy Thanksgiving! I'm thankful for you. Nearune gives us one question a day, and we see each other's answers.", "Today's question:", "Join me here:"].concat(FOLLOWUP_LINES);
   function myLanguageName() {
     var me = state && state.people && state.people[viewerKey];
     return (me && me.language && LANG_NAME_TO_CODE[String(me.language).toLowerCase()] && !/^(gib|tlh)$/.test(LANG_NAME_TO_CODE[String(me.language).toLowerCase()])) ? me.language : "English";
@@ -4243,10 +4243,20 @@ const RAW = String.raw`<!doctype html>
       h("span", { style: "white-space:nowrap;", text: "\uD83C\uDF10 " + t("Invitation language") }), sel
     ]);
   }
+  // US Thanksgiving weekend (Thu Nov 26 to Sun Nov 29, 2026), for people on
+  // US time zones: a thankful invite card title and message.
+  function thanksgivingNow() {
+    try {
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      if (!/^(America\/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Detroit|Boise|Indiana\/.+|Kentucky\/.+|North_Dakota\/.+|Menominee|Juneau|Sitka|Nome|Adak)|Pacific\/Honolulu)$/.test(tz)) return false;
+      var d = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      return d >= "2026-11-26" && d <= "2026-11-29";
+    } catch (e) { return false; }
+  }
   function inviteMessage(url) {
     var q = todaysQuestionText();
     return (resendOpen ? tInvite(FOLLOWUP_LINES[resendN] || FOLLOWUP_LINES[0]) + "\n\n" : "") +
-      tInvite("I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
+      tInvite(thanksgivingNow() ? "Happy Thanksgiving! I'm thankful for you. Nearune gives us one question a day, and we see each other's answers." : "I'd love for us to stay closer. Nearune gives us one question a day, and we see each other's answers.") +
       (q ? "\n\n" + tInvite("Today's question:") + " \u201c" + tInvite(q) + "\u201d" : "") +
       "\n\n" + tInvite("Join me here:") + " " + url;
   }
@@ -4441,7 +4451,7 @@ const RAW = String.raw`<!doctype html>
     // tell the person to expect it (unexpected invites get ignored).
     var sentNow = !!headsUpState && !stillWaiting && !!(state && state.relationship);
     var card = h("div", { class: "card" }, [
-      h("p", { class: "reg-title", text: sentNow ? t("Your invitation has been sent") : stillWaiting ? t("Your invite is still waiting") : t("Invite someone to your room") }),
+      h("p", { class: "reg-title", text: sentNow ? t("Your invitation has been sent") : stillWaiting ? t("Your invite is still waiting") : thanksgivingNow() ? t("Who are you thankful for? Send them your room.") : t("Invite someone to your room") }),
       h("p", { class: "reg-sub", text: sentNow ? sentNowLine()
         : state && state.origin !== "friend" && !state.relationship
         ? t("First, who's this invite for? It picks your daily questions.")
@@ -4706,7 +4716,7 @@ const RAW = String.raw`<!doctype html>
     }
     var kids = [
       envelope,
-      h("h2", { text: t("Who do you wish you talked to more?") }),
+      h("h2", { text: thanksgivingNow() ? t("Who are you thankful for? Send them your room.") : t("Who do you wish you talked to more?") }),
       h("p", { text: t("Send them your room. Each day you both answer one question and see each other's answers, wherever you are. Your link works for 3 days.") }),
       stepHead(1, t("Pick someone you know to be your Nearune partner")),
       chips

@@ -5102,8 +5102,6 @@ const RAW = String.raw`<!doctype html>
     // only lets confirmed people send invites).
     if (!confirmed) app.appendChild(registrationFlow());
     else if (state.origin === "friend") {
-      var fbSolo = friendBanner();
-      if (fbSolo) app.appendChild(fbSolo);
       app.appendChild(h("div", { class: "card" }, [
         h("div", { class: "eyebrow" }, [h("span", { text: t("Waiting for your match") })]),
         h("p", { class: "puzzle-guess-note", text: t("Your match hasn't joined yet. They'll show up here as soon as they do. You can answer today's question in the meantime.") })
@@ -5148,6 +5146,9 @@ const RAW = String.raw`<!doctype html>
         h("p", { class: "puzzle-guess-note", text: t("We sent you a link. Confirm it so you can get back into your room if you ever lose your link. It's only used for that. Until you confirm (up to 7 days) we keep your email so we can send a reminder; after that Nearune doesn't save it.") })
       ]));
     }
+    // Report / Leave sit at the bottom, out of the way of the first
+    // question (Mark, Nov 26).
+    if (confirmed && state.origin === "friend") { var fbSolo = friendBanner(); if (fbSolo) app.appendChild(fbSolo); }
     app.appendChild(settingsButtonRow());
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
   }
@@ -5295,7 +5296,6 @@ const RAW = String.raw`<!doctype html>
     if (settingsOpen) { app.appendChild(settingsSheet()); return; }
 
     addPart(app, "header", header);
-    addPart(app, "friendBanner", friendBanner);
     addPart(app, "notice", noticeCard);
     // Traveling button sits right under the clock/timezone block at the
     // very top of the page. The "enable notifications" link used to sit
@@ -5351,6 +5351,9 @@ const RAW = String.raw`<!doctype html>
     // that call site above). Only renders while notifications are actually
     // off (pushToggleRow() returns null once they're on).
     if (activeTab === "today") addPart(app, "friendInvite", friendInviteLine);
+    // Report / Leave for Make a friend rooms: at the bottom, not above the
+    // question (Mark, Nov 26).
+    addPart(app, "friendBanner", friendBanner);
     addPart(app, "switchRow", switchRow);
     if (!online) app.appendChild(h("p", { class: "offline-note", text: t("Having trouble syncing — check your connection.") }));
     var appOffer = appOfferCard();

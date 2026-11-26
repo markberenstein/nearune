@@ -392,6 +392,7 @@ const RAW = String.raw`<!doctype html>
   .qvote-opt { display: block; width: 100%; box-sizing: border-box; text-align: left; margin: 8px 0 0; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-size: 0.95rem; line-height: 1.35; cursor: pointer; }
   .qvote-opt.mine { border-color: var(--accent, #A8522A); box-shadow: 0 0 0 2px rgba(168, 82, 42, 0.25); }
   .qvote-q { display: block; }
+  .qvote-mypick { margin: 8px 0 0; font-weight: 700; font-size: 1rem; line-height: 1.35; color: var(--ink); }
   .qvote-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; }
   .qvote-row .qvote-opt { margin: 0; flex: 1; min-width: 0; }
   .qvote-speak { font-size: 1.25rem; padding: 8px 4px; opacity: 0.85; }
@@ -6734,7 +6735,7 @@ const RAW = String.raw`<!doctype html>
     return row;
   }
 
-  var qVoteBusy = false;
+  var qVoteBusy = false, qVoteOpen = false;
   function questionVoteCard() {
     var me = state.people && state.people[viewerKey];
     if (!me || !me.confirmed || state.closed) return null;
@@ -6752,24 +6753,25 @@ const RAW = String.raw`<!doctype html>
     var otherName = other && other.confirmed ? personName(otherKey) : "";
     var myPick = votes[viewerKey] ? votes[viewerKey].pick : -1;
     var theirPick = otherName && votes[otherKey] ? votes[otherKey].pick : -1;
-    var qr = qVoteResolve(tomorrow);
-    var me2 = qr.people[viewerKey] || { count: 0, nextAllowed: "" };
-    var myCount = me2.count + (votes[viewerKey] ? 1 : 0);
-    var voteNote, thisVoteNo = me2.count + 1;
-    if (me2.nextAllowed && tomorrow < me2.nextAllowed) {
-      voteNote = tTemplate("Your pick won recently. Your vote gets another chance from {day}.", { day: t(formatDateLabel(me2.nextAllowed)) });
-    } else if (thisVoteNo < QVOTE_FIRST) {
-      voteNote = tTemplate("Keep voting: from your 4th vote, your pick has a chance to choose the question. Votes so far: {n}", { n: myCount });
-    } else {
-      voteNote = "\uD83C\uDFB2 " + t("Your vote has a chance to choose tomorrow's question!");
-    }
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Vote on tomorrow's question") }), h("span", { text: t(formatDateLabel(tomorrow)) })]),
       h("p", { class: "puzzle-guess-note", style: "margin:6px 0 10px;", text: otherName
         ? tTemplate("Pick the one you'd most like {name} to answer.", { name: otherName })
-        : t("Pick the question you'd most like to answer tomorrow.") }),
-      h("p", { class: "qvote-count", text: voteNote })
+        : t("Pick the question you'd most like to answer tomorrow.") })
     ]);
+    // Nov 26 (Mark): the selection rules stay behind the scenes, and once
+    // you've voted the card folds to your pick, with "Change your vote".
+    if (myPick >= 0 && !qVoteOpen) {
+      var folded = h("div", { class: "card qvote-folded" }, [
+        h("div", { class: "eyebrow" }, [h("span", { text: t("Vote on tomorrow's question") }), h("span", { text: t(formatDateLabel(tomorrow)) })]),
+        h("p", { class: "qvote-mypick", text: "\u2713 " + t("Your vote") + ": " + tBi(choices[myPick] || "") })
+      ]);
+      if (theirPick >= 0) folded.appendChild(h("p", { class: "puzzle-guess-note", style: "margin:4px 0 0;", text: tTemplate("{name} voted too.", { name: otherName }) }));
+      var chg = h("button", { type: "button", class: "switch-link", style: "margin-top:6px;font-size:0.9rem;", text: t("Change your vote") + " \u203A" });
+      chg.addEventListener("click", function () { qVoteOpen = true; renderApp(); });
+      folded.appendChild(chg);
+      return folded;
+    }
     choices.forEach(function (q, i) {
       var mine = myPick === i, theirs = theirPick === i;
       var row = h("div", { class: "qvote-row" });
@@ -6785,7 +6787,7 @@ const RAW = String.raw`<!doctype html>
       b.disabled = qVoteBusy;
       b.addEventListener("click", function () {
         if (qVoteBusy || mine) return;
-        qVoteBusy = true; renderApp();
+        qVoteBusy = true; qVoteOpen = false; renderApp();
         fetch(RP + "/api/qvote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, date: tomorrow, pick: i }) })
           .then(function (r) { return r.json(); })
           .then(function (d) { if (d && d.people) state = d; })
@@ -6796,8 +6798,6 @@ const RAW = String.raw`<!doctype html>
       if (sp) { sp.classList.add("qvote-speak"); row.appendChild(sp); }
       card.appendChild(row);
     });
-    var w = qVoteWinner(tomorrow);
-    if (w >= 0) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;text-align:center;", text: t("Voting closes when tomorrow's question arrives.") }));
     return card;
   }
   function questionCard() {

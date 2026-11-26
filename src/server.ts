@@ -2981,6 +2981,68 @@ async function sendApologiesOnce(): Promise<void> {
   }
 }
 setTimeout(sendApologiesOnce, 90 * 1000);
+
+// One-time alert (Mark, Nov 26): the invite link now holds the invite for the
+// phone as soon as it's opened, so an app install lands in the right room.
+// Tell everyone still waiting on their person to send their link again. The
+// list of rooms is fixed the first time this runs; each inviter gets it once,
+// between 9am and 9pm their time, within 48 hours. A side file keeps track,
+// so restarts never send it twice.
+const RESEND_ALERT_FILE = "alert-invite-2026-11-26.json";
+const RESEND_ALERT = {
+  title: "Your invite works better now",
+  body: "If your person installed the app and ended up alone, send your link again. It now opens straight into your room.",
+};
+async function sendResendAlert(): Promise<void> {
+  try {
+    let rec: { start: number; targets: { rid: string; who: PersonKey }[]; done: string[] } | null = null;
+    try { rec = JSON.parse((await readSideFile(RESEND_ALERT_FILE)) || "null"); } catch { rec = null; }
+    const now = Date.now();
+    if (!rec) {
+      const targets: { rid: string; who: PersonKey }[] = [];
+      for (const id of await listRoomIds()) {
+        let st: any;
+        try { st = await loadState(id); } catch { continue; }
+        if (!st || st.origin === "friend" || st.closed || !st.pendingInvite) continue;
+        for (const other of ["mark", "nikita"] as PersonKey[]) {
+          const inv = st.pendingInvite[other];
+          if (!inv || !inv.token) continue;
+          if (st.people && st.people[other] && st.people[other].confirmed) continue;
+          targets.push({ rid: id, who: other === "mark" ? "nikita" : "mark" });
+        }
+      }
+      rec = { start: now, targets, done: [] };
+      console.log("[resend-alert] " + targets.length + " rooms waiting on their person: " + targets.map((t) => t.rid).join(", "));
+    }
+    if (now - rec.start > 48 * 60 * 60 * 1000) return;
+    for (const t of rec.targets) {
+      const key = t.rid + ":" + t.who;
+      if (rec.done.includes(key)) continue;
+      let st: any;
+      try { st = await loadState(t.rid); } catch { rec.done.push(key); continue; }
+      const other: PersonKey = t.who === "mark" ? "nikita" : "mark";
+      if (!st || st.closed || (st.people && st.people[other] && st.people[other].confirmed)) { rec.done.push(key); console.log("[resend-alert] room " + t.rid + " already joined, skipped"); continue; }
+      const me = st.people && st.people[t.who];
+      const h = localHour(me && me.tz);
+      if (h < 9 || h >= 21) continue;
+      const st2 = await saveState(t.rid, (s) => { s.notice = { id: RESEND_ALERT_FILE, title: RESEND_ALERT.title, body: RESEND_ALERT.body, at: new Date().toISOString() }; });
+      const sub: any = st2.pushSubs && st2.pushSubs[t.who];
+      let how = "room note only (no notifications on)";
+      if (sub) {
+        const res = await sendPush(sub, { title: RESEND_ALERT.title, body: RESEND_ALERT.body, tag: "invite-nudge", url: "/r/" + t.rid + "/?resend=1" } as any);
+        how = res.ok ? "push sent" : "push failed";
+        if (res.gone) await saveState(t.rid, (s) => { if (s.pushSubs) delete s.pushSubs[t.who]; });
+      }
+      rec.done.push(key);
+      console.log("[resend-alert] room " + t.rid + " " + how);
+    }
+    await writeSideFile(RESEND_ALERT_FILE, JSON.stringify(rec));
+  } catch (e) {
+    console.error("[resend-alert] failed", e);
+  }
+}
+setTimeout(sendResendAlert, 2 * 60 * 1000);
+setInterval(sendResendAlert, 60 * 60 * 1000);
 setTimeout(sweepFriendNoShows, 3 * 60 * 1000);
 setInterval(sweepFriendNoShows, 60 * 60 * 1000);
 setTimeout(purgeStaleEmails, 6 * 60 * 1000);

@@ -392,6 +392,9 @@ const RAW = String.raw`<!doctype html>
   .qvote-opt { display: block; width: 100%; box-sizing: border-box; text-align: left; margin: 8px 0 0; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-size: 0.95rem; line-height: 1.35; cursor: pointer; }
   .qvote-opt.mine { border-color: var(--accent, #A8522A); box-shadow: 0 0 0 2px rgba(168, 82, 42, 0.25); }
   .qvote-q { display: block; }
+  .qvote-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; }
+  .qvote-row .qvote-opt { margin: 0; flex: 1; min-width: 0; }
+  .qvote-speak { font-size: 1.25rem; padding: 8px 4px; opacity: 0.85; }
   .qvote-count { margin: 0 0 4px; font-size: 0.85rem; font-weight: 700; color: var(--ink); }
   .qvote-tag { display: block; margin-top: 6px; font-size: 0.78rem; font-weight: 700; opacity: 0.8; }
   .inv-steps { list-style: none; margin: 14px 0 4px; padding: 0; text-align: left; }
@@ -6769,8 +6772,12 @@ const RAW = String.raw`<!doctype html>
     ]);
     choices.forEach(function (q, i) {
       var mine = myPick === i, theirs = theirPick === i;
+      var row = h("div", { class: "qvote-row" });
       var b = h("button", { type: "button", class: "qvote-opt" + (mine ? " mine" : "") });
       b.appendChild(h("span", { class: "qvote-q", text: tBi(q) }));
+      // 🔊 reads the choice in the partner's own recorded voice, or the
+      // phone's voice until they've recorded one.
+      var sp = speakButton(q, "en", t("Listen"), otherName ? otherKey : null);
       var tags = [];
       if (mine) tags.push("\u2713 " + t("Your vote"));
       if (theirs) tags.push(tTemplate("{name}'s vote", { name: otherName }));
@@ -6785,7 +6792,9 @@ const RAW = String.raw`<!doctype html>
           .catch(function () {})
           .then(function () { qVoteBusy = false; renderApp(); });
       });
-      card.appendChild(b);
+      row.appendChild(b);
+      if (sp) { sp.classList.add("qvote-speak"); row.appendChild(sp); }
+      card.appendChild(row);
     });
     var w = qVoteWinner(tomorrow);
     if (w >= 0) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;text-align:center;", text: t("Voting closes when tomorrow's question arrives.") }));

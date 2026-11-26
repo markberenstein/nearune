@@ -184,6 +184,9 @@ export type State = {
   // the last phrases so a new round never repeats one.
   // history = finished rounds (both answered), comments = per-round notes
   // keyed by round number; both only shown once a round is revealed.
+  // Votes on tomorrow's question, keyed by that day: pick = 0..3 among the
+  // next 4 scheduled questions (see voteChoices() in page.ts).
+  qvotes?: Record<string, Partial<Record<PersonKey, { pick: number; at: string }>>>;
   nhie?: {
     round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">>; recent?: string[];
     history?: { round: number; text: string; votes: Partial<Record<PersonKey, "never" | "have">> }[];

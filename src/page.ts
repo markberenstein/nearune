@@ -389,6 +389,19 @@ const RAW = String.raw`<!doctype html>
   .reg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .priv-note { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); color: var(--ink-soft, var(--ink)); font-size: 0.85rem; line-height: 1.4; text-align: left; }
   .priv-lock { flex: none; }
+  .qvote-opt { display: block; width: 100%; box-sizing: border-box; text-align: left; margin: 8px 0 0; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-size: 0.95rem; line-height: 1.35; cursor: pointer; }
+  .qvote-opt.mine { border-color: var(--accent, #A8522A); box-shadow: 0 0 0 2px rgba(168, 82, 42, 0.25); }
+  .qvote-q { display: block; }
+  .qvote-count { margin: 0 0 4px; font-size: 0.85rem; font-weight: 700; color: var(--ink); }
+  .qvote-tag { display: block; margin-top: 6px; font-size: 0.78rem; font-weight: 700; opacity: 0.8; }
+  .inv-steps { list-style: none; margin: 14px 0 4px; padding: 0; text-align: left; }
+  .inv-steps li { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 0.92rem; line-height: 1.35; color: var(--ink-soft, var(--ink)); }
+  .inv-steps .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; border: 1.5px solid var(--line); color: var(--ink-soft, var(--ink)); }
+  .inv-steps li.now { color: var(--ink); font-weight: 700; }
+  .inv-steps li.now .n { background: var(--ink); color: var(--bg, #1b2140); border-color: var(--ink); }
+  .inv-steps li.done { opacity: 0.6; }
+  .inv-steps li.done .n { background: rgba(127, 200, 140, 0.25); border-color: rgba(127, 200, 140, 0.8); }
+  .inv-steps .alt { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
   .reg-chip { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 10px 16px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
   .reg-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .reg-more { background: none; border: none; color: var(--ink-soft); font: inherit; font-size: 0.82rem; text-decoration: underline; cursor: pointer; padding: 6px 4px; align-self: center; }
@@ -1228,7 +1241,69 @@ const RAW = String.raw`<!doctype html>
     var d = new Date(keyToUtcMs(key) + delta * DAY_MS);
     return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
+  // Question votes: each day the room can vote on TOMORROW's question from
+  // the next 4 the algorithm would ask. The winner is swapped forward into
+  // tomorrow and the question it replaced takes the winner's old day, so
+  // nothing repeats and nothing is skipped.
+  // Who wins (Mark's rules): a person's vote only counts on their 4th vote
+  // since their last win (votes 1-3 are practice). If nobody's vote counts,
+  // tomorrow gets the algorithm's next question. If both votes count and
+  // differ, whoever has lost more of those splits wins (ties: the earlier
+  // vote); the other stays eligible, so they win the very next time they
+  // vote, which keeps it to at least 1 win in every 5 votes.
+  // Votes close when tomorrow's question arrives (server only takes tomorrow).
+  var QVOTE_EVERY = 4;
+  function qVoteResolve(day) {
+    var qv = (state && state.qvotes) || {};
+    var since = { mark: 0, nikita: 0 }, lost = { mark: 0, nikita: 0 };
+    var result = -1, before = null;
+    Object.keys(qv).sort().forEach(function (d) {
+      if (d > day) return;
+      if (d === day) before = { mark: since.mark, nikita: since.nikita };
+      var v = qv[d] || {};
+      var ok = function (x) { return x && typeof x.pick === "number" && x.pick >= 0 && x.pick <= 3; };
+      var votes = {};
+      ["mark", "nikita"].forEach(function (k) { if (ok(v[k])) { votes[k] = v[k]; since[k]++; } });
+      var el = ["mark", "nikita"].filter(function (k) { return votes[k] && since[k] >= QVOTE_EVERY; });
+      var pick = -1, winners = [];
+      if (el.length === 2 && votes.mark.pick !== votes.nikita.pick) {
+        var w = lost.mark !== lost.nikita ? (lost.mark > lost.nikita ? "mark" : "nikita") : ((votes.mark.at || "") <= (votes.nikita.at || "") ? "mark" : "nikita");
+        lost[w === "mark" ? "nikita" : "mark"]++;
+        pick = votes[w].pick; winners = [w];
+      } else if (el.length) {
+        pick = votes[el[0]].pick; winners = el;
+      }
+      winners.forEach(function (k) { since[k] = 0; });
+      if (d === day) result = pick;
+    });
+    if (!before) before = { mark: since.mark, nikita: since.nikita };
+    return { pick: result, before: before };
+  }
+  function qVoteWinner(day) { return qVoteResolve(day).pick; }
+  function voteSwaps(upTo) {
+    var swaps = {};
+    function cur(k) { return Object.prototype.hasOwnProperty.call(swaps, k) ? swaps[k] : rawQuestionForKey(k); }
+    var days = Object.keys((state && state.qvotes) || {}).sort();
+    days.forEach(function (d) {
+      if (d >= upTo) return;
+      var w = qVoteWinner(d);
+      if (w <= 0) return;
+      var other = keyOffsetDays(d, w);
+      var a = cur(d), b = cur(other);
+      swaps[d] = b; swaps[other] = a;
+    });
+    return cur;
+  }
   function questionForKey(key) {
+    return voteSwaps(keyOffsetDays(key, 1))(key);
+  }
+  // The 4 choices for a day: what's scheduled for it and the 3 after,
+  // counting earlier days' votes but not this day's own vote.
+  function voteChoices(day) {
+    var cur = voteSwaps(day);
+    return [0, 1, 2, 3].map(function (i) { return cur(keyOffsetDays(day, i)); });
+  }
+  function rawQuestionForKey(key) {
     var pool = questionPoolFor(key);
     var days = Math.floor((keyToUtcMs(key) - EPOCH_MS) / DAY_MS);
     if (pool === QUESTIONS_SIGNIFICANT_OTHER_V1 && key >= QUESTIONS_V3_START) {
@@ -4283,6 +4358,39 @@ const RAW = String.raw`<!doctype html>
   // Right after setting up a room: just the room code and the invite link, with
   // buttons to share or copy them. The link is fetched automatically (the
   // server keeps the same link every time, so asking again is harmless).
+  // The invite, step by step (Mark's order): who -> or Make a friend -> tell
+  // them it's coming -> send it -> answer your first question -> greet them
+  // when they join. Done steps get a check; the next one is highlighted.
+  function inviteSteps() {
+    var chose = !!(state && (state.relationship || state.origin === "friend"));
+    var sent = inviteWasShared();
+    var answered = false;
+    try { var a = state.answers && state.answers[dateKey(new Date())]; answered = !!(a && a[viewerKey] && a[viewerKey].text); } catch (e) {}
+    var steps = [
+      { text: t("Pick someone you know to be your Nearune partner"), done: chose },
+      { text: t("No one in mind? Make a friend instead"), done: false, alt: true, skip: chose },
+      { text: t("Let them know your invite is coming, so they watch for it"), done: sent },
+      { text: t("Send the invite from Nearune"), done: sent },
+      { text: t("Answer your first question"), done: answered },
+      { text: t("Greet your new Nearune partner when they join"), done: false }
+    ];
+    var nowIdx = -1;
+    steps.forEach(function (st, i) { if (nowIdx < 0 && !st.done && !st.alt) nowIdx = i; });
+    var ol = h("ol", { class: "inv-steps" });
+    steps.forEach(function (st, i) {
+      var li = h("li", { class: st.done ? "done" : i === nowIdx ? "now" : "" });
+      li.appendChild(h("span", { class: "n", text: st.done ? "\u2713" : String(i + 1) }));
+      if (st.alt && !st.skip) {
+        var b = h("button", { type: "button", class: "alt", text: "\uD83E\uDD1D " + st.text });
+        b.addEventListener("click", function () { funnelPing("invite_wait_friend"); location.href = "/home?friend=1"; });
+        li.appendChild(b);
+      } else {
+        li.appendChild(h("span", { text: st.text }));
+      }
+      ol.appendChild(li);
+    });
+    return ol;
+  }
   function inviteFlow(otherKey) {
     funnelPing("invite_screen");
     // Nearune only starts once the other person joins, so this card is the
@@ -4314,6 +4422,7 @@ const RAW = String.raw`<!doctype html>
         ? t("They haven't joined yet. Send it again by text or email.")
         : t("Send your invite, then answer today's question below. They'll see your answer when they join.") })
     ]);
+    if (state && state.origin !== "friend") card.appendChild(inviteSteps());
     // Who the invite is for, asked here instead of on the sign-up form. It
     // picks the daily question set, so it's chosen before the invite goes
     // out (and before today's question shows).
@@ -4342,6 +4451,7 @@ const RAW = String.raw`<!doctype html>
       card.appendChild(inviteLangRow());
       var dsHome = directSendRow(lastInviteUrl);
       if (dsHome) card.appendChild(dsHome);
+      if (!inviteWasShared()) card.appendChild(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin-top:10px;", text: "\uD83D\uDCAC " + t("Tip: text or call them first so they know to expect it.") }));
       var main = shareLinkButton(lastInviteUrl, headsUpState ? t("Send it again") : t("Send them your invite"), "puzzle-upload-btn reg-cta");
       main.style.marginTop = "12px";
       card.appendChild(main);
@@ -4412,7 +4522,8 @@ const RAW = String.raw`<!doctype html>
         var mfl = h("button", { class: afterSend ? "puzzle-choose-btn" : "switch-link", type: "button", text: "\uD83E\uDD1D " + (afterSend ? t("While you wait, get matched with someone now") : t("No one in mind? Make a friend instead")) });
         mfl.style.cssText = afterSend ? "display:block;width:100%;box-sizing:border-box;margin:14px 0 0;font-weight:700;" : "display:block;margin:6px auto 0;font-size:0.9rem;";
         mfl.addEventListener("click", function () { funnelPing("invite_wait_friend"); location.href = "/home?friend=1"; });
-        card.appendChild(mfl);
+        // Before sending, step 2 in the list above already offers this.
+        if (afterSend || state.origin === "friend") card.appendChild(mfl);
       }
     } else if (regError) {
       card.appendChild(h("p", { class: "puzzle-guess-note", style: "color: var(--danger, #B3361F);", text: t(regError) }));
@@ -4557,23 +4668,36 @@ const RAW = String.raw`<!doctype html>
       if (!chosen) main.addEventListener("click", function () { inviteStepNeedsWho = true; renderApp(); });
     }
     main.style.width = "100%"; main.style.marginTop = "16px";
-    var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("No one in mind? Make a friend instead") });
-    mf.style.cssText = "display:block;margin:14px auto 0;font-size:0.9rem;";
-    mf.addEventListener("click", function () { location.href = "/home?friend=1"; });
+    var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("Make a friend instead") });
+    mf.style.cssText = "display:block;margin:6px auto 0;font-size:0.9rem;";
+    mf.addEventListener("click", function () { funnelPing("invite_wait_friend"); location.href = "/home?friend=1"; });
+    // Numbered in Mark's order: 1 pick someone you know, 2 or Make a friend,
+    // 3 let them know it's coming, 4 send it, then 5 answer your first
+    // question and 6 greet them when they join (shown as the closing line).
+    function stepHead(n, text) {
+      return h("div", { class: "reg-label", style: "margin-top:16px;text-align:center;", text: n + " \u00B7 " + text });
+    }
     var kids = [
       envelope,
       h("h2", { text: t("Who do you wish you talked to more?") }),
       h("p", { text: t("Send them your room. Each day you both answer one question and see each other's answers, wherever you are. Your link works for 3 days.") }),
-      h("div", { class: "reg-label", style: "margin-top:14px;text-align:center;", text: t("Who is it for?") }),
+      stepHead(1, t("Pick someone you know to be your Nearune partner")),
       chips
     ];
     if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
+    kids.push(stepHead(2, t("No one in mind?")));
+    kids.push(mf);
+    kids.push(stepHead(3, t("Let them know your invite is coming")));
+    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them first, so they watch for it.") }));
+    kids.push(stepHead(4, t("Send the invite from Nearune")));
     if (chosen) kids.push(inviteLangRow());
     var dsStep = chosen && lastInviteUrl ? directSendRow(lastInviteUrl) : null;
     if (dsStep) kids.push(dsStep);
+    main.style.marginTop = "10px";
     kids.push(main);
     if (copy) kids.push(copy);
-    kids.push(mf);
+    kids.push(stepHead(5, t("Answer your first question")));
+    kids.push(stepHead(6, t("Greet your new Nearune partner when they join")));
     return h("div", { class: "picker-overlay", style: "z-index:50;" }, [h("div", { class: "picker-card" }, kids)]);
   }
 
@@ -4884,6 +5008,7 @@ const RAW = String.raw`<!doctype html>
     // Today's question waits until they've said who the room is for (it
     // picks the question set: partner, family or friend).
     if (confirmed && (state.relationship || state.origin === "friend")) app.appendChild(soloQuestionCard(otherKey));
+    if (confirmed) { var qv = questionVoteCard(); if (qv) app.appendChild(qv); }
     var weatherBlock = weatherWidgetBlock();
     if (weatherBlock) app.appendChild(weatherBlock);
     if (confirmed) {
@@ -5090,6 +5215,7 @@ const RAW = String.raw`<!doctype html>
         addPart(app, "puzzle", puzzleSection);
       } else {
         addPart(app, "question", questionCard);
+        addPart(app, "qvote", questionVoteCard);
         addPart(app, "streak", streakCard);
         addPart(app, "journal", journalSection);
       }
@@ -6470,6 +6596,54 @@ const RAW = String.raw`<!doctype html>
     return row;
   }
 
+  var qVoteBusy = false;
+  function questionVoteCard() {
+    var me = state.people && state.people[viewerKey];
+    if (!me || !me.confirmed || state.closed) return null;
+    if (!state.relationship && state.origin !== "friend") return null;
+    var tomorrow = keyOffsetDays(dateKey(new Date()), 1);
+    var choices = voteChoices(tomorrow);
+    var votes = (state.qvotes && state.qvotes[tomorrow]) || {};
+    var otherKey = viewerKey === "mark" ? "nikita" : "mark";
+    var other = state.people && state.people[otherKey];
+    var otherName = other && other.confirmed ? personName(otherKey) : "";
+    var myPick = votes[viewerKey] ? votes[viewerKey].pick : -1;
+    // Which of my votes this is (1..4); only the 4th can win.
+    var myNth = (qVoteResolve(tomorrow).before[viewerKey] || 0) + 1;
+    var theirPick = otherName && votes[otherKey] ? votes[otherKey].pick : -1;
+    var card = h("div", { class: "card" }, [
+      h("div", { class: "eyebrow" }, [h("span", { text: t("Vote on tomorrow's question") }), h("span", { text: t(formatDateLabel(tomorrow)) })]),
+      h("p", { class: "puzzle-guess-note", style: "margin:6px 0 10px;", text: otherName
+        ? tTemplate("Pick the one you'd most like {name} to answer.", { name: otherName })
+        : t("Pick the question you'd most like to answer tomorrow.") }),
+      h("p", { class: "qvote-count", text: myNth >= QVOTE_EVERY
+        ? "\u2B50 " + t("This vote can choose tomorrow's question!")
+        : tTemplate("Vote {n} of 4. Your 4th vote gets to choose the question.", { n: myNth }) })
+    ]);
+    choices.forEach(function (q, i) {
+      var mine = myPick === i, theirs = theirPick === i;
+      var b = h("button", { type: "button", class: "qvote-opt" + (mine ? " mine" : "") });
+      b.appendChild(h("span", { class: "qvote-q", text: t(q) }));
+      var tags = [];
+      if (mine) tags.push("\u2713 " + t("Your vote"));
+      if (theirs) tags.push(tTemplate("{name}'s vote", { name: otherName }));
+      if (tags.length) b.appendChild(h("span", { class: "qvote-tag", text: tags.join(" \u00B7 ") }));
+      b.disabled = qVoteBusy;
+      b.addEventListener("click", function () {
+        if (qVoteBusy || mine) return;
+        qVoteBusy = true; renderApp();
+        fetch(RP + "/api/qvote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, date: tomorrow, pick: i }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d && d.people) state = d; })
+          .catch(function () {})
+          .then(function () { qVoteBusy = false; renderApp(); });
+      });
+      card.appendChild(b);
+    });
+    var w = qVoteWinner(tomorrow);
+    if (w >= 0) card.appendChild(h("p", { class: "puzzle-guess-note", style: "margin-top:10px;text-align:center;", text: t("Voting closes when tomorrow's question arrives.") }));
+    return card;
+  }
   function questionCard() {
     var today = dateKey(new Date());
     var q = questionForKey(today);

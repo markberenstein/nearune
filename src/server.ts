@@ -2240,6 +2240,31 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
     // Who the room is for (partner, family, friend...), chosen on the invite
     // card now that sign-up only asks for a name and city. Picks the daily
     // question set. Can be changed until the invited person joins.
+    // Vote on tomorrow's question (0..3 among the next 4 scheduled ones).
+    // Only tomorrow can be voted on, so a day's question is fixed once it starts.
+    if (req.method === "POST" && restPath === "/api/qvote") {
+      const body = await readJson(req);
+      const who = body && body.who;
+      const pick = body && body.pick;
+      if (!isPerson(who) || typeof pick !== "number" || !Number.isInteger(pick) || pick < 0 || pick > 3 || typeof body.date !== "string") return json({ error: "invalid" }, { status: 400 });
+      const cur = await loadState(roomId);
+      if (!cur.people || !cur.people[who] || !cur.people[who]!.confirmed || cur.closed) return json({ error: "invalid" }, { status: 400 });
+      const t0 = todayKeyFor(cur).split("-").map(Number);
+      const tm = new Date(Date.UTC(t0[0], t0[1] - 1, t0[2]) + 86400000);
+      const tomorrow = tm.getUTCFullYear() + "-" + String(tm.getUTCMonth() + 1).padStart(2, "0") + "-" + String(tm.getUTCDate()).padStart(2, "0");
+      if (body.date !== tomorrow) return json({ error: "closed", tomorrow }, { status: 409 });
+      if (!rateLimit("qvote:" + roomId, 60, HOUR)) return json({ error: "rate_limited" }, { status: 429 });
+      const st = await saveState(roomId, (s) => {
+        s.qvotes = s.qvotes || {};
+        // Keep only recent days (a few weeks is plenty for the schedule).
+        for (const k of Object.keys(s.qvotes)) if (k < "2026-01-01") delete s.qvotes[k];
+        const day = (s.qvotes[tomorrow] = s.qvotes[tomorrow] || {});
+        day[who] = { pick, at: new Date().toISOString() };
+      });
+      console.log(`[qvote] room=${roomId} pick=${pick}`);
+      return json(forClient(st));
+    }
+
     if (req.method === "POST" && restPath === "/api/relationship") {
       const body = await readJson(req);
       const rel = body && body.relationship;

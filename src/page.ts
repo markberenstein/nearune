@@ -6735,7 +6735,12 @@ const RAW = String.raw`<!doctype html>
   function questionVoteCard() {
     var me = state.people && state.people[viewerKey];
     if (!me || !me.confirmed || state.closed) return null;
-    if (!state.relationship && state.origin !== "friend") return null;
+    // Rooms from before "who is it for?" existed (like the original room)
+    // have no relationship set; they still get the vote once both people
+    // are in. A room still waiting for its second person needs one, since
+    // its questions depend on it.
+    var bothIn = ["mark", "nikita"].every(function (k) { return state.people && state.people[k] && state.people[k].confirmed; });
+    if (!state.relationship && state.origin !== "friend" && !bothIn) return null;
     var tomorrow = keyOffsetDays(dateKey(new Date()), 1);
     var choices = voteChoices(tomorrow);
     var votes = (state.qvotes && state.qvotes[tomorrow]) || {};

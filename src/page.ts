@@ -4521,8 +4521,8 @@ const RAW = String.raw`<!doctype html>
     try { var a = state.answers && state.answers[dateKey(new Date())]; answered = !!(a && a[viewerKey] && a[viewerKey].text); } catch (e) {}
     var steps = [
       { text: t("Pick someone you know to be your Nearune partner"), done: chose },
-      { text: t("Let them know your invite is coming, so they watch for it"), done: sent },
       { text: t("Send the invite from Nearune"), done: sent },
+      { text: t("Let them know your invite is coming, so they watch for it"), done: sent },
       { text: t("Answer your first question"), done: answered },
       { text: t("Greet your new Nearune partner when they join"), done: false }
     ];
@@ -4826,8 +4826,8 @@ const RAW = String.raw`<!doctype html>
       if (!chosen) main.addEventListener("click", function () { inviteStepNeedsWho = true; renderApp(); });
     }
     main.style.width = "100%"; main.style.marginTop = "16px";
-    // Numbered in Mark's order: 1 pick someone you know, 2 let them know
-    // it's coming, 3 send it, then 4 answer your first question and 5 greet
+    // Numbered in Mark's order: 1 pick someone you know, 2 send it, 3 let
+    // them know it's coming, then 4 answer your first question and 5 greet
     // them when they join. (Make a friend is the choice on the card before.)
     function stepHead(n, text) {
       return h("div", { class: "reg-label", style: "margin-top:16px;text-align:center;", text: n + " \u00B7 " + text });
@@ -4840,15 +4840,15 @@ const RAW = String.raw`<!doctype html>
       chips
     ];
     if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
-    kids.push(stepHead(2, t("Let them know your invite is coming")));
-    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them so they watch for your invite.") }));
-    kids.push(stepHead(3, t("Send the invite from Nearune")));
+    kids.push(stepHead(2, t("Send the invite from Nearune")));
     if (chosen) kids.push(inviteLangRow());
     var dsStep = chosen && lastInviteUrl ? directSendRow(lastInviteUrl) : null;
     if (dsStep) kids.push(dsStep);
     main.style.marginTop = "10px";
     kids.push(main);
     if (copy) kids.push(copy);
+    kids.push(stepHead(3, t("Let them know your invite is coming")));
+    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them so they watch for your invite.") }));
     kids.push(stepHead(4, t("Answer your first question")));
     kids.push(stepHead(5, t("Greet your new Nearune partner when they join")));
     return h("div", { class: "picker-overlay", style: "z-index:50;" }, [h("div", { class: "picker-card" }, kids)]);

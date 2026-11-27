@@ -1880,6 +1880,9 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         if (bodyLang && langCodeForName(bodyLang)) base.lang = bodyLang;
         else if (priorLive && (priorInvite as any).lang) base.lang = (priorInvite as any).lang;
         s.pendingInvite[other] = base;
+        // Kept after the link expires, so the admin still knows an invite was made.
+        if (!s.funnel) s.funnel = {};
+        if (!s.funnel.invite_link_made) s.funnel.invite_link_made = madeAt;
       });
       // Start translating the invite page into the inviter's language now, so
       // the chat app's preview card and the page are ready when the link lands.

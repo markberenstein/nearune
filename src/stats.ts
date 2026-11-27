@@ -51,13 +51,18 @@ const coordCache = new Map<string, { lat: number; lon: number; city: string; cou
 function furthestStep(st: any, ppl: any[], answeredDays: number): string {
   const f = (st && st.funnel) || {};
   const allConfirmed = ppl.length >= 2 && ppl.every((p: any) => p.confirmed);
-  if (answeredDays > 0) return "answered a question";
+  // "Answered" only counts once both are in; a creator answering alone
+  // used to jump the room past "partner joined".
+  if (allConfirmed && answeredDays > 0) return "answered a question";
   if (allConfirmed) return "partner joined";
   if (f.invite_share_done || f.invite_emailed) return "sent the invite (share completed)";
   if (f.invite_copied) return "sent the invite (copied the link)";
   if (f.invite_share_cancel) return "tapped Send, closed the share screen";
   if (f.invite_shared) return "sent the invite";
   if (st && st.pendingInvite && Object.keys(st.pendingInvite).length > 0) return "invite ready, not sent yet";
+  // The link was made but expired unsent (before Nov 27 this wasn't recorded,
+  // so older rooms whose link expired still show as "registered").
+  if (f.invite_link_made) return "invite ready, expired unsent";
   if (ppl.some((p: any) => p.confirmed)) return "registered";
   if (ppl.length > 0) return "registered, not confirmed";
   if (f.reg_clicked) return "clicked Continue (didn't finish)";

@@ -160,7 +160,11 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
                 inviteLine = "<div class=\"invline\">" + inviteLine + "</div>";
       }
       const active = r.lastActive ? adminEsc(r.lastActive) : "<span class=\"muted\">no answers yet</span>";
-      const status = r.daysAnswered > 0 ? "active" : r.people.length > 0 ? "joined" : "empty";
+      // Plain words: "joined" used to mean only the creator had signed up.
+      const confirmedN = r.people.filter((p) => p.confirmed).length;
+      const bothIn = confirmedN >= 2 || !!(r.invite && r.invite.bothJoined);
+      const status = bothIn ? (r.daysAnswered > 0 ? "active" : "both") : r.people.length > 0 ? "joined" : "empty";
+      const statusText = status === "active" ? "both in, answering" : status === "both" ? "both joined" : status === "joined" ? (r.friend ? "waiting for match" : "waiting for partner") : "not signed up";
       // The legacy "main room" (empty roomId) has no delete control here —
       // it's reachable only through the in-app "Delete my data" flow, so a
       // stray click on this page can't wipe the room actually in use.
@@ -214,7 +218,7 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
         : `<span class="muted">—</span>`);
       return `<tr${r.roomId && r.people.length === 0 && !r.friend ? ' class="unset-row"' : ""}>
         <td data-sort="${r.roomNo || 0}">${label}${r.roomName ? `<br><span class="muted">\u201c${adminEsc(r.roomName)}\u201d</span>` : ""}</td>
-        <td data-sort="${status === "active" ? 3 : status === "joined" ? 2 : 1}">${`<span class="pill pill-${status}">${status}</span>`}${r.invite && r.invite.bothJoined ? ` <span class="pill pill-both">Both joined</span>` : ""}${flags}</td>
+        <td data-sort="${status === "active" ? 4 : status === "both" ? 3 : status === "joined" ? 2 : 1}">${`<span class="pill pill-${status}">${statusText}</span>`}${flags}</td>
         <td data-sort="${r.createdAt ? Date.parse(r.createdAt) || 0 : 0}">${created}</td>
         <td data-sort="${adminEsc(r.people.map((p) => p.name).join(", ").toLowerCase())}">${people}${inviteLine}</td>
         <td class="where" data-sort="${adminEsc(r.people.map((p) => p.location || "").filter(Boolean).join(", ").toLowerCase())}">${where}</td>

@@ -2385,6 +2385,15 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       return json(forClient(st));
     }
 
+    // Settings: which language buttons and labels show in, per person.
+    if (req.method === "POST" && restPath === "/api/ui-lang") {
+      const body = await readJson(req);
+      const mode = body && body.mode;
+      if (!isPerson(body?.who) || !["own", "en", "both"].includes(mode)) return json({ error: "invalid" }, { status: 400 });
+      const st = await saveState(roomId, (s) => { if (s.people && s.people[body.who]) s.people[body.who]!.uiLang = mode; });
+      return json(forClient(st));
+    }
+
     if (req.method === "POST" && restPath === "/api/relationship") {
       const body = await readJson(req);
       const rel = body && body.relationship;

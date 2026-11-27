@@ -44,6 +44,9 @@ export type PersonProfile = {
   name: string;
   location: string;
   language: string;
+  // Buttons and labels: "own" (their language only, the default), "en"
+  // (English only) or "both" (their language with English after it).
+  uiLang?: "own" | "en" | "both";
   tz?: string;
   confirmed: boolean;
   emailHash?: string;

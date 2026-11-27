@@ -43,13 +43,35 @@ public class MetaEventsPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "MetaEventsPlugin"
     public let jsName = "MetaEvents"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "logRegistration", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "logRegistration", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "logEvent", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func logRegistration(_ call: CAPPluginCall) {
         let method = call.getString("method") ?? "room"
         DispatchQueue.main.async {
             AppEvents.shared.logEvent(.completedRegistration, parameters: [.registrationMethod: method])
+        }
+        call.resolve()
+    }
+
+    // Any Meta app event the web pages ask for (1.0.5+), so new events (like
+    // "invite sent") never need a new app build. Takes Meta's raw event name
+    // and plain text parameters only, never a name, email or city.
+    @objc func logEvent(_ call: CAPPluginCall) {
+        let name = call.getString("name") ?? ""
+        let okName = name.range(of: "^[A-Za-z0-9_ ]{1,40}$", options: .regularExpression) != nil
+        if !okName { call.resolve(); return }
+        var params: [AppEvents.ParameterName: Any] = [:]
+        if let raw = call.getObject("params") {
+            for (k, v) in raw {
+                if let s = v as? String, s.count <= 100, k.range(of: "^[A-Za-z0-9_]{1,40}$", options: .regularExpression) != nil {
+                    params[AppEvents.ParameterName(rawValue: k)] = s
+                }
+            }
+        }
+        DispatchQueue.main.async {
+            AppEvents.shared.logEvent(AppEvents.Name(rawValue: name), parameters: params)
         }
         call.resolve()
     }

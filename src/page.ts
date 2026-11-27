@@ -484,6 +484,12 @@ const RAW = String.raw`<!doctype html>
   .journal-empty { color: var(--ink-soft); font-size: 0.88rem; }
 
   .picker-overlay { position: fixed; inset: 0; background: rgba(20,16,28,0.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
+  .start-opt { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; margin-top: 14px; padding: 16px; border-radius: 16px; border: 1.5px solid rgba(168,82,42,0.35); background: rgba(168,82,42,0.07); color: inherit; font: inherit; cursor: pointer; }
+  .start-opt:active { transform: scale(0.99); }
+  .start-emoji { font-size: 1.9rem; line-height: 1; }
+  .start-text { display: flex; flex-direction: column; gap: 4px; }
+  .start-text strong { font-size: 1.05rem; }
+  .start-text span { font-size: 0.88rem; opacity: 0.75; line-height: 1.35; }
   .picker-card { background: var(--surface); border-radius: var(--radius); padding: 30px 26px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 8px 30px var(--shadow); }
   .picker-card h2 { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 1.3rem; margin: 0 0 6px; }
   .picker-card p { color: var(--ink-soft); font-size: 0.88rem; margin: 0 0 20px; }
@@ -4515,9 +4521,8 @@ const RAW = String.raw`<!doctype html>
     try { var a = state.answers && state.answers[dateKey(new Date())]; answered = !!(a && a[viewerKey] && a[viewerKey].text); } catch (e) {}
     var steps = [
       { text: t("Pick someone you know to be your Nearune partner"), done: chose },
-      { text: t("No one in mind? Make a friend instead"), done: false, alt: true, skip: chose },
-      { text: t("Let them know your invite is coming, so they watch for it"), done: sent },
       { text: t("Send the invite from Nearune"), done: sent },
+      { text: t("Let them know your invite is coming, so they watch for it"), done: sent },
       { text: t("Answer your first question"), done: answered },
       { text: t("Greet your new Nearune partner when they join"), done: false }
     ];
@@ -4753,6 +4758,10 @@ const RAW = String.raw`<!doctype html>
   }
 
   var inviteStepNeedsWho = false;
+  // First choice after sign-up: invite someone you know, or get matched.
+  // Most people from ads have no one in mind (38 of 45 invite links were
+  // never put in a message), so Make a friend is an equal choice here.
+  var inviteStepMode = "";
   // HEADS-UP: people are trained to ignore unexpected invites, even from
   // friends. Once the invite has really gone out, the invite card reminds the
   // inviter to tell them it's coming (sentNowLine below).
@@ -4780,6 +4789,7 @@ const RAW = String.raw`<!doctype html>
     if (!state || state.origin === "friend") return null;
     if (!isConfirmedKey(viewerKey) || inviteWasShared()) return null;
     funnelPing("invite_step");
+    if (!state.relationship && inviteStepMode !== "invite") return startChoiceCard();
     var envelope = h("div", { style: "position:relative;width:84px;height:62px;margin:0 auto 12px;", html: ENVELOPE_SVG + '<div style="position:absolute;left:50%;top:54%;width:36px;height:36px;transform:translate(-50%,-50%);">' + LOGO_MARK_SVG.replace(/wmSky/g, "envSky").replace(/wmHeartClip/g, "envHeartClip") + '</div>' });
     // One card: who the invite is for (it picks the daily questions), then
     // send. Both sign-ups on Nov 22 stopped on the "who" choice when it was
@@ -4816,12 +4826,9 @@ const RAW = String.raw`<!doctype html>
       if (!chosen) main.addEventListener("click", function () { inviteStepNeedsWho = true; renderApp(); });
     }
     main.style.width = "100%"; main.style.marginTop = "16px";
-    var mf = h("button", { class: "switch-link", type: "button", text: "\uD83E\uDD1D " + t("Make a friend instead") });
-    mf.style.cssText = "display:block;margin:6px auto 0;font-size:0.9rem;";
-    mf.addEventListener("click", function () { funnelPing("invite_wait_friend"); location.href = "/home?friend=1"; });
-    // Numbered in Mark's order: 1 pick someone you know, 2 or Make a friend,
-    // 3 let them know it's coming, 4 send it, then 5 answer your first
-    // question and 6 greet them when they join (shown as the closing line).
+    // Numbered in Mark's order: 1 pick someone you know, 2 send it, 3 let
+    // them know it's coming, then 4 answer your first question and 5 greet
+    // them when they join. (Make a friend is the choice on the card before.)
     function stepHead(n, text) {
       return h("div", { class: "reg-label", style: "margin-top:16px;text-align:center;", text: n + " \u00B7 " + text });
     }
@@ -4833,22 +4840,43 @@ const RAW = String.raw`<!doctype html>
       chips
     ];
     if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
-    kids.push(stepHead(2, t("No one in mind?")));
-    kids.push(mf);
-    kids.push(stepHead(3, t("Let them know your invite is coming")));
-    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them first, so they watch for it.") }));
-    kids.push(stepHead(4, t("Send the invite from Nearune")));
+    kids.push(stepHead(2, t("Send the invite from Nearune")));
     if (chosen) kids.push(inviteLangRow());
     var dsStep = chosen && lastInviteUrl ? directSendRow(lastInviteUrl) : null;
     if (dsStep) kids.push(dsStep);
     main.style.marginTop = "10px";
     kids.push(main);
     if (copy) kids.push(copy);
-    kids.push(stepHead(5, t("Answer your first question")));
-    kids.push(stepHead(6, t("Greet your new Nearune partner when they join")));
+    kids.push(stepHead(3, t("Let them know your invite is coming")));
+    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them so they watch for your invite.") }));
+    kids.push(stepHead(4, t("Answer your first question")));
+    kids.push(stepHead(5, t("Greet your new Nearune partner when they join")));
     return h("div", { class: "picker-overlay", style: "z-index:50;" }, [h("div", { class: "picker-card" }, kids)]);
   }
 
+
+  function startChoiceCard() {
+    funnelPing("start_choice_shown");
+    function option(emoji, title, sub, onClick) {
+      var b = h("button", { type: "button", class: "start-opt" }, [
+        h("span", { class: "start-emoji", text: emoji }),
+        h("span", { class: "start-text" }, [h("strong", { text: title }), h("span", { text: sub })])
+      ]);
+      b.addEventListener("click", onClick);
+      return b;
+    }
+    var kids = [
+      h("h2", { text: t("How would you like to start?") }),
+      h("p", { text: t("Nearune is two people answering one question a day, then seeing each other's answers.") }),
+      option("💌", t("Invite someone you know"), t("Send them your room. It starts when they join."), function () {
+        funnelPing("start_choice_invite"); inviteStepMode = "invite"; renderApp();
+      }),
+      option("🤝", t("Get matched with someone new"), t("No one in mind? We'll pair you with someone who also chose this. You'll get a notification when you're matched."), function () {
+        funnelPing("invite_wait_friend"); location.href = "/home?friend=1";
+      })
+    ];
+    return h("div", { class: "picker-overlay", style: "z-index:50;" }, [h("div", { class: "picker-card" }, kids)]);
+  }
 
   // Home screen while your invited partner hasn't joined yet: your own clock,
   // "Pending" (with days since the invite) for them, your own weather and Local

@@ -4328,6 +4328,39 @@ const RAW = String.raw`<!doctype html>
       return d >= "2026-11-26" && d <= "2026-11-29";
     } catch (e) { return false; }
   }
+  // Which app the iPhone share screen sent the invite through (1.04+).
+  function shareActivityName(a) {
+    a = String(a || "");
+    if (/UIKit\.activity\.Message/i.test(a)) return "messages";
+    if (/UIKit\.activity\.Mail|mobilemail|gmail|outlook/i.test(a)) return "mail";
+    if (/CopyToPasteboard/i.test(a)) return "copy";
+    if (/whatsapp/i.test(a)) return "whatsapp";
+    if (/messenger/i.test(a)) return "messenger";
+    if (/instagram/i.test(a)) return "instagram";
+    if (/telegra/i.test(a)) return "telegram";
+    if (/viber|line|kakao|wechat|signal|snapchat|facebook/i.test(a)) return "otherchat";
+    return "other";
+  }
+  // A day after the invite went out: "Did they get your invite?" One tap,
+  // so we learn whether invites reach people (most leave no trace).
+  var REACH_KEY = "nearuneReach:" + ROOM;
+  function reachQuestion() {
+    var ans = "";
+    try { ans = localStorage.getItem(REACH_KEY) || ""; } catch (e) {}
+    var box = h("div", { style: "background:var(--cream,#FFF7EC);border:1px solid var(--line,#E8D9C8);border-radius:14px;padding:12px 14px;margin:12px 0 0;text-align:center;" });
+    if (ans) {
+      box.appendChild(h("p", { style: "margin:0;font-size:0.92rem;", text: ans === "unsure" ? t("Thanks! A quick follow-up often helps. Tap Send it again below.") : ans === "notsent" ? t("Thanks! Tap Send it again below whenever you're ready.") : t("Thanks! We'll let you know as soon as they join.") }));
+      return box;
+    }
+    box.appendChild(h("p", { style: "margin:0 0 8px;font-weight:700;", text: t("Did they get your invite?") }));
+    [["yes", t("Yes, they saw it")], ["unsure", t("Not sure")], ["notsent", t("I didn't send it")]].forEach(function (o) {
+      var b = h("button", { type: "button", class: "picker-btn", text: o[1] });
+      b.style.cssText = "margin:4px;";
+      b.addEventListener("click", function () { funnelPing("reach_" + o[0]); try { localStorage.setItem(REACH_KEY, o[0]); } catch (e) {} renderApp(); });
+      box.appendChild(b);
+    });
+    return box;
+  }
   function inviteMessage(url) {
     var q = todaysQuestionText();
     return (resendOpen ? tInvite(FOLLOWUP_LINES[resendN] || FOLLOWUP_LINES[0]) + "\n\n" : "") +
@@ -4401,7 +4434,7 @@ const RAW = String.raw`<!doctype html>
     wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
     var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
     sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
-    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); headsUpLater(); }); });
+    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); funnelPing(a === wa ? "invite_via_whatsapp" : "invite_via_sms"); headsUpLater(); }); });
     return h("div", {}, [wa, sms]);
   }
   function shareLinkButton(url, label, cls) {
@@ -4422,15 +4455,15 @@ const RAW = String.raw`<!doctype html>
         // message (see NearuneSharePlugin in SceneDelegate.swift).
         var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
         if (iosApp && url === lastInviteUrl && NS && NS.share) {
-          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); if (r && r.completed) headsUpLater(); }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); headsUpLater(); }, function () {}); });
+          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); if (r && r.completed) { headsUpLater(); funnelPing("invite_via_" + shareActivityName(r.activity)); } }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); headsUpLater(); }, function () {}); });
           return;
         }
         var shareObj = url === lastInviteUrl && !iosApp
           ? { text: inviteMessage(url) }
           : { url: url };
-        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); if (url === lastInviteUrl) headsUpLater(); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
+        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); funnelPing("invite_via_sheet"); if (url === lastInviteUrl) headsUpLater(); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); if (url === lastInviteUrl) headsUpLater(); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
+        navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); funnelPing("invite_via_copy"); if (url === lastInviteUrl) headsUpLater(); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {
         window.prompt(t("Copy this link:"), url === lastInviteUrl ? inviteMessage(url) : url);
       }
@@ -4560,6 +4593,7 @@ const RAW = String.raw`<!doctype html>
       setTimeout(submitInviteLink, 0);
     }
     if (lastInviteUrl) {
+      if (stillWaiting) { var rq = reachQuestion(); if (rq) card.appendChild(rq); }
       card.appendChild(inviteLangRow());
       var dsHome = directSendRow(lastInviteUrl);
       if (dsHome) card.appendChild(dsHome);

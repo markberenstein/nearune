@@ -261,6 +261,8 @@ const FUNNEL_STEPS = new Set([
   // What happened in the share screen after Send: finished (picked an app or
   // person), closed without sending, or copied the link instead.
   "invite_share_done", "invite_share_cancel", "invite_copied",
+  "invite_via_messages", "invite_via_whatsapp", "invite_via_mail", "invite_via_messenger", "invite_via_instagram", "invite_via_telegram", "invite_via_otherchat", "invite_via_sms", "invite_via_copy", "invite_via_sheet", "invite_via_other",
+  "reach_yes", "reach_unsure", "reach_notsent",
   // Changed the "Invitation language" picker on the invite card.
   "invite_lang_changed",
   // The "let them know it's coming" note appeared after the invite went out.

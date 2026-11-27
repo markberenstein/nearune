@@ -159,7 +159,9 @@ Bun.serve({
               const conf = (["mark", "nikita"] as PersonKey[]).filter((k) => state.people?.[k]?.confirmed);
               const joins = conf.map((k) => (state.people![k] as any).joinedAt).filter((t: any) => typeof t === "string" && isFinite(Date.parse(t))).sort();
               const bothJoined = conf.length === 2;
-              return { sentAt: sentTimes[0] || null, acceptedAt: bothJoined && joins.length ? joins[joins.length - 1] : null, bothJoined };
+              const via = Object.keys(fn).filter((k) => k.startsWith("invite_via_")).map((k) => k.slice(11)).join(", ") || null;
+              const reach = fn.reach_yes ? "yes" : fn.reach_unsure ? "unsure" : fn.reach_notsent ? "notsent" : null;
+              return { sentAt: sentTimes[0] || null, acceptedAt: bothJoined && joins.length ? joins[joins.length - 1] : null, bothJoined, via, reach };
             })(),
             remindable: (["mark", "nikita"] as PersonKey[])
               .filter((k) => state.people?.[k] && state.people[k]!.emailVerified === false && !!state.pendingConfirm?.[k]?.email)

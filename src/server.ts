@@ -2924,6 +2924,54 @@ async function inviteSweep(): Promise<void> {
     console.error("[invite-sweep] failed", err);
   }
 }
+// One-time follow-up (Mark, Nov 26): rooms created before the tracking fix
+// where the invite went out but the other person never joined. One push at
+// 10 AM the inviter's time, opening the "Send a follow-up" card with a fresh
+// link. REENGAGE_SEND false = dry run: only logs who would get it.
+const REENGAGE_SEND = false;
+const REENGAGE_BEFORE = Date.parse("2026-11-27T03:56:00Z");
+let reengageDryLogged = false;
+async function reengageSweep(): Promise<void> {
+  try {
+    const eligible: string[] = [], noPush: string[] = [];
+    for (const id of await listRoomIds()) {
+      let st: any;
+      try { st = await loadState(id); } catch { continue; }
+      if (!st || !st.createdAt || Date.parse(st.createdAt) >= REENGAGE_BEFORE) continue;
+      if (st.origin === "friend" || st.closed || st.reengageAt) continue;
+      const ppl: any = st.people || {};
+      const inviterKey = (["mark", "nikita"] as PersonKey[]).find((k) => ppl[k] && ppl[k].confirmed);
+      if (!inviterKey) continue;
+      const other: PersonKey = inviterKey === "mark" ? "nikita" : "mark";
+      if (ppl[other] && ppl[other].confirmed) continue;
+      const f = st.funnel || {};
+      const pi = st.pendingInvite && st.pendingInvite[other];
+      const sent = !!(f.invite_shared || f.invite_emailed || f.invite_share_done || f.invite_copied || (pi && (pi.instagram || !pi.link)));
+      if (!sent) continue;
+      const sub = st.pushSubs && st.pushSubs[inviterKey];
+      if (!sub) { noPush.push(id); continue; }
+      eligible.push(id);
+      if (!REENGAGE_SEND) continue;
+      if (st.inviteNudgeAt && Date.now() - Date.parse(st.inviteNudgeAt) < 20 * 60 * 60 * 1000) continue;
+      if (localHour(ppl[inviterKey].tz) !== 10) continue;
+      const w = invitedLabel(st.relationship);
+      const res = await sendPush(sub, { title: w === "the person you invited" ? "Still hoping they'll join?" : "Still hoping " + w + " will join?", body: "Your first invite may have gotten lost. Tap to send a fresh link with a quick note.", tag: "invite-nudge", url: (id ? "/r/" + id : "") + "/?resend=1&n=2" } as any);
+      if (res.ok) {
+        console.log("[reengage] sent room=" + (id || "main"));
+        await saveState(id, (s: any) => { s.reengageAt = new Date().toISOString(); });
+      }
+      if (res.gone) await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+    }
+    if (!REENGAGE_SEND && !reengageDryLogged) {
+      reengageDryLogged = true;
+      console.log("[reengage-dry] would notify " + eligible.length + " rooms: " + eligible.join(",") + " | sent but notifications off: " + noPush.length + " (" + noPush.join(",") + ")");
+    }
+  } catch (err) {
+    console.error("[reengage] failed", err);
+  }
+}
+setTimeout(reengageSweep, 3 * 60 * 1000);
+setInterval(reengageSweep, 10 * 60 * 1000);
 setTimeout(inviteSweep, 4 * 60 * 1000);
 // Every 10 minutes, so the 1-hour reminder goes out close to the hour.
 setInterval(inviteSweep, 10 * 60 * 1000);

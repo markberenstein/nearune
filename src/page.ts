@@ -4841,7 +4841,7 @@ const RAW = String.raw`<!doctype html>
     ];
     if (!chosen && inviteStepNeedsWho) kids.push(h("p", { class: "puzzle-guess-note", style: "color:#B3361F;text-align:center;margin-top:8px;", text: t("Pick who it's for first. It sets your daily questions.") }));
     kids.push(stepHead(2, t("Let them know your invite is coming")));
-    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them first, so they watch for it.") }));
+    kids.push(h("p", { class: "puzzle-guess-note", style: "text-align:center;margin:4px 0 0;", text: t("Text or call them so they watch for your invite.") }));
     kids.push(stepHead(3, t("Send the invite from Nearune")));
     if (chosen) kids.push(inviteLangRow());
     var dsStep = chosen && lastInviteUrl ? directSendRow(lastInviteUrl) : null;

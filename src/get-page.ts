@@ -300,6 +300,15 @@ h1 span{color:var(--rust)}
 .cta h2{margin:0 0 6px;font-size:26px;font-weight:800;letter-spacing:-.5px}
 .cta p{margin:0 0 20px;color:var(--muted)}
 footer{margin:40px 0 0;font-size:13px;color:var(--muted);text-align:center}
+.faq{margin:44px 0 0}
+.faq h2{margin:0 0 10px;font-size:26px;font-weight:800;letter-spacing:-.5px}
+.faq details{border-top:1px solid rgba(92,58,40,.18);padding:14px 0}
+.faq details:last-child{border-bottom:1px solid rgba(92,58,40,.18)}
+.faq summary{cursor:pointer;font-weight:700;font-size:17px;list-style:none;display:flex;justify-content:space-between;gap:12px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:after{content:"+";color:var(--rust);font-weight:800}
+.faq details[open] summary:after{content:"\\2013"}
+.faq details p{margin:8px 0 0;color:var(--muted);font-size:15px}
 @media (min-width:600px){h1{font-size:56px}}
 </style>
 </head>
@@ -342,6 +351,14 @@ footer{margin:40px 0 0;font-size:13px;color:var(--muted);text-align:center}
         <img src="/google-play-badge.svg" alt="Get it on Google Play">
       </a>
     </div>
+  </section>
+
+  <section class="faq" aria-labelledby="faqH">
+    <h2 id="faqH">Questions</h2>
+    <details><summary>Does the other person need the app?</summary><p>No. They can join free from your link, right in their browser. They can get the app later if they like.</p></details>
+    <details><summary>Who can see our answers?</summary><p>Only the two of you. Each room is private and invite only.</p></details>
+    <details><summary>What if we speak different languages?</summary><p>Each of you answers in your own language. Nearune shows and plays the other person's answer in yours.</p></details>
+    <details><summary>Does it cost anything?</summary><p>No. Nearune is free for both of you.</p></details>
   </section>
 
   <footer>&copy; 2026 Nearune &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/support">Support</a><span id="nrSupport" style="display:none"> &middot; <a href="https://donate.stripe.com/6oU9ATf6B0SZbcTgr22VG00" target="_blank" rel="noopener">☕ Support Nearune</a></span><script>(function(){try{var c=window.Capacitor,n=!!(c&&c.isNativePlatform&&c.isNativePlatform()),u=navigator.userAgent||"",w=/AppleWebKit/.test(u)&&!/Safari|Android/.test(u)||/iPad|Macintosh/.test(u)&&navigator.maxTouchPoints>1;if(!n&&!w){var s=document.getElementById("nrSupport");if(s)s.style.display="";}}catch(e){}})();</script></footer>

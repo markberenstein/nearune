@@ -192,9 +192,13 @@ async function alertedRooms(): Promise<Set<string>> {
   alertedCache = { at: Date.now(), rooms };
   return rooms;
 }
+// Far-from-their-city flags go to #nearune-alert (Mark, Nov 27) through
+// their own webhook, SLACK_ALERTS_WEBHOOK_URL; until that's set they fall
+// back to the usual channel.
+const ALERT_CHANNEL_TAGS = new Set(["far-signup", "traveling"]);
 function slackPost(text: string, tag: string): void {
   console.log("[" + tag + "] " + text);
-  const hook = Bun.env.SLACK_WEBHOOK_URL;
+  const hook = (ALERT_CHANNEL_TAGS.has(tag) && Bun.env.SLACK_ALERTS_WEBHOOK_URL) || Bun.env.SLACK_WEBHOOK_URL;
   if (!hook) return;
   fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
     .then((r) => { if (!r.ok) console.error("[slack] " + tag + " post failed status=" + r.status); })
@@ -1122,6 +1126,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
 
     if (req.method === "GET" && restPath === "/api/state") {
       let state = await loadState(roomId);
+      { const sw = url.searchParams.get("who"); if (isPerson(sw)) checkTraveling(clientIp(req, server), roomId, sw, state.people && state.people[sw as PersonKey]); }
       // Existing users: a room with anyone located in (or traveling to) a blocked country is closed.
       try {
         for (const k of ["mark", "nikita"] as PersonKey[]) {
@@ -3388,6 +3393,31 @@ function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(x)));
 }
+// Traveling (Mark, Nov 27): when someone already signed up opens their room
+// from a connection far from their own city, post once per trip. Checked at
+// most every 6 hours per person, and only in memory: nothing is saved, so a
+// restart may repeat one note.
+const travelSeen = new Map<string, { at: number; near: string }>();
+function checkTraveling(ip: string, room: string, who: string, person: any): void {
+  if (!person || !person.confirmed || !person.location) return;
+  const key = room + ":" + who;
+  const prev = travelSeen.get(key);
+  if (prev && Date.now() - prev.at < 6 * 60 * 60 * 1000) return;
+  (async () => {
+    const label = await approxCity(ip);
+    const hit = ipCityCache.get(ip);
+    if (!hit || typeof hit.lat !== "number" || typeof hit.lon !== "number") return;
+    const c = await resolveCoords(person.location);
+    if (!c) return;
+    const km = kmBetween({ lat: hit.lat, lon: hit.lon! }, c);
+    const near = km >= FAR_KM ? (label || "far away") : "";
+    const was = prev ? prev.near : "";
+    travelSeen.set(key, { at: Date.now(), near });
+    if (!near || near === was) return;
+    const rounded = km >= 1000 ? Math.round(km / 100) * 100 : Math.round(km / 10) * 10;
+    slackPost(":airplane: " + String(person.name || "Someone") + " looks to be traveling: opened Nearune from " + (label ? "near " + label : "far away") + ", about " + rounded.toLocaleString("en-US") + " km from " + person.location + ". Room " + room + ". (Could also be a VPN.)", "traveling");
+  })().catch(() => {});
+}
 function flagIfFar(ip: string, typed: string, name: string, room: string, how: string): void {
   (async () => {
     const label = await approxCity(ip);
@@ -3398,6 +3428,6 @@ function flagIfFar(ip: string, typed: string, name: string, room: string, how: s
     const km = kmBetween({ lat: hit.lat, lon: hit.lon! }, c);
     if (km < FAR_KM) return;
     const rounded = km >= 1000 ? Math.round(km / 100) * 100 : Math.round(km / 10) * 10;
-    slackPost(":round_pushpin: " + (name || "Someone") + " " + how + " as \"" + typed + "\", but their connection looks about " + rounded.toLocaleString("en-US") + " km away" + (label ? " (near " + label + ")" : "") + (room ? ". Room " + room : "") + ". Could be a VPN or a mobile carrier.", "far-signup");
+    slackPost(":round_pushpin: " + (name || "Someone") + " " + how + " as \"" + typed + "\", but their connection looks about " + rounded.toLocaleString("en-US") + " km away" + (label ? " (near " + label + ")" : "") + (room ? ". Room " + room : "") + ". Could be traveling, a VPN or a mobile carrier.", "far-signup");
   })().catch(() => {});
 }

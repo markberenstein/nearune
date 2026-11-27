@@ -2881,6 +2881,26 @@ async function inviteSweep(): Promise<void> {
             }
           }
         }
+        // One hour after sign-up made the link, if it still hasn't gone out:
+        // one gentle reminder (the next unsent one comes at 24 hours).
+        {
+          const f1 = st.funnel || {};
+          const sent1 = !!(f1.invite_shared || f1.invite_emailed || inv.instagram || !inv.link);
+          if (!sent1 && age >= HOUR_NUDGE_MS && age < INVITE_NUDGE_AFTER[0] && st.inviteHourNudgeToken !== inv.token && !(st.inviteNudgeToken === inv.token && st.inviteNudgeCount)) {
+            const inv1 = st.people && st.people[inviterKey];
+            const h1 = localHour(inv1 && inv1.tz);
+            if (h1 >= 9 && h1 < 21) {
+              const w1 = invitedLabel(st.relationship);
+              const r1 = await sendPush(sub, { title: "Your invite hasn't gone out yet", body: (w1 === "the person you invited" ? "Send it with one tap" : "Send it to " + w1 + " with one tap") + ", and today's question opens for you both.", tag: "invite-nudge", url: id ? "/r/" + id : "/" } as any);
+              if (r1.ok) {
+                console.log("[invite-nudge] room=" + (id || "main") + " 1h unsent");
+                await saveState(id, (s) => { s.inviteHourNudgeToken = inv.token; });
+              }
+              if (r1.gone) await saveState(id, (s) => { if (s.pushSubs) delete s.pushSubs[inviterKey]; });
+              continue;
+            }
+          }
+        }
         const count = st.inviteNudgeToken === inv.token ? (st.inviteNudgeCount || 0) : 0;
         if (count >= INVITE_NUDGE_AFTER.length || age < INVITE_NUDGE_AFTER[count]) continue;
         const inviter = st.people && st.people[inviterKey];

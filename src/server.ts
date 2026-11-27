@@ -32,7 +32,7 @@ import { resolveTranslation, translateEmailStrings, langCodeForName } from "./tr
 import { cloneVoice, deleteVoice, synthesizeSpeech, parseVoiceSample, defaultVoiceId } from "./voice";
 import { aiGuessMatches, moderateContent, guessPlaceFromImage, voiceGenderForName } from "./ai";
 import { regionAbbr } from "./usstates";
-import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel, resolveCountryCode } from "./geo";
+import { resolveTimezoneFromLocation, resolveLocationInfo, isBlockedLocation, isCityLevelLocation, searchPlaces, canonicalPlaceLabel, resolveCountryCode, resolveCoords } from "./geo";
 import { holidaysOn } from "./holidays";
 import { currentWeather } from "./weather";
 import { topLocalStory } from "./localnews";
@@ -666,6 +666,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const pBlocked = await isBlockedLocation(pLoc);
         if (pBlocked) return json({ error: "region_unavailable", country: pBlocked }, { status: 403 });
         if (!(await isCityLevelLocation(pLoc))) return json({ error: "city_required" }, { status: 400 });
+        flagIfFar(clientIp(req, server), pLoc, pName, "", "signed up for Make a friend");
         const resolvedTz = await resolveTimezoneFromLocation(pLoc);
         profile = { name: pName, location: pLoc, language: pLang, ...((resolvedTz || pTz) ? { tz: resolvedTz || pTz } : {}) };
       }
@@ -1663,6 +1664,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const locBlocked = await isBlockedLocation(location);
       if (locBlocked) return json({ error: "region_unavailable", country: locBlocked }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      flagIfFar(clientIp(req, server), location, name, roomId, "signed up");
       // Optional room name typed by the first person on the setup screen.
       if ((await applySignupRoomName(roomId, body?.roomName)) === "blocked") {
         return json({ error: "inappropriate_name" }, { status: 400 });
@@ -1944,6 +1946,7 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const locBlocked = await isBlockedLocation(location);
       if (locBlocked) return json({ error: "region_unavailable", country: locBlocked }, { status: 403 });
       if (!(await isCityLevelLocation(location))) return json({ error: "city_required" }, { status: 400 });
+      flagIfFar(clientIp(req, server), location, name, roomId, "joined through an invite");
       const cur = await loadState(roomId);
       let who: PersonKey | null = null;
       (["mark", "nikita"] as PersonKey[]).forEach((k) => {
@@ -3346,7 +3349,7 @@ function roomSignedUp(roomId: string): void {
 }
 
 // ---- Approximate city from the internet connection ----------------------
-const ipCityCache = new Map<string, { at: number; label: string }>();
+const ipCityCache = new Map<string, { at: number; label: string; lat?: number; lon?: number }>();
 async function approxCity(ip: string): Promise<string> {
   if (!ip || ip === "unknown" || /^(127\.|10\.|192\.168\.|::1)/.test(ip)) return "";
   const hit = ipCityCache.get(ip);
@@ -3363,8 +3366,38 @@ async function approxCity(ip: string): Promise<string> {
       if (city && !d.error) {
         label = d.country_code === "US" && d.region_code ? city + ", " + d.region_code : city + (d.country_name ? ", " + d.country_name : "");
       }
+      if (!d.error && typeof d.latitude === "number" && typeof d.longitude === "number") {
+        ipCityCache.set(ip, { at: Date.now(), label, lat: d.latitude, lon: d.longitude });
+        return label;
+      }
     }
   } catch {}
   ipCityCache.set(ip, { at: Date.now(), label });
   return label;
+}
+
+// Far-from-their-city flag (Mark, Nov 27). At sign-up, compare the city a
+// person typed with where their internet connection appears to be, and post
+// to Slack only when the two are far apart. Nothing is stored: not the IP,
+// not the connection's location, not the distance. VPNs, mobile carriers and
+// iCloud Private Relay can be hundreds of km off, so it's a hint, not proof.
+const FAR_KM = 300;
+function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(x)));
+}
+function flagIfFar(ip: string, typed: string, name: string, room: string, how: string): void {
+  (async () => {
+    const label = await approxCity(ip);
+    const hit = ipCityCache.get(ip);
+    if (!hit || typeof hit.lat !== "number" || typeof hit.lon !== "number") return;
+    const c = await resolveCoords(typed);
+    if (!c) return;
+    const km = kmBetween({ lat: hit.lat, lon: hit.lon! }, c);
+    if (km < FAR_KM) return;
+    const rounded = km >= 1000 ? Math.round(km / 100) * 100 : Math.round(km / 10) * 10;
+    slackPost(":round_pushpin: " + (name || "Someone") + " " + how + " as \"" + typed + "\", but their connection looks about " + rounded.toLocaleString("en-US") + " km away" + (label ? " (near " + label + ")" : "") + (room ? ". Room " + room : "") + ". Could be a VPN or a mobile carrier.", "far-signup");
+  })().catch(() => {});
 }

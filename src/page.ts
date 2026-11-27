@@ -2475,13 +2475,21 @@ const RAW = String.raw`<!doctype html>
     var mine = langCodeFor(viewerKey);
     return mine !== "en" ? mine : null;
   }
+  // Settings > Buttons and labels: "own" (default), "en" or "both".
+  function myUiMode() {
+    var meP = viewerKey && state && state.people && state.people[viewerKey];
+    return meP && meP.uiLang ? meP.uiLang : "own";
+  }
   function t(text) {
     if (!text) return text;
     var lang = myUiLang();
     if (!lang) return text;
+    var mode = myUiMode();
+    if (mode === "en") return text;
     var key = lang + "|en::" + text;
     scheduleTranslate(text, lang, "en");
     var val = translationCache[key];
+    if (mode === "both") return val && val !== text ? val + " (" + text + ")" : text;
     return val || text;
   }
   // Two-language version (English plus the other language), for content.
@@ -7612,6 +7620,27 @@ const RAW = String.raw`<!doctype html>
     var youG = setGroup(t("You"), [pushRow, sw]);
     if (youG) wrap.appendChild(youG);
     if (pushError) wrap.appendChild(h("p", { class: "offline-note", text: pushError }));
+    // Buttons and labels: own language, English, or both (only for people
+    // whose language isn't English).
+    var ownLang = myUiLang();
+    if (me && ownLang) {
+      var ownName = ownLang;
+      try { ownName = new Intl.DisplayNames([ownLang], { type: "language" }).of(ownLang) || ownLang; } catch (e) {}
+      var curMode = myUiMode();
+      var pick = function (mode) {
+        return function () {
+          if (mode === curMode) return;
+          me.uiLang = mode; renderApp();
+          fetch(RP + "/api/ui-lang", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: viewerKey, mode: mode }) })
+            .then(function (r) { return r.json(); }).then(function (d) { if (d && d.people) { state = d; renderApp(); } }).catch(function () {});
+        };
+      };
+      wrap.appendChild(setGroup(t("Buttons and labels"), [
+        setRow(ownName, pick("own"), { end: curMode === "own" ? "\u2713" : "" }),
+        setRow("English", pick("en"), { end: curMode === "en" ? "\u2713" : "" }),
+        setRow(ownName + " + English", pick("both"), { end: curMode === "both" ? "\u2713" : "" })
+      ]));
+    }
     // Rooms
     wrap.appendChild(setGroup(t("Rooms"), [
       setRow(t("My rooms"), null, { href: "/home" }),

@@ -3914,6 +3914,25 @@ const RAW = String.raw`<!doctype html>
       if (P && P.logRegistration) P.logRegistration({ method: method }).catch(function () {});
     } catch (e) {}
   }
+  // Any Meta app event, through the app's general connection (app 1.0.5+).
+  // A no-op on the web and in older app versions.
+  function metaEvent(name, params) {
+    try {
+      var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.MetaEvents;
+      if (P && P.logEvent) P.logEvent({ name: name, params: params || {} }).catch(function () {});
+    } catch (e) {}
+  }
+  // "Invite sent" goes to Meta as the standard Unlock achievement event
+  // (Meta's app campaigns can only optimize for standard events), once per
+  // room, so a campaign can aim for people who actually send invites.
+  function metaInviteSent() {
+    try {
+      var k = "nearuneMetaInvite:" + ROOM;
+      if (localStorage.getItem(k)) return;
+      localStorage.setItem(k, "1");
+    } catch (e) {}
+    metaEvent("fb_mobile_achievement_unlocked", { fb_description: "invite_sent" });
+  }
   var clearRegErrorShown = function () {};
   function fillerName(n) {
     var x = String(n || "").toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[.!?,]+$/, "").trim();
@@ -4442,7 +4461,7 @@ const RAW = String.raw`<!doctype html>
     wa.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;background:#25D366;color:#fff;border-color:#25D366;font-weight:800;";
     var sms = h("a", { class: "picker-btn", href: "sms:" + (ios ? "&" : "?") + "body=" + encodeURIComponent(msg), text: "\u2709\uFE0F " + t("Send by text message") });
     sms.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:10px;text-decoration:none;text-align:center;";
-    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); funnelPing(a === wa ? "invite_via_whatsapp" : "invite_via_sms"); headsUpLater(); }); });
+    [wa, sms].forEach(function (a) { a.addEventListener("click", function () { nrTrack("invite_sent"); markInviteShared(); funnelPing("invite_share_done"); metaInviteSent(); funnelPing(a === wa ? "invite_via_whatsapp" : "invite_via_sms"); headsUpLater(); }); });
     return h("div", {}, [wa, sms]);
   }
   function shareLinkButton(url, label, cls) {
@@ -4463,13 +4482,13 @@ const RAW = String.raw`<!doctype html>
         // message (see NearuneSharePlugin in SceneDelegate.swift).
         var NS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NearuneShare;
         if (iosApp && url === lastInviteUrl && NS && NS.share) {
-          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); if (r && r.completed) { headsUpLater(); funnelPing("invite_via_" + shareActivityName(r.activity)); } }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); headsUpLater(); }, function () {}); });
+          NS.share({ text: inviteMessage(url) }).then(function (r) { funnelPing(r && r.completed ? "invite_share_done" : "invite_share_cancel"); if (r && r.completed) { headsUpLater(); metaInviteSent(); funnelPing("invite_via_" + shareActivityName(r.activity)); } }, function () { navigator.share({ url: url }).then(function () { funnelPing("invite_share_done"); metaInviteSent(); headsUpLater(); }, function () {}); });
           return;
         }
         var shareObj = url === lastInviteUrl && !iosApp
           ? { text: inviteMessage(url) }
           : { url: url };
-        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); funnelPing("invite_via_sheet"); if (url === lastInviteUrl) headsUpLater(); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
+        navigator.share(shareObj).then(function () { funnelPing("invite_share_done"); metaInviteSent(); funnelPing("invite_via_sheet"); if (url === lastInviteUrl) headsUpLater(); }, function (e) { if (e && e.name === "AbortError") funnelPing("invite_share_cancel"); });
       } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url === lastInviteUrl ? inviteMessage(url) : url).then(function () { funnelPing("invite_copied"); funnelPing("invite_via_copy"); if (url === lastInviteUrl) headsUpLater(); btn.textContent = t("Copied! Now paste it in a chat"); setTimeout(function () { btn.textContent = labelText; }, 1500); }, function () {});
       } else {

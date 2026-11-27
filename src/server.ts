@@ -269,6 +269,7 @@ const FUNNEL_STEPS = new Set([
   "headsup_shown",
   // Tapped "While you wait, get matched with someone now" after sending.
   "invite_wait_friend",
+  "start_choice_shown", "start_choice_invite",
   // Question first: picked who it's for, saw today's question, typed, tapped Send.
   "fq_who", "fq_question", "fq_typed", "fq_sent",
   // Picked "Not sure yet? Match me with someone" (Make a friend) instead.

@@ -6803,8 +6803,8 @@ const RAW = String.raw`<!doctype html>
     var card = h("div", { class: "card" }, [
       h("div", { class: "eyebrow" }, [h("span", { text: t("Vote on tomorrow's question") }), h("span", { text: t(formatDateLabel(tomorrow)) })]),
       h("p", { class: "puzzle-guess-note", style: "margin:6px 0 10px;", text: otherName
-        ? tTemplate("Pick the one you'd most like {name} to answer.", { name: otherName })
-        : t("Pick the question you'd most like to answer tomorrow.") })
+        ? tTemplate("Your votes help choose tomorrow's question. Pick the one you'd most like {name} to answer.", { name: otherName })
+        : t("Your vote helps choose tomorrow's question. Pick the one you'd most like to answer.") })
     ]);
     // Nov 26 (Mark): the selection rules stay behind the scenes, and once
     // you've voted the card folds to your pick, with "Change your vote".

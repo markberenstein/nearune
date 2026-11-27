@@ -2928,7 +2928,7 @@ async function inviteSweep(): Promise<void> {
 // where the invite went out but the other person never joined. One push at
 // 10 AM the inviter's time, opening the "Send a follow-up" card with a fresh
 // link. REENGAGE_SEND false = dry run: only logs who would get it.
-const REENGAGE_SEND = false;
+const REENGAGE_SEND = true;
 const REENGAGE_BEFORE = Date.parse("2026-11-27T03:56:00Z");
 let reengageDryLogged = false;
 async function reengageSweep(): Promise<void> {

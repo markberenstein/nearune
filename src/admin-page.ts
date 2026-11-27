@@ -35,7 +35,7 @@ export type AdminRoomSummary = {
   // out (link shared or copied, or emailed). acceptedAt = when the invited
   // person finished sign-up; null with bothJoined = joined before join times
   // were recorded (Nov 22, 2026).
-  invite?: { sentAt: string | null; acceptedAt: string | null; bothJoined: boolean };
+  invite?: { sentAt: string | null; acceptedAt: string | null; bothJoined: boolean; via?: string | null; reach?: string | null };
 };
 
 // "2 h 5 min", "3 days 4 h", "12 min".
@@ -155,7 +155,9 @@ export function buildAdminPage(rooms: AdminRoomSummary[], secret: string, notice
         } else {
           inviteLine = "<span class=\"muted\">Invite not sent yet</span>";
         }
-        inviteLine = "<div class=\"invline\">" + inviteLine + "</div>";
+        if (inv.via) inviteLine += "<br><span class=\"muted\">shared by " + adminEsc(inv.via) + "</span>";
+        if (inv.reach) inviteLine += "<br>Inviter says: <b>" + (inv.reach === "yes" ? "they saw it" : inv.reach === "unsure" ? "not sure they got it" : "didn't send it") + "</b>";
+                inviteLine = "<div class=\"invline\">" + inviteLine + "</div>";
       }
       const active = r.lastActive ? adminEsc(r.lastActive) : "<span class=\"muted\">no answers yet</span>";
       const status = r.daysAnswered > 0 ? "active" : r.people.length > 0 ? "joined" : "empty";

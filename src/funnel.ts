@@ -107,14 +107,18 @@ export function isFunnelStep(step: unknown): step is string {
   return typeof step === "string" && STEP_KEYS.has(step);
 }
 
-export async function recordFunnel(device: string, step: string, plat: "app" | "web", existing: boolean): Promise<void> {
+// Returns true the first time a new phone (not an existing user) uses the
+// app: the closest Nearune can see to "downloaded the app".
+export async function recordFunnel(device: string, step: string, plat: "app" | "web", existing: boolean): Promise<boolean> {
   const d = await load();
   const now = Date.now();
   let dev = d.devices[device];
+  let firstApp = false;
   if (!dev) {
     dev = d.devices[device] = { first: now, plat, steps: {}, days: [], ...(existing ? { existing: true } : {}) };
     prune(d);
-  }
+    firstApp = plat === "app" && !existing;
+  } else if (plat === "app" && dev.plat !== "app" && !dev.existing) firstApp = true;
   if (plat === "app") dev.plat = "app"; // a phone that ever used the app counts as app
   if (!dev.steps[step]) dev.steps[step] = now;
   if (!dev.ls) dev.ls = {};
@@ -127,6 +131,7 @@ export async function recordFunnel(device: string, step: string, plat: "app" | "
     }
   }
   dirty = true;
+  return firstApp;
 }
 
 export async function recordTime(device: string, seconds: number, plat: "app" | "web"): Promise<void> {

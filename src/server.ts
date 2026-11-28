@@ -56,7 +56,7 @@ import { buildGetPage } from "./get-page";
 import { buildInvitePage, INVITE_STRINGS } from "./invite-page";
 import { buildHomePage } from "./home-page";
 import { friendJoin, friendStatus, friendCancel, friendBlock, friendSetPush, friendRequeue, type FriendProfile } from "./friend";
-import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep } from "./funnel";
+import { recordFunnel, recordLanding, recordTime, recordRoomUse, isValidFunnelDevice, isFunnelStep, bumpSlackCount, slackCounts, slackSummaryDone } from "./funnel";
 import { startQaSchedule, lastQaReport, runQa, roomQaOnce } from "./qa";
 const tzBackfillAt = new Map<string, number>();
 import { sendPush, pushConfigured, vapidPublicKey, anyPushConfigured, setBadgeResolver } from "./push";
@@ -205,14 +205,22 @@ function slackPost(text: string, tag: string): void {
     .catch((e) => console.error("[slack] " + tag + " post error", e));
 }
 const resendSlackSent = new Set<string>();
-// Mark's four funnel channels (Nov 27): one Slack incoming webhook each, set
-// as Railway variables. A missing variable just skips that channel.
-//   SLACK_LANDING_WEBHOOK_URL  -> #nearune-landng-page-view (landing page views)
-//   SLACK_DOWNLOAD_WEBHOOK_URL -> #nearune-download (first open of the app on a new phone)
-//   SLACK_SIGNUP_WEBHOOK_URL   -> #nearune-sign-up (someone finished signing up)
-//   SLACK_INVITE_WEBHOOK_URL   -> #nearune-4-invite (an invite actually went out)
-function slackFunnel(which: "LANDING" | "DOWNLOAD" | "SIGNUP" | "INVITE", text: string): void {
+// Mark's funnel channels (Nov 27): one Slack incoming webhook each, set as
+// Railway variables. A missing variable just skips that channel.
+//   SLACK_LANDING_WEBHOOK_URL  -> #nearune-1-landing-view
+//   SLACK_STORETAP_WEBHOOK_URL -> #nearune-2-store-tap
+//   SLACK_DOWNLOAD_WEBHOOK_URL -> #nearune-3-download (first open of the app on a new phone)
+//   SLACK_SIGNUP_WEBHOOK_URL   -> #nearune-4-sign-up
+//   SLACK_INVITE_WEBHOOK_URL   -> #nearune-5-invite-sent
+//   SLACK_OPENED_WEBHOOK_URL   -> #nearune-6-invite-opened
+//   SLACK_JOINED_WEBHOOK_URL   -> #nearune-7-joined
+//   SLACK_BOTH_WEBHOOK_URL     -> #nearune-8-both-answered
+//   SLACK_MATCHED_WEBHOOK_URL  -> #nearune-matched
+//   SLACK_SUMMARY_WEBHOOK_URL  -> #nearune-daily-summary (8 AM Pacific)
+type SlackStep = "LANDING" | "STORETAP" | "DOWNLOAD" | "SIGNUP" | "INVITE" | "OPENED" | "JOINED" | "BOTH" | "MATCHED" | "SUMMARY";
+function slackFunnel(which: SlackStep, text: string): void {
   console.log("[slack-" + which.toLowerCase() + "] " + text);
+  if (which !== "SUMMARY") bumpSlackCount(pacificDay(new Date()), which).catch(() => {});
   const hook = Bun.env["SLACK_" + which + "_WEBHOOK_URL"];
   if (!hook) return;
   fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
@@ -245,6 +253,8 @@ function notifyInviteEvent(room: string, step: string, st: any, extra: string): 
     "Invite to " + inviter + "'s room: " + step;
   const text = what + ". Room " + room + (waited ? ", " + waited + " after the invite was sent" : "") + ".";
   console.log("[invite-event] room=" + room + " step=" + step + (extra ? " " + JSON.stringify(extra) : ""));
+  if (step === "opened") slackFunnel("OPENED", text + " · " + nowPT());
+  if (step === "joined") slackFunnel("JOINED", text + " · " + nowPT());
   const hook = Bun.env.SLACK_WEBHOOK_URL;
   if (!hook) return;
   fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
@@ -693,6 +703,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       }
       const fr = await friendJoin(device, profile);
       console.log("[friend] join status=" + fr.status + (fr.status === "matched" ? " room=" + fr.roomId + " signedUp=" + fr.signedUp : "") + (profile ? " withProfile" : ""));
+      if (fr.status === "matched" && fr.roomId) {
+        loadState(fr.roomId).then((ms: any) => {
+          const ns = (["mark", "nikita"] as const).map((k) => ms && ms.people && ms.people[k]).filter(Boolean).map((p: any) => String(p.name || "?") + (p.location ? " (" + p.location + ")" : ""));
+          slackFunnel("MATCHED", ":handshake: New match: " + (ns.length ? ns.join(" + ") : "two people") + " · room " + fr.roomId + " · " + nowPT());
+        }).catch(() => {});
+      }
       return json(fr);
     }
     // In-app tip completed (Apple handles the payment; this is only a log line
@@ -705,6 +721,11 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : fb2.page === "get (new)" ? "get (new)" : "";
         const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
         if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : fb2.step === "lp_play" ? "play" : "tap");
+        if (lpPage && (fb2.step === "lp_tap" || fb2.step === "lp_play")) {
+          const uaT = req.headers.get("user-agent") || "";
+          const devT = /iPhone|iPad/.test(uaT) ? "iPhone" : /Android/.test(uaT) ? "Android" : /Windows|Macintosh|Linux/.test(uaT) ? "computer" : "device";
+          slackFunnel("STORETAP", ":arrow_down: Tapped " + (fb2.step === "lp_play" ? "Google Play" : "App Store") + " on /" + lpPage + " (from " + lpSrc + ", " + devT + ") · " + nowPT());
+        }
         if (lpPage && fb2.step === "lp_view") {
           const ua0 = req.headers.get("user-agent") || "";
           const dev0 = /iPhone|iPad/.test(ua0) ? "iPhone" : /Android/.test(ua0) ? "Android" : /Windows|Macintosh|Linux/.test(ua0) ? "computer" : "device";
@@ -1225,15 +1246,27 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       const trimmed = text.trim().slice(0, 4000);
       const blockedA = await moderate(roomId, who, "answer", trimmed, body.confirmFlagged === true);
       if (blockedA) return blockedA;
+      let wasNewAnswer = false;
       const state = await saveState(roomId, (s) => {
         if (!s.answers[date]) s.answers[date] = {};
         const prev = s.answers[date][who];
+        wasNewAnswer = !prev;
         s.answers[date][who] = {
           text: trimmed,
           at: prev?.at || new Date().toISOString(),
           ...(prev ? { editedAt: new Date().toISOString() } : {}),
         };
       });
+      // First time both people have answered the same day: the room is real.
+      if (wasNewAnswer) {
+        try {
+          const bothDays = Object.keys(state.answers || {}).filter((d) => { const a: any = state.answers[d]; return a && a.mark && a.mark.text && a.nikita && a.nikita.text; });
+          if (bothDays.length === 1 && bothDays[0] === date) {
+            const pp: any = state.people || {};
+            slackFunnel("BOTH", ":sparkles: First answers from both: " + String((pp.mark && pp.mark.name) || "?") + " and " + String((pp.nikita && pp.nikita.name) || "?") + (state.origin === "friend" ? " (matched)" : "") + " · room " + roomId + " · " + nowPT());
+          }
+        } catch {}
+      }
       // Nudge whoever hasn't answered yet, and sync badges to the shared
       // "how many of you two still need to answer today" count (0/1/2) —
       // both people's badges always show the same number. Fire-and-forget —
@@ -3383,6 +3416,52 @@ setInterval(numberRooms, 60 * 60 * 1000);
 
 // A room just got its first sign-up: number it, and recount today's rooms
 // for the daily cap and the "N new rooms today" Slack note.
+// Morning summary for #nearune-daily-summary: yesterday's count for every
+// step, plus how many rooms came back on day 2 and day 7.
+async function slackDailySummary(): Promise<void> {
+  try {
+    if (!Bun.env.SLACK_SUMMARY_WEBHOOK_URL) return;
+    const now = new Date();
+    if (localHour("America/Los_Angeles") !== 8) return;
+    const today = pacificDay(now);
+    if (await slackSummaryDone(today)) return;
+    await slackSummaryDone(today, true);
+    const y = pacificDay(new Date(now.getTime() - 24 * 3600 * 1000));
+    const c = await slackCounts(y);
+    const shift = (d: string, n: number) => new Date(Date.parse(d + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+    let d2 = 0, d2Back = 0, d7 = 0, d7Back = 0;
+    for (const id of await listRoomIds()) {
+      let st: any; try { st = await loadState(id); } catch { continue; }
+      const days = Object.keys(st.answers || {}).sort();
+      const both = days.filter((d) => { const a = st.answers[d]; return a && a.mark && a.mark.text && a.nikita && a.nikita.text; });
+      if (!both.length) continue;
+      const first = both[0];
+      const answeredOn = (d: string) => { const a = st.answers[d]; return !!(a && ((a.mark && a.mark.text) || (a.nikita && a.nikita.text))); };
+      if (first === shift(y, -1)) { d2++; if (answeredOn(y)) d2Back++; }
+      if (first === shift(y, -6)) { d7++; if (answeredOn(y)) d7Back++; }
+    }
+    const n = (k: string) => c[k] || 0;
+    const lines = [
+      ":sunrise: Nearune yesterday (" + y + ", Pacific)",
+      "1. Landing page views: " + n("LANDING"),
+      "2. Store taps: " + n("STORETAP"),
+      "3. Downloads (first app open): " + n("DOWNLOAD"),
+      "4. Sign-ups: " + n("SIGNUP"),
+      "5. Invites sent: " + n("INVITE"),
+      "6. Invites opened: " + n("OPENED"),
+      "7. Joined from an invite: " + n("JOINED"),
+      "8. Both answered for the first time: " + n("BOTH"),
+      "Matched (Get matched): " + n("MATCHED"),
+      "Came back on day 2: " + (d2 ? d2Back + " of " + d2 + " rooms" : "no rooms to check"),
+      "Came back on day 7: " + (d7 ? d7Back + " of " + d7 + " rooms" : "no rooms to check"),
+    ];
+    slackFunnel("SUMMARY", lines.join("\n"));
+  } catch (err) {
+    console.error("[slack-summary] failed", err);
+  }
+}
+setInterval(slackDailySummary, 10 * 60 * 1000);
+
 function roomSignedUp(roomId: string): void {
   loadState(roomId).then((st: any) => {
     const ppl = (st && st.people) || {};

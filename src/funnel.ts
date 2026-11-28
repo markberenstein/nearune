@@ -54,7 +54,7 @@ type LandingDay = Record<string, { v: number; t: number; p?: number }>; // "page
 // and the Original room included): roomId ("" = Original) -> day -> kind -> count.
 export const ROOM_USE_KINDS = ["answer", "voice_played", "voice_recorded", "puzzle_uploaded", "nhie_vote"] as const;
 export type RoomUseKind = (typeof ROOM_USE_KINDS)[number];
-type Data = { devices: Record<string, Device>; landing?: Record<string, LandingDay>; rooms?: Record<string, Record<string, Partial<Record<RoomUseKind, number>>>> };
+type Data = { devices: Record<string, Device>; landing?: Record<string, LandingDay>; rooms?: Record<string, Record<string, Partial<Record<RoomUseKind, number>>>>; slack?: Record<string, Record<string, number>>; slackSummaryDay?: string };
 
 const FILE = "funnel.json";
 const MAX_DEVICES = 20000;
@@ -323,4 +323,25 @@ export async function funnelReport(days: number, fresh = false): Promise<FunnelR
     retention: { nextDay, nextDayOf, week, weekOf },
     recent,
   };
+}
+
+// Daily counts behind the Slack funnel channels (Pacific day -> step -> n),
+// for the morning summary. Kept 14 days.
+export async function bumpSlackCount(day: string, step: string): Promise<void> {
+  const d = await load();
+  if (!d.slack) d.slack = {};
+  if (!d.slack[day]) d.slack[day] = {};
+  d.slack[day][step] = (d.slack[day][step] || 0) + 1;
+  const days = Object.keys(d.slack).sort();
+  while (days.length > 14) delete d.slack[days.shift()!];
+  dirty = true;
+}
+export async function slackCounts(day: string): Promise<Record<string, number>> {
+  const d = await load();
+  return (d.slack && d.slack[day]) || {};
+}
+export async function slackSummaryDone(day: string, mark = false): Promise<boolean> {
+  const d = await load();
+  if (mark) { d.slackSummaryDay = day; dirty = true; }
+  return d.slackSummaryDay === day;
 }

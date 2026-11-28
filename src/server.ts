@@ -205,6 +205,23 @@ function slackPost(text: string, tag: string): void {
     .catch((e) => console.error("[slack] " + tag + " post error", e));
 }
 const resendSlackSent = new Set<string>();
+// Mark's four funnel channels (Nov 27): one Slack incoming webhook each, set
+// as Railway variables. A missing variable just skips that channel.
+//   SLACK_LANDING_WEBHOOK_URL  -> #nearune-landng-page-view (landing page views)
+//   SLACK_DOWNLOAD_WEBHOOK_URL -> #nearune-download (first open of the app on a new phone)
+//   SLACK_SIGNUP_WEBHOOK_URL   -> #nearune-sign-up (someone finished signing up)
+//   SLACK_INVITE_WEBHOOK_URL   -> #nearune-4-invite (an invite actually went out)
+function slackFunnel(which: "LANDING" | "DOWNLOAD" | "SIGNUP" | "INVITE", text: string): void {
+  console.log("[slack-" + which.toLowerCase() + "] " + text);
+  const hook = Bun.env["SLACK_" + which + "_WEBHOOK_URL"];
+  if (!hook) return;
+  fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) })
+    .then((r) => { if (!r.ok) console.error("[slack] " + which + " post failed status=" + r.status); })
+    .catch((e) => console.error("[slack] " + which + " post error", e));
+}
+function nowPT(): string {
+  try { return new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT"; } catch { return ""; }
+}
 
 function notifyInviteEvent(room: string, step: string, st: any, extra: string): void {
   const k = room + "|" + step;
@@ -688,6 +705,12 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         const lpPage = fb2.page === "military" ? "military" : fb2.page === "get" ? "get" : fb2.page === "get (new)" ? "get (new)" : "";
         const lpSrc = typeof fb2.source === "string" ? fb2.source.toLowerCase().replace(/[^a-z0-9 ._()-]/g, "").slice(0, 40) || "direct" : "direct";
         if (lpPage) await recordLanding(lpPage, lpSrc, fb2.step === "lp_view" ? "view" : fb2.step === "lp_play" ? "play" : "tap");
+        if (lpPage && fb2.step === "lp_view") {
+          const ua0 = req.headers.get("user-agent") || "";
+          const dev0 = /iPhone|iPad/.test(ua0) ? "iPhone" : /Android/.test(ua0) ? "Android" : /Windows|Macintosh|Linux/.test(ua0) ? "computer" : "device";
+          const where0 = await approxCity(clientIp(req, server)).catch(() => "");
+          slackFunnel("LANDING", ":eyes: Landing page view: /" + lpPage + " from " + lpSrc + " on " + dev0 + (where0 ? " near " + where0 : "") + " · " + nowPT());
+        }
         return json({ ok: true });
       }
       if (fb2 && fb2.step === "time" && isValidFunnelDevice(fb2.device)) {
@@ -696,7 +719,13 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
         return json({ ok: true });
       }
       if (fb2 && isValidFunnelDevice(fb2.device) && isFunnelStep(fb2.step)) {
-        await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
+        const firstApp = await recordFunnel(fb2.device, fb2.step, fb2.platform === "app" ? "app" : "web", fb2.existing === true);
+        if (firstApp) {
+          const ua1 = req.headers.get("user-agent") || "";
+          const dev1 = /iPhone|iPad/.test(ua1) ? "iPhone" : /Android/.test(ua1) ? "Android" : "phone";
+          const where1 = await approxCity(clientIp(req, server)).catch(() => "");
+          slackFunnel("DOWNLOAD", ":iphone: New download: Nearune opened for the first time on " + (dev1 === "phone" ? "a " : "an ") + dev1 + (where1 ? " near " + where1 : "") + " · " + nowPT());
+        }
       }
       return json({ ok: true });
     }
@@ -1616,6 +1645,13 @@ async function handleRequest(req: Request, server: any): Promise<Response> {
       // Only rooms that were really created (never conjure a room from a made-up id).
       if (roomId && !cur.createdAt) return json({ ok: false }, { status: 404 });
       if (cur.funnel && cur.funnel[step]) return json({ ok: true });
+      if (step === "invite_share_done") {
+        const ppl2: any = cur.people || {};
+        const ik2 = (["mark", "nikita"] as const).find((p) => ppl2[p] && ppl2[p].confirmed);
+        const via2 = Object.keys(cur.funnel || {}).filter((k) => k.startsWith("invite_via_")).map((k) => k.slice(11)).join(", ");
+        const w2 = cur.relationship === "significant_other" ? "their partner" : cur.relationship === "family" ? "a family member" : cur.relationship === "friend" ? "a friend" : cur.relationship === "its_complicated" ? "someone (it's complicated)" : "someone";
+        slackFunnel("INVITE", ":love_letter: Invite sent: " + (ik2 ? String(ppl2[ik2].name || "Someone") : "Someone") + " invited " + w2 + (via2 ? " by " + via2 : "") + " · room " + roomId + " · " + nowPT());
+      }
       await saveState(roomId, (s) => {
         if (!s.funnel) s.funnel = {};
         if (!s.funnel[step]) s.funnel[step] = new Date().toISOString();
@@ -3348,6 +3384,13 @@ setInterval(numberRooms, 60 * 60 * 1000);
 // A room just got its first sign-up: number it, and recount today's rooms
 // for the daily cap and the "N new rooms today" Slack note.
 function roomSignedUp(roomId: string): void {
+  loadState(roomId).then((st: any) => {
+    const ppl = (st && st.people) || {};
+    const list = (["mark", "nikita"] as const).map((k) => ppl[k]).filter(Boolean).sort((a: any, b: any) => String(b.joinedAt || "").localeCompare(String(a.joinedAt || "")));
+    const p: any = list[0];
+    if (!p) return;
+    slackFunnel("SIGNUP", ":tada: New sign-up: " + String(p.name || "Someone") + (p.location ? " (" + p.location + ")" : "") + " · room " + roomId + (st.createdVia ? " · " + st.createdVia : "") + " · " + nowPT());
+  }).catch(() => {});
   numberRooms().catch(() => {});
   regToday.day = "";
   roomsCreatedToday().then((n) => notifyRoomMilestone(n)).catch(() => {});
